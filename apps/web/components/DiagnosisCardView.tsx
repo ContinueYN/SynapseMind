@@ -50,7 +50,7 @@ export function DiagnosisCardView({
       <section className="card-section">
         <h2>已排除</h2>
         <ul>
-          {card.excluded.map((item) => (
+          {(card.excluded ?? []).map((item) => (
             <li key={item}>{item}</li>
           ))}
         </ul>

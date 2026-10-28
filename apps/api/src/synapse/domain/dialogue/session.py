@@ -10,6 +10,7 @@ from synapse.domain.diagnosis.models import DiagnosisCard
 from synapse.domain.dialogue.events import DialogueEvent
 from synapse.domain.dialogue.states import DialogueState
 from synapse.domain.dialogue.table import next_state
+from synapse.domain.evidence.models import EvidenceChain
 from synapse.domain.problem.models import AlignmentResult
 
 
@@ -37,6 +38,7 @@ class DialogueSession:
     turn: int = 0
     asked_probe_ids: list[str] = field(default_factory=list)
     history: list[TurnRecord] = field(default_factory=list)
+    evidence: EvidenceChain = field(default_factory=EvidenceChain)
     diagnosis: DiagnosisCard | None = None
 
     def advance(self, event: DialogueEvent) -> DialogueState:

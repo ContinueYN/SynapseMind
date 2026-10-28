@@ -16,15 +16,11 @@ _ONE_LINE = {
 def build_diagnosis_card(session: DialogueSession, problem: Problem) -> DiagnosisCard:
     top_id, confidence = session.hypotheses.top()
     top = session.hypotheses.states[top_id].hypothesis
-    evidence = list(session.alignment.evidence)
-    if session.history:
-        last = session.history[-1]
-        evidence.append(
-            f"第 {last.turn} 轮探针回答支持“{top.label}”假设"
-            if not last.is_unknown
-            else f"第 {last.turn} 轮说“不知道”，因此降低了对已掌握该步的置信"
-        )
-    evidence = evidence[:4] or ["本轮证据不足，按当前最高假设出卡"]
+    evidence = list(session.evidence.latest("probe", limit=1))
+    evidence.extend(session.evidence.claims(limit=3))
+    evidence = list(dict.fromkeys(evidence))[:4]
+    if not evidence:
+        evidence = ["本轮证据不足，按当前最高假设出卡"]
 
     excluded = list(session.alignment.excluded)[:4]
     if not excluded:

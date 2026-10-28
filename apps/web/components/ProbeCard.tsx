@@ -19,6 +19,8 @@ export function ProbeCard({
   onUnknown,
   onExit,
 }: ProbeCardProps) {
+  const options = probe.options ?? [];
+
   return (
     <section className="probe-card" aria-live="polite" aria-busy={busy}>
       <p className="eyebrow">
@@ -27,7 +29,7 @@ export function ProbeCard({
       </p>
       <h1 className="probe-question">{probe.question}</h1>
       <div className="option-list" role="group" aria-label="回答选项">
-        {probe.options.map((option, index) => (
+        {options.map((option, index) => (
           <button
             className="option-button"
             disabled={busy}

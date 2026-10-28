@@ -134,7 +134,7 @@ export default function DiagnosePage() {
         {error && session ? <p className="inline-error">{error}</p> : null}
       </div>
       <aside className="diagnose-aside">
-        <Transcript items={session.history} />
+        <Transcript items={session.history ?? []} />
         <section className="principle-card">
           <p className="eyebrow">这一轮的原则</p>
           <p>一次只问一个可回答的问题；不重复问；前 3 轮不给最终答案。</p>

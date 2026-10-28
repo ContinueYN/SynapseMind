@@ -54,7 +54,7 @@ docs/design/release/      # 合并 MD / DOCX / PDF；生成物，不进 Git
 | `eval/redteam/` | 诱导、越界、答案泄漏、提示注入用例 | 普通单元测试 | `README.md` |
 | `infra/` | `compose.yaml`、Dockerfile、Nginx、OTel 配置 | 业务代码、前端组件 | `README.md`；M2 起容器文件 |
 | `tools/` | `diagrams.py`、`merge_markdown.py`、`generate_docx.py`、TOC/PDF 脚本 | 运行时依赖、业务逻辑 | 5 个脚本 + `requirements.txt` |
-| `scripts/` | `check_repo.py`、`export_openapi.py` 等仓库级检查/导出 | 应用入口、部署脚本 | 2 个脚本 + `README.md` |
+| `scripts/` | `check_repo.py`、`dev.py`、`contracts.py` 等仓库级检查/启动/导出 | 应用入口、部署脚本 | 4 个脚本 + `README.md` |
 | `docs/adr/` | 一个决策一个文件：背景、选项、评分、后果、改选条件 | 教程、会议记录、未决讨论 | `0001` 语言与代码架构 |
 | `docs/design/chapters/` | 第 0–12 章 Markdown，按编号排序 | DOCX/PDF、合并稿、图片 | 13 个章节源文件 |
 | `docs/design/assets/` | 由 `tools/diagrams.py` 生成的 3 张 PNG | 手工改图、截图堆 | 3 张图 |

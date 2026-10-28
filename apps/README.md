@@ -20,6 +20,15 @@
 
 ## 本地启动
 
+在仓库根目录一条命令启动 API + Web（首次自动建 venv/装依赖）：
+
+```powershell
+python scripts/dev.py
+# 或 .\scripts\dev.ps1
+```
+
+只检查环境：`python scripts/dev.py --check`。手动启动：
+
 ```powershell
 # API（Python 3.12+）
 cd apps/api

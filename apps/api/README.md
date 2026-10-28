@@ -20,6 +20,7 @@ apps/api/src/synapse/
 │  ├─ diagnosis/
 │  │  ├─ models.py            # L0–L6、Hypothesis、DiagnosisCard
 │  │  └─ hypotheses.py        # 先验/对数似然证据/后验/判定
+│  ├─ evidence/models.py      # Evidence + EvidenceChain（来源/主张/支持假设/轮次）
 │  └─ guard/leak.py           # 禁用词 + n-gram 出口防护
 ├─ application/               # 用例编排 + ports（Protocol）
 │  ├─ ports.py                # SessionRepository / ProblemRepository / AnswerStore / Clock / IdGenerator
@@ -84,6 +85,14 @@ domain 不 import FastAPI / SQLAlchemy / OpenAI
 
 ## 本地命令
 
+在仓库根目录一条命令启动 API + Web：
+
+```powershell
+python scripts/dev.py
+```
+
+只跑 API 检查：
+
 ```powershell
 cd apps/api
 python -m venv .venv
@@ -97,10 +106,10 @@ mypy src
 .\.venv\Scripts\lint-imports.exe
 ```
 
-生成 OpenAPI（本地产物，不进 Git）：
+生成接口契约与 Web 类型（本地产物，`generated.ts` 入库）：
 
 ```powershell
-python ..\..\scripts\export_openapi.py
+python ..\..\scripts\contracts.py
 ```
 
 ## M1 明确不做

@@ -16,8 +16,17 @@ from synapse.domain.diagnosis.hypotheses import HypothesisSet
 from synapse.domain.dialogue.events import DialogueEvent
 from synapse.domain.dialogue.session import DialogueSession
 from synapse.domain.dialogue.states import DialogueState
+from synapse.domain.evidence.models import Evidence
 from synapse.domain.problem.alignment import StepAligner
 from synapse.domain.problem.models import StudentAttempt
+
+_ALIGNMENT_SUPPORT = {
+    "n1": ("H_L1",),
+    "n2": ("H_L1",),
+    "n3": ("H_L2",),
+    "n5": ("H_L4",),
+    "n6": ("H_L2",),
+}
 
 
 class ProblemNotSupported(ValueError):
@@ -71,4 +80,15 @@ class SessionFactory:
         session.advance(DialogueEvent.INGESTED)
         session.advance(DialogueEvent.PARSED)
         session.advance(DialogueEvent.ALIGNED)
+
+        supports = _ALIGNMENT_SUPPORT.get(alignment.first_divergence, ())
+        for index, claim in enumerate(alignment.evidence):
+            session.evidence.add(
+                Evidence(
+                    id=f"alignment:{index}",
+                    source="alignment",
+                    claim=claim,
+                    supports=supports,
+                )
+            )
         return session

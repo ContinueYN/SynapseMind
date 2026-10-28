@@ -21,7 +21,22 @@
 
 ## 本地启动
 
-需要 Python 3.12+、Node.js 22+。两个终端：
+需要 Python 3.12+、Node.js 22+。一条命令启动 API + Web（首次会建 venv、装依赖）：
+
+```powershell
+python scripts/dev.py
+# Windows 也可以：.\scripts\dev.ps1
+```
+
+打开 `http://localhost:3000`；API 文档在 `http://localhost:8000/docs`。`Ctrl+C` 会同时停掉两个进程。
+
+只检查环境、不启动：
+
+```powershell
+python scripts/dev.py --check
+```
+
+手动分开启动（调试用）：
 
 ```powershell
 # 终端 1：API
@@ -30,26 +45,34 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
 uvicorn --app-dir src synapse.api.main:app --reload --port 8000
-```
 
-```powershell
 # 终端 2：Web
 cd apps/web
 npm install
 npm run dev
 ```
 
-打开 `http://localhost:3000`。API 文档在 `http://localhost:8000/docs`；Web 通过 `NEXT_PUBLIC_API_BASE`（默认 `http://localhost:8000`）访问 API。
+### 契约生成
+
+接口 DTO 是源，Web 的 TS 类型是生成物：
 
 ```powershell
-# 后端检查
+python scripts/contracts.py
+```
+
+它先导出 OpenAPI 到本地忽略目录，再用 `openapi-typescript` 生成 `apps/web/src/lib/api/generated.ts`；该文件已入库，fresh clone 不跑 Python 也能 typecheck/build。
+
+### 检查命令
+
+```powershell
+# 后端
 cd apps/api
 pytest
 ruff check src tests
 mypy src
 .\.venv\Scripts\lint-imports.exe
 
-# 前端检查
+# 前端
 cd apps/web
 npm run typecheck
 npm run lint
@@ -150,8 +173,8 @@ npm run build
 │  └─ redteam/              # 50 条诱导/边界
 ├─ infra/                   # docker / nginx / observability 计划
 ├─ tools/                   # 文档生成、TOC、PDF
-├─ scripts/check_repo.py    # 链接/契约/图片检查
-└─ .github/workflows/ci.yml # 只跑无依赖检查
+├─ scripts/                 # 仓库检查、一键启动、契约生成
+└─ .github/workflows/ci.yml # repo / API / Web 三组检查
 ```
 
 `docs/design/release/` 是本地生成目录（DOCX/PDF/合并稿），已加入 `.gitignore`，不上传；发布时作为 GitHub Release 附件。

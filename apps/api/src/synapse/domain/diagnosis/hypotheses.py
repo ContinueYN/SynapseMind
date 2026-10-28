@@ -128,6 +128,16 @@ class HypothesisSet:
             if hyp_id in self.states:
                 self.states[hyp_id].logit += weight
 
+    @staticmethod
+    def supported_by(probe_id: str, option_id: str) -> tuple[HypothesisId, ...]:
+        """Which hypotheses this answer is positive evidence for.
+
+        Used by the evidence chain; scoring still happens in ``observe``.
+        """
+
+        weights = EVIDENCE.get(probe_id, {}).get(option_id, {})
+        return tuple(hyp_id for hyp_id, weight in weights.items() if weight > 0)
+
     def observe_unknown(self, probe_id: str) -> None:
         """A “不知道” answer is evidence of a missing lower-level concept.
 

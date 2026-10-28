@@ -21,6 +21,7 @@ from synapse.domain.diagnosis.models import DiagnosisCard
 from synapse.domain.dialogue.events import DialogueEvent
 from synapse.domain.dialogue.session import DialogueSession, TurnRecord
 from synapse.domain.dialogue.states import DialogueState
+from synapse.domain.evidence.models import Evidence
 from synapse.domain.problem.alignment import normalize
 from synapse.domain.problem.models import Probe, Problem
 
@@ -122,6 +123,7 @@ class SessionService:
                 action="answer",
             )
         )
+        self._record_probe_evidence(session, probe, option_id)
 
         decision = session.hypotheses.decide(session.turn, session.max_turns)
         if decision.kind == "diagnose":
@@ -179,6 +181,15 @@ class SessionService:
                 is_unknown=True,
             )
         )
+        session.evidence.add(
+            Evidence(
+                id=f"probe:{probe.id}:{session.turn}",
+                source="probe",
+                claim=f"第 {session.turn} 轮说“不知道”，降低了对已掌握该步的置信",
+                supports=("H_L1",),
+                turn=session.turn,
+            )
+        )
         if session.turn >= session.max_turns:
             session.advance(DialogueEvent.TURN_LIMIT)
             return self._close(
@@ -216,6 +227,30 @@ class SessionService:
             probe,
             confidence=confidence,
             hint_level=hint_level,
+        )
+
+    @staticmethod
+    def _record_probe_evidence(
+        session: DialogueSession,
+        probe: Probe,
+        option_id: str,
+    ) -> None:
+        supports = session.hypotheses.supported_by(probe.id, option_id)
+        if not supports:
+            return
+        labels = "、".join(
+            session.hypotheses.states[hyp_id].hypothesis.label
+            for hyp_id in supports
+            if hyp_id in session.hypotheses.states
+        )
+        session.evidence.add(
+            Evidence(
+                id=f"probe:{probe.id}:{session.turn}",
+                source="probe",
+                claim=f"第 {session.turn} 轮的回答支持“{labels}”假设",
+                supports=supports,
+                turn=session.turn,
+            )
         )
 
     def _resolve_option(self, probe: Probe, command: SubmitAnswerCommand) -> str | None:

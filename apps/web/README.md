@@ -31,13 +31,15 @@ apps/web/
 │  ├─ DiagnosisCardView.tsx   # 卡点卡视图；“我不同意”本地记录
 │  └─ Transcript.tsx          # 追问历史
 └─ src/lib/api/
-   ├─ types.ts                # 与 specs/diagnosis.schema.json 对齐的 DTO
+   ├─ generated.ts            # openapi-typescript 从 FastAPI 契约生成，勿手改
+   ├─ types.ts                # 对生成类型的窄别名 + 交题输入 DTO
    └─ client.ts               # fetch 封装 + ApiError
 ```
 
 - 页面负责“取数 + 状态更新”，展示组件只收 props；不把 fetch 散落在组件里。
 - 所有 API 错误统一为 `ApiError(status, message)`；网络失败会给可操作的提示。
 - 卡点卡页不重新请求诊断逻辑，只读取同一会话的 `diagnosis`。
+- 契约变更流程：改 `apps/api` 的 Pydantic DTO → `python scripts/contracts.py` → 重新 typecheck；不要手改 `generated.ts`。
 
 ## 交互硬规则
 
@@ -57,7 +59,10 @@ npm run dev        # http://localhost:3000
 npm run typecheck
 npm run lint
 npm run build
+npm run generate:api   # 需要先生成 docs/design/release/openapi.json
 ```
+
+一键启动（含 API）：在仓库根目录 `python scripts/dev.py`。
 
 环境变量：
 

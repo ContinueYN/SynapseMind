@@ -53,6 +53,7 @@ def test_two_answers_produce_l2_card(client: TestClient, sample_payload: dict[st
     assert second_body["diagnosis"]["card"]["layer"] == "L2"
     assert second_body["diagnosis"]["card"]["confidence"] >= 0.8
     assert second_body["diagnosis"]["card"]["evidence"]
+    assert any("第 2 轮" in item for item in second_body["diagnosis"]["card"]["evidence"])
     assert "solution" not in json.dumps(second_body, ensure_ascii=False)
 
 
