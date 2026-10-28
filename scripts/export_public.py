@@ -14,7 +14,9 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
+import stat
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -84,6 +86,12 @@ def _copy_public_scripts(target: Path) -> None:
     shutil.copy2(TEMPLATES / "README.scripts.md", scripts / "README.md")
 
 
+def _remove_readonly(func, path: str, _exc_info) -> None:
+    """Git marks object files read-only on Windows; clear the bit and retry."""
+    os.chmod(path, stat.S_IWRITE)
+    func(path)
+
+
 def _validate_target(target: Path, force: bool) -> None:
     resolved = target.resolve()
     root = ROOT.resolve()
@@ -95,7 +103,7 @@ def _validate_target(target: Path, force: bool) -> None:
                 f"target is not empty: {resolved}\n"
                 "Pass --force to replace it after checking the path."
             )
-        shutil.rmtree(resolved)
+        shutil.rmtree(resolved, onerror=_remove_readonly)
 
 
 def export(target: Path, force: bool) -> None:
