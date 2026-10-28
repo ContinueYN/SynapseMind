@@ -1,9 +1,13 @@
 # OS / editor
 .DS_Store
 Thumbs.db
+desktop.ini
 .idea/
 .vscode/
+.history/
 *.swp
+*.suo
+*.user
 
 # Python
 __pycache__/
@@ -13,6 +17,11 @@ venv/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.tox/
+.nox/
+.eggs/
+*.egg-info/
+pip-wheel-metadata/
 
 # Java / Maven
 target/
@@ -27,19 +36,39 @@ out/
 dist/
 build/
 .turbo/
+.vercel/
+.pnpm-store/
+.yarn/
 coverage/
+coverage.xml
 *.tsbuildinfo
+.eslintcache
+
+# Tests / browser reports
+test-results/
+playwright-report/
+blob-report/
 
 # Local config / secrets
 .env
 .env.*
 !.env.example
 *.local
+.secrets/
+*.pem
 
 # Runtime artifacts
 .tmp/
+.run/
 logs/
 *.log
+*.pid
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+data/local/
 
 # Local-only archive / generated doc artifacts
 _local/
