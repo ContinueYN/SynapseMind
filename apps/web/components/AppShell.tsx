@@ -34,7 +34,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Link>
 
           <div className="header-side">
-            <p className="header-line">不是讲这道题，是找到你卡住的那一步。</p>
+            <p className="header-line">基于人脑神经原理及智商核心构成能力的学习引导</p>
             <span className="header-pill">
               <span className="pulse-dot" aria-hidden="true" />
               M1 live
