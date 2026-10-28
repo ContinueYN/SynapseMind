@@ -104,6 +104,8 @@
 
 `docs/design/release/` 是本地生成目录（DOCX/PDF/合并稿），已加入 `.gitignore`，不上传；发布时作为 GitHub Release 附件。
 
+每个目录“放什么、不放什么、什么时候才建”，见 [STRUCTURE.md](STRUCTURE.md)。
+
 ### 四条目录约定
 
 1. **按可部署单元与领域分，不按语言/文件类型分**：`apps/` 放能独立构建/部署的单元，不建 `frontend/`、`backend/`、`java/`、`python/` 这类名字。

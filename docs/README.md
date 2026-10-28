@@ -1,5 +1,7 @@
 # 文档
 
+> 仓库级目录说明见 [STRUCTURE.md](../STRUCTURE.md)。
+
 | 目录 | 内容 |
 |---|---|
 | [`adr/`](adr/README.md) | 架构决策记录；[0001 语言与代码架构](adr/0001-language-and-code-architecture.md) 是技术选型的准绳 |

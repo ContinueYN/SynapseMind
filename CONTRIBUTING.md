@@ -3,9 +3,10 @@
 ## 先读什么
 
 1. [`README.md`](README.md) —— 产品是什么、不是什么；
-2. [`docs/design/chapters/00-一页纸.md`](docs/design/chapters/00-一页纸.md) —— 一页纸；
-3. [`specs/dialogue-state.md`](specs/dialogue-state.md) —— 状态机与硬约束；
-4. [`docs/design/chapters/08-skill映射.md`](docs/design/chapters/08-skill映射.md) —— 能力与落点。
+2. [`STRUCTURE.md`](STRUCTURE.md) —— 每个目录放什么、不放什么；
+3. [`docs/design/chapters/00-一页纸.md`](docs/design/chapters/00-一页纸.md) —— 一页纸；
+4. [`specs/dialogue-state.md`](specs/dialogue-state.md) —— 状态机与硬约束；
+5. [`docs/design/chapters/08-skill映射.md`](docs/design/chapters/08-skill映射.md) —— 能力与落点。
 
 ## 工作方式
 
@@ -33,11 +34,12 @@ docs(design): clarify answer-leak gates
 
 ## 文档改动
 
-改 `docs/design/chapters/` 下的源文件，不直接改 `release/` 里的 DOCX/PDF。
+改 `docs/design/chapters/` 下的源文件；`docs/design/release/` 是本地生成物，不提交，也不直接改。
 
 ```bash
 python -m pip install -r tools/requirements.txt
 python tools/diagrams.py
+python tools/merge_markdown.py
 python tools/generate_docx.py
 pwsh tools/update_toc_and_export.ps1   # Windows + Word
 python scripts/check_repo.py

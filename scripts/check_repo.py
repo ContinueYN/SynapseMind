@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 REQUIRED = [
     "README.md",
+    "STRUCTURE.md",
     "CONTRIBUTING.md",
     "CHANGELOG.md",
     ".gitignore",
@@ -23,6 +24,7 @@ REQUIRED = [
     "docs/adr/README.md",
     "docs/adr/0001-language-and-code-architecture.md",
     "docs/design/README.md",
+    "docs/reference/README.md",
     "docs/design/chapters/00-一页纸.md",
     "docs/design/chapters/08-skill映射.md",
     "docs/design/assets/01-dialogue-loop.png",
@@ -57,6 +59,7 @@ SKIP_DIRS = {
 def walk_markdown() -> list[Path]:
     roots = [
         ROOT / "README.md",
+        ROOT / "STRUCTURE.md",
         ROOT / "CONTRIBUTING.md",
         ROOT / "CHANGELOG.md",
         ROOT / "docs" / "README.md",
