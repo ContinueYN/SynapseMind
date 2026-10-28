@@ -44,6 +44,7 @@ body {
   text-rendering: optimizeLegibility;
   -webkit-user-select: none;
   user-select: none;
+  -webkit-touch-callout: none;
 }
 
 ::selection {
@@ -59,6 +60,7 @@ select,
 option {
   -webkit-user-select: text;
   user-select: text;
+  -webkit-touch-callout: default;
 }
 
 input::selection,
