@@ -25,9 +25,6 @@ REQUIRED = [
     "docs/design/README.md",
     "docs/design/chapters/00-一页纸.md",
     "docs/design/chapters/08-skill映射.md",
-    "docs/design/release/SynapseMind-单题诊断引导-设计方案.md",
-    "docs/design/release/SynapseMind-单题诊断引导-设计方案.docx",
-    "docs/design/release/SynapseMind-单题诊断引导-设计方案.pdf",
     "docs/design/assets/01-dialogue-loop.png",
     "docs/design/assets/02-diagnosis-engine.png",
     "docs/design/assets/03-architecture.png",
@@ -52,7 +49,8 @@ SKIP_DIRS = {
     "build",
     "__pycache__",
     ".venv",
-    "docs/archive",
+    "docs/design/release",
+    "_local",
 }
 
 
@@ -67,8 +65,6 @@ def walk_markdown() -> list[Path]:
         ROOT / "docs" / "reference",
         ROOT / "specs",
         ROOT / "apps",
-        ROOT / "services",
-        ROOT / "packages",
         ROOT / "eval",
         ROOT / "infra",
         ROOT / "scripts",

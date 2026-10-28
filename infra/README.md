@@ -4,14 +4,19 @@
 
 选型见 [ADR-0001](../docs/adr/0001-language-and-code-architecture.md)：**3 个容器、1 个 Postgres、1 个 Redis**，不引 K8s/Spring Cloud/MySQL。
 
-## 目录
+## M1 提交的文件
 
-| 目录 | 内容 |
+不预建空目录；M1 只落这些：
+
+| 文件 | 内容 |
 |---|---|
-| [`docker/`](docker/README.md) | `docker-compose.yml`、Dockerfile、Nginx 配置 |
-| `observability/` | Prometheus 规则、Grafana 大盘 JSON、OTel 配置 |
-| `serverless/` | OCR/PDF 导出的 FC 配置（可选） |
-| `k8s/` | **Phase 2 再建**，MVP 不引入 |
+| `infra/compose.yaml` | web / api / worker / postgres / redis / minio |
+| `infra/Dockerfile.api` | api 与 worker 共用镜像 |
+| `infra/Dockerfile.web` | Next.js standalone |
+| `infra/nginx.conf` | SSE 关闭缓冲、限流、超时 |
+| `infra/.env.example` | 无密钥的配置模板 |
+
+可观测性、serverless、K8s 等到有真实需求再加，不先摆空目录。
 
 ## MVP 拓扑
 
@@ -40,9 +45,9 @@ Nginx（SSE 关闭缓冲、限流）
 ## 本地
 
 ```bash
-cd infra/docker
+cd infra
 cp .env.example .env
 docker compose up -d
 ```
 
-> 当前只有说明与占位；Compose 文件在 M1 提交。
+> 当前只有说明；Compose 与 Dockerfile 在 M1 提交。

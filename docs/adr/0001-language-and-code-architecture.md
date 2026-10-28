@@ -90,9 +90,7 @@ SynapseMind 不是“聊天机器人”，而是一个**确定性状态机 + 受
 apps/
   web/                 # Next.js + TS：学生端、教师后台、SEO
   api/                 # FastAPI：状态机、诊断、AI 编排、SSE
-  worker/              # Arq：OCR 后处理、ETL、评测、红队
-packages/
-  contracts/           # OpenAPI + JSON Schema + 生成 TS 类型
+  worker/              # Arq：OCR 后处理、ETL、评测、红队（与 api 同镜像）
 specs/                 # 状态机、输入/解法图/诊断卡契约
 eval/                  # golden / redteam / reports
 infra/                 # docker / nginx / observability
@@ -101,9 +99,9 @@ docs/
   design/              # 产品设计源与产物
 ```
 
-- `apps/` 是**能独立构建/部署**的单元；`services/` 是未来拆分占位，**现在不建**。
+- `apps/` 是**能独立构建/部署**的单元；`services/` 等真正要拆时再建，不预建空目录。
 - 不按 `frontend/`、`backend/`、`java/`、`python/` 分；这些名字不表达领域边界。
-- `specs/` 放机器可验证契约；`packages/contracts` 放生成物与 OpenAPI；生成物不手改。
+- `specs/` 放机器可验证契约；生成的 TS 类型/客户端在 M1 放到 `apps/web/src/lib/api/`，不单独建空 `packages/`；生成物不手改。
 - `eval/` 与 `docs/` 平级：诊断质量是产品核心，不是 `tests/` 的附属。
 
 ### 6.2 `apps/api` 分层
@@ -155,7 +153,7 @@ apps/api/src/synapse/
 2. **契约**：把 `specs/dialogue-state.md` 的转移表落成 `apps/api/src/synapse/domain/dialogue/table.py`；Pydantic 模型生成 JSON Schema。
 3. **数据**：MySQL 设计改为 PostgreSQL；保留 14 张逻辑表，去掉 16 片分库，MVP 单库 + 月分区。
 4. **部署**：Compose 从 MySQL 改 Postgres；Nginx 保持 SSE 关闭缓冲；3 个容器。
-5. **文档**：`docs/design/chapters/07-技术架构.md`、`08-skill映射.md` 已按本 ADR 重写，DOCX/PDF 已重生成（v0.3）；第 11 章保留旧 Java 设计过程作为方法记录。
+5. **文档**：`docs/design/chapters/07-技术架构.md`、`08-skill映射.md` 已按本 ADR 重写，本地 DOCX/PDF 已重生成（v0.3，不入库）；第 11 章保留旧 Java 设计过程作为方法记录。
 6. **验证**：`python scripts/check_repo.py`、`uv run pytest`、契约生成 diff、500 并发 SSE 压测、100 条 golden 回放。
 
 ## 9. 验证实验

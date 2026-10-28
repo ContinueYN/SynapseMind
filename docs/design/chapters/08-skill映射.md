@@ -9,7 +9,7 @@
 | # | 能力 | 本项目落点 | 可演示证据 | 验收指标 |
 |---|---|---|---|---|
 | **1** | AI 辅助编程；Java/Python/Go；Hutool、Lombok；代码规范 | **Python 主栈**（FastAPI/Pydantic/SQLAlchemy）；Python worker 做 OCR 后处理、ETL、评测；Go/Java **不进 MVP**；Hutool/Lombok 不适用；`ruff` + `mypy` + `import-linter` + `pytest` 守规范 | `apps/api/`、`apps/worker/`、`eval/`；CI 报告；AI 生成单测的 commit；Code Review 记录 | 单测覆盖率 ≥60%；`ruff`/`mypy` 0 error；核心规则手写率 100% |
-| **2** | 微服务、Spring Cloud、MyBatis、单体拆微服务治理 | MVP **不引** Spring Cloud/MyBatis；`apps/api` 是 Python 模块化单体，按包边界拆；拆分触发条件写进 [ADR](../../adr/0001-language-and-code-architecture.md) 与 `services/README.md`；网关由 Nginx + FastAPI 中间件承担 | `apps/api/src/synapse/` 包边界；import-linter 报告；拆分 ADR；Compose 一键起 | 3 容器一键起；跨层依赖 0 违规；拆分触发条件有数据 |
+| **2** | 微服务、Spring Cloud、MyBatis、单体拆微服务治理 | MVP **不引** Spring Cloud/MyBatis；`apps/api` 是 Python 模块化单体，按包边界拆；拆分触发条件写进 [ADR](../../adr/0001-language-and-code-architecture.md) 与 `apps/api/README.md`；网关由 Nginx + FastAPI 中间件承担 | `apps/api/src/synapse/` 包边界；import-linter 报告；拆分 ADR；Compose 一键起 | 3 容器一键起；跨层依赖 0 违规；拆分触发条件有数据 |
 | **3** | MySQL 设计、SQL 调优、分库分表、索引优化、Druid | MVP 用 **PostgreSQL 16 + pgvector**：14 张逻辑表、联合/覆盖索引、月分区、慢查询日志；**不用 MySQL/Druid**；分库分表留到 Phase 2，MVP 单库 | `schema.sql`；EXPLAIN 前后对比；慢查询 Top20；pgvector HNSW 索引 | 诊断会话查询 P95 <50ms；慢 SQL <10 条/天 |
 | **4** | Redis、Caffeine 多级缓存、分布式锁、雪崩/穿透/击穿、哨兵 | Redis 7：会话/提示卡/幂等/限流/SSE 重放；本地缓存用 `cachetools`（Caffeine 等价物）；锁用 Redis Lua 原子命令；布隆/空值缓存防穿透；随机 TTL + 逻辑过期；**Caffeine/Redisson 不适用** | 缓存命中率；锁/幂等测试；故障演练：Redis 挂 30s 仍可出诊断卡 | 缓存命中率 ≥85%；故障演练通过 |
 | **5** | Docker、Nginx、Dockerfile、Serverless | 3 容器 Compose（web/api/worker）；Nginx SSE 关闭缓冲 + 限流；OCR/PDF 导出可选 FC | `Dockerfile`；`nginx.conf`；FC 日志；镜像大小对比 | 镜像 <250MB；SSE 不中断；冷启动 <3s（若用 FC） |

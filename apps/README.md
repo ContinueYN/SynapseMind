@@ -15,7 +15,7 @@
 - `apps/api` 是**模块化单体**，不按 7 个服务拆进程；边界在 Python 包与端口上。
 - `apps/web` 只通过 `/api/v1/*` 访问后端，不直连数据库/向量库。
 - `apps/worker` 不处理在线追问；在线编排在 `apps/api`。
-- 跨应用契约放 [`../specs/`](../specs/) 与 [`../packages/contracts/`](../packages/contracts/)。
+- 跨应用契约的源放 [`../specs/`](../specs/)；生成的 TS 类型/客户端在 M1 放到 `apps/web/src/lib/api/`，不单独建空 `packages/`。
 
 ## 本地启动（目标形态）
 

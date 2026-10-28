@@ -8,9 +8,9 @@
 - 选定 Next.js + TypeScript（Web/SEO/SSE 外壳）+ Python 3.12 + FastAPI（状态机/诊断/AI/评测）+ PostgreSQL/pgvector + Redis；
 - 明确不用 Java/Spring/MySQL、4 部署单元/7 服务边界、K8s、多 Agent 框架；
 - `apps/api` 从 Java 改为 Python 脚手架；`apps/ai-worker` 重命名为 `apps/worker`；
-- 更新 apps/services/packages/infra/eval 的 README 与目标命令；
+- 更新 apps/infra/eval 的 README 与目标命令；删除未落地的 `services/`、`packages/` 空脚手架；
 - 记录代价：skill.txt 的 Java/Spring/MySQL/Caffeine 在 MVP 主链路失去落点，保留为 Phase 2 企业适配器/作品集分支；
-- 第 7/8 章与 DOCX/PDF 已按 ADR 重生成（v0.3，56 页、49 表、3 图）；第 11 章保留旧 Java 设计过程作为方法记录。
+- 第 7/8 章已按 ADR 重写；本地 DOCX/PDF 重生成（56 页、49 表、3 图），但生成物不入库，发布时作为 Release 附件；第 11 章保留旧 Java 设计过程作为方法记录。
 
 ## 0.2.0 — 2026-10-28
 
@@ -29,4 +29,4 @@
 ## 0.1.0 — 2026-10
 
 - 初版“基于脑可塑性与智商核心构成能力的学习引导系统”；
-- 偏“测评 + 学习 OS + 增长”，已归档到 `docs/archive/v0-broad-os/`，不再维护。
+- 偏“测评 + 学习 OS + 增长”，已移到本地 `_local/archive/v0-broad-os/`，不入库、不再维护。

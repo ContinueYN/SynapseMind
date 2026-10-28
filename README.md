@@ -85,42 +85,38 @@
 ├─ apps/                    # 运行单元（当前是脚手架）
 │  ├─ web/                  # Next.js + TS：交题/追问/卡点卡/SEO
 │  ├─ api/                  # Python + FastAPI：状态机/诊断/AI/SSE
-│  └─ worker/               # Python + Arq：OCR 后处理/ETL/评测
-├─ services/                # Phase 2 拆分；当前不建，避免“假微服务”
-├─ packages/contracts/      # Pydantic→OpenAPI→TS 类型、事件契约
+│  └─ worker/               # Python + Arq：OCR 后处理/ETL/评测（与 api 同镜像）
 ├─ specs/                   # 状态机 + JSON Schema（先于代码）
 ├─ docs/
 │  ├─ adr/                  # 架构决策记录；0001 是技术选型准绳
 │  ├─ design/
 │  │  ├─ chapters/          # 第 0–12 章，手写源
-│  │  ├─ release/           # 合并版 MD + DOCX + PDF
 │  │  └─ assets/            # 3 张设计图
-│  ├─ reference/skill.txt   # 能力清单原文
-│  └─ archive/v0-broad-os/  # 废弃的旧版
+│  └─ reference/skill.txt   # 能力清单原文
 ├─ eval/
 │  ├─ golden/               # 100 条双教师标注
 │  └─ redteam/              # 50 条诱导/边界
-├─ infra/                   # docker / nginx / observability
+├─ infra/                   # docker / nginx / observability 计划
 ├─ tools/                   # 文档生成、TOC、PDF
 ├─ scripts/check_repo.py    # 链接/契约/图片检查
 └─ .github/workflows/ci.yml # 只跑无依赖检查
 ```
 
+`docs/design/release/` 是本地生成目录（DOCX/PDF/合并稿），已加入 `.gitignore`，不上传；发布时作为 GitHub Release 附件。
+
 ### 四条目录约定
 
 1. **按可部署单元与领域分，不按语言/文件类型分**：`apps/` 放能独立构建/部署的单元，不建 `frontend/`、`backend/`、`java/`、`python/` 这类名字。
-2. **文档源与产物分开**：改 `docs/design/chapters/`，不直接改 `release/` 里的 DOCX/PDF。
-3. **spec 先于代码**：改接口/状态机，先改 `specs/`，再改 `apps/`；`packages/contracts` 只放生成物。
-4. **先单体后拆分**：代码先落在 `apps/api/src/synapse/` 的包边界；`services/` 等触发条件满足再建。
+2. **文档源与产物分开**：改 `docs/design/chapters/`；`release/` 是本地产物，不进 Git。
+3. **spec 先于代码**：改接口/状态机，先改 `specs/`，再改 `apps/`；生成的 TS 类型在 M1 放到 `apps/web/src/lib/api/`，不预建空 `packages/`。
+4. **先单体后拆分**：代码先落在 `apps/api/src/synapse/` 的包边界；拆分触发条件写在 ADR 与 `apps/api/README.md`，`services/` 目录等真正要拆时再建。
 
 ## 从哪里读
 
 | 文档 | 内容 |
 |---|---|
 | [语言与代码架构 ADR](docs/adr/0001-language-and-code-architecture.md) | **先看这篇**：5 个独立评审、评分、最终选型、迁移与改选条件 |
-| [Word 版](docs/design/release/SynapseMind-单题诊断引导-设计方案.docx) | 56 页，封面、自动目录、页眉页脚、49 张表、3 张图；v0.3 已按 ADR 重写第 7/8 章 |
-| [PDF 版](docs/design/release/SynapseMind-单题诊断引导-设计方案.pdf) | 与 Word 同版式，适合预览/发送 |
-| [Markdown 全文](docs/design/release/SynapseMind-单题诊断引导-设计方案.md) | 12 章 + 附录，约 1.6 万字 |
+| 本地 Word/PDF | **不入库**；运行下方“构建设计文档”生成，发布时作为 GitHub Release 附件 |
 | [一页纸](docs/design/chapters/00-一页纸.md) | 定位、示例、指标 |
 | [核心体验](docs/design/chapters/02-核心体验.md) | 完整对话、四个分支、诊断卡 |
 | [诊断引擎](docs/design/chapters/04-诊断引擎.md) | 解法图、L0–L6、假设与探针 |
@@ -186,16 +182,19 @@ pwsh tools/update_toc_and_export.ps1   # Windows + Word
 python scripts/check_repo.py
 ```
 
+产物写到 `docs/design/release/`，该目录已忽略、不上传；发布时把 PDF 作为 GitHub Release 附件。
+
 CI 只跑 `python scripts/check_repo.py`，不依赖 Word/网络。
 
 ## 诚实说明
 
-- 这是**项目设计方案**，不是已上线产品；56 页里的完成率、成本、一致率均为目标或估算。
-- **v0.3 已按 ADR-0001 统一第 7/8 章与 DOCX/PDF**；第 11 章保留旧 Java 设计过程，仅作为“无共享记忆子 Agent + 冲突裁决”的方法记录，不是当前架构。
+- 这是**项目设计方案**，不是已上线产品；文中的完成率、成本、一致率均为目标或估算。
+- **v0.3 已按 ADR-0001 统一第 7/8 章**；第 11 章保留旧 Java 设计过程，仅作为“无共享记忆子 Agent + 冲突裁决”的方法记录，不是当前架构。
+- **DOCX/PDF 是本地生成物，不入库**；仓库只保留 Markdown 源，发布时把 PDF 放到 GitHub Release。
 - 选 Python/TS 的代价是 skill.txt 的 Java/Spring/MySQL/Caffeine 四项在 MVP 主链路没有落点；这是有意的产品取舍，不是遗漏。
 - MVP 只覆盖高中数学“函数与导数”的五类题型；任意题/全学科是 Phase 2。
 - 当前没有真实用户数据、没有 100 条标注、没有疗效证据；第 9.8 节列了缺口。
-- 旧版“12 分钟测评 + 学习 OS + 增长”方案已归档：[docs/archive/v0-broad-os](docs/archive/v0-broad-os/README.md)。它把重点做偏了，不作为主方案。
+- 旧版“12 分钟测评 + 学习 OS + 增长”方案已移到本地 `_local/archive/v0-broad-os/`，不上传；Git 历史里仍可追溯，但不占用仓库首页。
 - License 尚未确定；公开前由维护者选择并添加 `LICENSE`。
 
 **这个项目最难的不是模型，是 30 道题 × 每道 7–10 个节点的双人标注，以及让一个学生在第 3 轮还愿意回答。**

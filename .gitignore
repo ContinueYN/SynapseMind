@@ -40,5 +40,6 @@ coverage/
 logs/
 *.log
 
-# Generated docs intermediate files
-docs/design/release/~$*
+# Local-only archive / generated doc artifacts
+_local/
+docs/design/release/
