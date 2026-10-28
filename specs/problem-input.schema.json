@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://synapsemind.dev/schemas/problem-input.schema.json",
+  "title": "ProblemInput",
+  "description": "学生交题入口：题目 + 自己的答案/过程。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["problem", "attempt"],
+  "properties": {
+    "problem": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000,
+          "description": "题目文本；公式用 LaTeX，行内 $...$，块级 $$...$$。"
+        },
+        "image_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "题目拍照/截图；与 text 至少有一个。"
+        },
+        "subject": {
+          "type": "string",
+          "enum": ["math"],
+          "default": "math"
+        },
+        "grade": {
+          "type": "string",
+          "enum": ["high_school"],
+          "default": "high_school"
+        }
+      },
+      "anyOf": [
+        {"required": ["text"]},
+        {"required": ["image_url"]}
+      ]
+    },
+    "attempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["answer"],
+      "properties": {
+        "answer": {
+          "type": "string",
+          "maxLength": 2000,
+          "description": "最终答案；完全不会时填 \"不会\"。"
+        },
+        "work": {
+          "type": "string",
+          "maxLength": 8000,
+          "description": "过程/步骤；越完整诊断越准。"
+        },
+        "stuck_at": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "学生自述卡住的位置。"
+        },
+        "confidence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5,
+          "description": "这题有几成把握（1–5）。"
+        },
+        "self_report": {
+          "type": "string",
+          "enum": ["no_idea", "wrong", "unsure", "correct_but_guessed"],
+          "description": "用户自述状态，仅作初始假设，不作为诊断结论。"
+        }
+      }
+    },
+    "correct_answer": {
+      "type": "string",
+      "maxLength": 2000,
+      "description": "正确答案；只用于校验，学习模式不展示。"
+    },
+    "locale": {
+      "type": "string",
+      "enum": ["zh-CN", "en"],
+      "default": "zh-CN"
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["learning", "answer_only"],
+      "default": "learning",
+      "description": "learning 不泄漏答案；answer_only 是显式出口。"
+    }
+  }
+}

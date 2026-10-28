@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://synapsemind.dev/schemas/solution-graph.schema.json",
+  "title": "SolutionGraph",
+  "description": "题目解法图：节点是认知动作，边是依赖。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["problem_id", "version", "nodes", "edges"],
+  "properties": {
+    "problem_id": {
+      "type": "string",
+      "pattern": "^P_[A-Z0-9_]+$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^g[0-9]+$"
+    },
+    "stem": {
+      "type": "string",
+      "maxLength": 4000
+    },
+    "nodes": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 20,
+      "items": {"$ref": "#/$defs/node"}
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "prefixItems": [
+          {"type": "string"},
+          {"type": "string"}
+        ],
+        "minItems": 2,
+        "maxItems": 2
+      }
+    }
+  },
+  "$defs": {
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "text", "demand"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^n[0-9]+$"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["READ", "CONCEPT", "CONDITION", "STRATEGY", "TRANSFORM", "COMPUTE", "CHECK"]
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "demand": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "V": {"type": "number", "minimum": 0, "maximum": 1},
+            "Gf": {"type": "number", "minimum": 0, "maximum": 1},
+            "Gv": {"type": "number", "minimum": 0, "maximum": 1},
+            "WM": {"type": "number", "minimum": 0, "maximum": 1},
+            "Gs": {"type": "number", "minimum": 0, "maximum": 1},
+            "LTS": {"type": "number", "minimum": 0, "maximum": 1},
+            "M": {"type": "number", "minimum": 0, "maximum": 1}
+          }
+        },
+        "common_errors": {
+          "type": "array",
+          "items": {"type": "string"},
+          "maxItems": 8
+        },
+        "probes": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/probe"},
+          "maxItems": 10
+        }
+      }
+    },
+    "probe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "question", "targets"],
+      "properties": {
+        "id": {"type": "string"},
+        "question": {"type": "string", "maxLength": 300},
+        "options": {
+          "type": "array",
+          "items": {"type": "string"},
+          "maxItems": 4
+        },
+        "targets": {
+          "type": "array",
+          "items": {"type": "string"},
+          "minItems": 1
+        },
+        "hint_level": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3,
+          "default": 0
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://synapsemind.dev/schemas/diagnosis.schema.json",
+  "title": "DiagnosisCard",
+  "description": "卡点卡：不是成绩单，是下一动作。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "session_id", "problem_id", "card"],
+  "properties": {
+    "version": {"type": "string", "const": "0.1"},
+    "session_id": {"type": "string", "pattern": "^S_[A-Z0-9]+$"},
+    "problem_id": {"type": "string", "pattern": "^P_[A-Z0-9_]+$"},
+    "card": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "layer",
+        "label",
+        "node_id",
+        "one_line",
+        "evidence",
+        "excluded",
+        "confidence",
+        "confidence_label",
+        "next_action",
+        "verify",
+        "disagree"
+      ],
+      "properties": {
+        "layer": {
+          "type": "string",
+          "enum": ["L0", "L1", "L2", "L3", "L4", "L5", "L6"]
+        },
+        "label": {"type": "string", "maxLength": 40},
+        "node_id": {"type": "string", "pattern": "^n[0-9]+$"},
+        "one_line": {"type": "string", "maxLength": 200},
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": {"type": "string", "maxLength": 300}
+        },
+        "excluded": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {"type": "string", "maxLength": 100}
+        },
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "confidence_label": {
+          "type": "string",
+          "enum": ["high", "medium", "low"]
+        },
+        "next_action": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["micro_lesson", "worked_example", "probe_more", "none"]
+            },
+            "concept_id": {"type": "string"},
+            "duration_min": {"type": "integer", "minimum": 1, "maximum": 10},
+            "task_id": {"type": "string"}
+          }
+        },
+        "verify": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "due_hours"],
+          "properties": {
+            "type": {"type": "string", "enum": ["transfer", "none"]},
+            "due_hours": {"type": "integer", "minimum": 1, "maximum": 168},
+            "item_id": {"type": "string"}
+          }
+        },
+        "disagree": {"type": "boolean"}
+      }
+    }
+  }
+}

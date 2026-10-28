@@ -1,0 +1,183 @@
+# SynapseMind 突触智学
+
+> **不是讲这道题，是找到你卡住的那一步。**
+
+一个“单题诊断引导”产品：学生发来一道**不会/做错的题**，加上**自己的答案或过程**（也可以只说“完全不会”），系统用 2–6 轮追问，找到他**最早断掉的认知动作**，给一张带证据的卡点卡、3 分钟微干预和一道迁移题。
+
+**状态**：设计方案 v0.2 已完成；仓库已按可公开托管的结构搭好；MVP 代码尚未开始。不是已上线产品。
+
+## 它怎么工作
+
+| 步骤 | 系统做什么 | 用户看到 |
+|---|---|---|
+| 1. 交题 | 文本/拍照；分离题目与答案 | “先确认题目识别对不对” |
+| 2. 拆题 | 生成解法图：读题、概念、条件、策略、执行、校验 | “这题分几步”（不展开答案） |
+| 3. 对齐 | 把用户步骤贴到图上，找第一处偏离 | “你写到第 2 步时用了一个前提” |
+| 4. 追问 | 2–6 轮，一次一问，用反例/二选一逼出真实理解 | 一个具体问题 + 选项/输入框 |
+| 5. 定位 | L0–L6 卡点 + 证据 + 排除项 + 置信度 | “你卡在 L2，不是不会求导” |
+| 6. 微干预 | 3 分钟讲一个点 + 1 道同构题 | 一张概念卡 + 一道小题 |
+| 7. 验证 | 24h/7d 新题复测 | “明天用新题验证，不用同一道” |
+
+## 一个片段：答案对，过程漏了条件
+
+题目：`f(x)=ln x - a x`，`a∈R`，若 `f(x)≤0` 对任意 `x>0` 恒成立，求 `a` 的取值范围。
+
+学生答案：`f'(x)=1/x-a`，令 `f'(x)=0` 得 `x=1/a`，最大值 `ln(1/a)-1≤0`，所以 `a≥1/e`。**答案对，但漏了 `a≤0`。**
+
+系统没有说“你漏了 a≤0”，而是问：
+
+> “当 `a=0` 时，`f'(x)` 是什么？在 `x>0` 上有零点吗？”
+
+学生：“`1/x`，没有零点。”
+
+> “那 `a=0` 时，`f(x)=ln x` 会不会超过 0？”
+
+学生：“会，`x>1` 就大于 0。”
+
+> “再看 `a=-1`：`f'(x)=1/x+1` 有零点吗？`f(x)` 单调怎样？”
+
+学生：“没有零点，一直增；x 很大时 `ln x + x` 也很大，肯定超过 0。”
+
+> “所以‘令 `f'(x)=0` 得 `x=1/a`’要求 `a` 满足什么？”
+
+学生：“`a>0`。a<0 时 1/a 是负的，不在定义域；a=0 也不行。”
+
+**卡点卡**：L2 条件转译 / 参数分类；证据是“在 a=0、a=-1 时仍沿用 x=1/a”；排除“求导、解不等式”；置信度 0.86；下一练是“存在性三步检查”。
+
+## 五个可演示亮点
+
+1. **单题入口**：不是先做 12 分钟测评，而是从用户当下卡住的那道题开始。
+2. **第一处偏离**：不是看最后错在哪，而是找最早让解题链断掉的认知动作。
+3. **一次一问**：每轮只问一个可回答的问题，用具体反例/二选一，不用“懂了吗”。
+4. **诊断卡 + 我不同意**：卡点、证据、排除项、置信度、下一练；用户能否决。
+5. **答案单向阀**：检索、Prompt/schema、出口、回归四道闸；学习模式拿不到最终答案。
+
+![单题诊断闭环](docs/design/assets/01-dialogue-loop.png)
+
+## 不是什么
+
+| 不是 | 为什么 |
+|---|---|
+| 题库/搜题 | 搜题给答案，我们给“你卡在哪” |
+| AI 家教 | 家教讲整题，我们只追问一个点，讲 3 分钟就停 |
+| 智商测试 | 不输出 IQ、百分位、等级；七维只在后台做“探针镜头” |
+| 完整课程 | MVP 只做高中数学“函数与导数” |
+| 提分承诺 | 只承诺更准确地找到下一个该练的点 |
+
+## MVP 边界
+
+| 项 | 决策 |
+|---|---|
+| 学科 | 高中数学“函数与导数” |
+| 题量 | 100 道种子题，30 道深标 |
+| 输入 | 文本 + 拍照；答案可文本/手写 |
+| 输出 | 卡点卡 + 3 分钟微干预 + 1 道迁移题 |
+| 团队/周期 | 3 人 / 8 周 |
+| 架构 | 4 个部署单元，7 个服务边界 |
+| 评测 | 与双教师卡点一致率 ≥75%；“说中了” ≥70%；答案泄漏 0 |
+| 生死线 | 50 次诊断一致率 <60%，停止扩张 |
+
+## 仓库结构
+
+```text
+.
+├─ apps/                    # 运行单元（当前是脚手架）
+│  ├─ api/                  # Java 21 + Spring Boot，模块化单体
+│  ├─ web/                  # Next.js，交题/追问/卡点卡
+│  └─ ai-worker/            # Python：OCR 后处理/ETL/评测
+├─ services/                # Phase 2 拆分；当前不建，避免“假微服务”
+├─ packages/contracts/      # OpenAPI、生成的 DTO、事件契约
+├─ specs/                   # 状态机 + JSON Schema（先于代码）
+├─ docs/
+│  ├─ design/
+│  │  ├─ chapters/          # 第 0–12 章，手写源
+│  │  ├─ release/           # 合并版 MD + DOCX + PDF
+│  │  └─ assets/            # 3 张设计图
+│  ├─ reference/skill.txt   # 能力清单原文
+│  └─ archive/v0-broad-os/  # 废弃的旧版
+├─ eval/
+│  ├─ golden/               # 100 条双教师标注
+│  └─ redteam/              # 50 条诱导/边界
+├─ infra/                   # docker / nginx / observability
+├─ tools/                   # 文档生成、TOC、PDF
+├─ scripts/check_repo.py    # 链接/契约/图片检查
+└─ .github/workflows/ci.yml # 只跑无依赖检查
+```
+
+### 三条目录约定
+
+1. **文档源与产物分开**：改 `docs/design/chapters/`，不直接改 `release/` 里的 DOCX/PDF。
+2. **spec 先于代码**：改接口/状态机，先改 `specs/`，再改 `apps/`。
+3. **先单体后拆分**：代码先落在 `apps/api` 的包边界；`services/` 等触发条件满足再建。
+
+## 从哪里读
+
+| 文档 | 内容 |
+|---|---|
+| [Word 版](docs/design/release/SynapseMind-单题诊断引导-设计方案.docx) | 56 页，封面、自动目录、页眉页脚、49 张表、3 张图 |
+| [PDF 版](docs/design/release/SynapseMind-单题诊断引导-设计方案.pdf) | 与 Word 同版式，适合预览/发送 |
+| [Markdown 全文](docs/design/release/SynapseMind-单题诊断引导-设计方案.md) | 12 章 + 附录，约 1.6 万字 |
+| [一页纸](docs/design/chapters/00-一页纸.md) | 定位、示例、指标 |
+| [核心体验](docs/design/chapters/02-核心体验.md) | 完整对话、四个分支、诊断卡 |
+| [诊断引擎](docs/design/chapters/04-诊断引擎.md) | 解法图、L0–L6、假设与探针 |
+| [Prompt 与 Agent](docs/design/chapters/05-Prompt与Agent.md) | 状态机、系统提示、JSON Schema、答案四道闸 |
+| [RAG 与内容](docs/design/chapters/06-RAG与内容.md) | 五类知识卡、混合检索、引用 |
+| [技术架构](docs/design/chapters/07-技术架构.md) | 4 单元 / 7 服务边界、14 张表 |
+| [skill.txt 映射](docs/design/chapters/08-skill映射.md) | 11 项逐条落点与验收 |
+| [可行性与 MVP](docs/design/chapters/09-可行性与MVP.md) | 8 周计划、评测、成本、风险 |
+| [状态机 spec](specs/dialogue-state.md) | 运行前先看这个 |
+| [诊断卡 schema](specs/diagnosis.schema.json) | 输出契约 |
+
+## skill.txt 的 11 项能力落在哪
+
+| 能力 | 本项目落点 |
+|---|---|
+| Java/Python/Go + Hutool/Lombok + 规范 | Java 21 主栈；Python 做 OCR 后处理/评测；Go SSE 采集 sidecar；Spotless/Checkstyle/ArchUnit |
+| Spring Cloud + MyBatis + 单体拆微服务 | Gateway/Nacos/Feign/Sentinel；4 单元 → 7 服务边界；MyBatis-Plus；拆分 ADR |
+| MySQL + 分表 + 索引 + Druid | 14 张表；`user_id` 16 片；联合/覆盖索引；3 条 SQL 优化；慢 SQL 日报 |
+| Redis/Caffeine/锁/三防 | 解法图本地缓存、会话 Redis、Redisson 锁、布隆、逻辑过期 |
+| Docker/Nginx/Serverless | 多阶段镜像；SSE 关闭缓冲；OCR/PDF 导出跑 FC |
+| Prometheus/Grafana/ARMS/JVM | 对话全链路 trace；三张大盘；5 条 SLO；OOM 复盘 |
+| SEO/GEO | 公开“题目卡点库”100 页；TDK；JSON-LD；llms.txt；AI 引用监测 |
+| Spring AI/LangChain4j/RAG/MCP/多 Agent | 四角色状态机；五类知识卡；6 个 MCP 工具 |
+| Prompt/PGvector/ETL/查询增强 | JSON Schema；pgvector HNSW；文档 ETL；BM25+dense+RRF+rerank |
+| Cursor/Claude Code/Copilot/MCP/Skills | 自建 MCP Server；`diagnostic-review`、`hint-policy` 两个 Skill |
+| Vibe Coding/SDD/Harness/Spec-Kit | spec 先行；golden 对话；canary；回滚演练 |
+
+完整映射见 [第 8 章](docs/design/chapters/08-skill映射.md)。
+
+## 开发入口
+
+当前没有可运行的业务代码，只有**目录、契约、设计**。下一步按这个顺序：
+
+1. 读 [`specs/dialogue-state.md`](specs/dialogue-state.md) 与三个 JSON Schema；
+2. 在 `apps/api` 建 Maven 模块，先实现 `session` + `problem` + `diagnosis` 文本闭环；
+3. 在 `apps/web` 做 `/diagnose/[sessionId]` 一页；
+4. 用 3 道题跑通，再接模型；
+5. 把 10 条 golden 写进 `eval/golden/`，再谈 100 条。
+
+### 构建设计文档
+
+```bash
+python -m pip install -r tools/requirements.txt
+python tools/diagrams.py
+python tools/generate_docx.py
+pwsh tools/update_toc_and_export.ps1   # Windows + Word
+python scripts/check_repo.py
+```
+
+CI 只跑 `python scripts/check_repo.py`，不依赖 Word/网络。
+
+## 诚实说明
+
+- 这是**项目设计方案**，不是已上线产品；56 页里的完成率、成本、一致率均为目标或估算。
+- MVP 只覆盖高中数学“函数与导数”的五类题型；任意题/全学科是 Phase 2。
+- 当前没有真实用户数据、没有 100 条标注、没有疗效证据；第 9.8 节列了缺口。
+- 旧版“12 分钟测评 + 学习 OS + 增长”方案已归档：[docs/archive/v0-broad-os](docs/archive/v0-broad-os/README.md)。它把重点做偏了，不作为主方案。
+- License 尚未确定；公开前由维护者选择并添加 `LICENSE`。
+
+**这个项目最难的不是模型，是 30 道题 × 每道 7–10 个节点的双人标注，以及让一个学生在第 3 轮还愿意回答。**
+
+---
+
+*文档版本 v0.2 · 2026-10-28 · 贡献前请读 [CONTRIBUTING.md](CONTRIBUTING.md)*

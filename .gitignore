@@ -1,0 +1,44 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Java / Maven
+target/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+
+# Node / frontend
+node_modules/
+.next/
+out/
+dist/
+build/
+.turbo/
+coverage/
+
+# Local config / secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# Runtime artifacts
+.tmp/
+logs/
+*.log
+
+# Generated docs intermediate files
+docs/design/release/~$*
