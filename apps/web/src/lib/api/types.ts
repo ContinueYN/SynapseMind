@@ -2,7 +2,7 @@ import type { components } from "./generated";
 
 /**
  * Response contracts are generated from the FastAPI OpenAPI document:
- *   python scripts/contracts.py
+ *   python scripts/contracts/generate.py
  *
  * Only the request input stays hand-written, because the browser intentionally
  * relies on server defaults (`locale`, `mode`, empty work strings).

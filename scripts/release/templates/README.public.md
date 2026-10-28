@@ -24,7 +24,7 @@
 需要 Python 3.12+、Node.js 22+。一条命令启动 API 和 Web（首次会建 venv、装依赖）：
 
 ```powershell
-python scripts/dev.py
+python scripts/dev/run.py
 ```
 
 打开 `http://localhost:3000`；API 文档在 `http://localhost:8000/docs`。`Ctrl+C` 会同时停掉两个进程。
@@ -32,7 +32,7 @@ python scripts/dev.py
 只检查环境、不启动：
 
 ```powershell
-python scripts/dev.py --check
+python scripts/dev/run.py --check
 ```
 
 手动分开启动：
@@ -55,7 +55,7 @@ npm run dev
 
 - **Web**：Next.js 15 App Router + TypeScript，三个页面（交题 / 追问 / 卡点卡）。
 - **API**：Python 3.12 + FastAPI + Pydantic v2，模块化单体，按 `domain / application / infrastructure / api` 分层；M1 用内存适配器。
-- **契约**：DTO 是源，FastAPI 导出 OpenAPI，`scripts/contracts.py` 生成 `apps/web/src/lib/api/generated.ts`；生成的 TS 已入库，fresh clone 不跑 Python 也能 typecheck/build。
+- **契约**：DTO 是源，FastAPI 导出 OpenAPI，`scripts/contracts/generate.py` 生成 `apps/web/src/lib/api/generated.ts`；生成的 TS 已入库，fresh clone 不跑 Python 也能 typecheck/build。
 - **硬约束**：LLM 不直接选下一状态；答案库与学习模式 DTO 物理隔离；一轮只问一个问题；最多 6 轮；后验 ≥ 0.80 且 margin ≥ 0.25 才收敛。
 
 ```text
@@ -66,7 +66,7 @@ npm run dev
 │  └─ worker/               # Arq 入口（M2）
 ├─ specs/                   # 状态机 + JSON Schema
 ├─ infra/                   # Compose / Nginx / 可观测性规划
-├─ scripts/                 # 一键启动、契约生成、仓库检查
+├─ scripts/                 # 启动、契约、检查、可选导出
 ├─ docs/adr/                # 架构决策记录
 ├─ .github/workflows/       # CI
 ├─ README.md

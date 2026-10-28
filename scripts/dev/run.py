@@ -1,6 +1,6 @@
 """One-command local development launcher.
 
-    python scripts/dev.py
+    python scripts/dev/run.py
 
 Creates the API venv if needed, installs dependencies on first run, starts
 FastAPI and Next.js, and waits until both are reachable. Ctrl+C stops both.
@@ -20,7 +20,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 API = ROOT / "apps" / "api"
 WEB = ROOT / "apps" / "web"
 
@@ -111,7 +111,7 @@ def check() -> int:
         problems.append("npm is missing from PATH")
     if not (WEB / "src" / "lib" / "api" / "generated.ts").is_file():
         problems.append(
-            "generated API types are missing; run python scripts/contracts.py"
+            "generated API types are missing; run python scripts/contracts/generate.py"
         )
     print(f"python: {python}")
     print(f"npm:    {npm}")

@@ -21,7 +21,7 @@ jobs:
           python-version: "3.12"
 
       - name: Check docs, links and specs
-        run: python scripts/check_repo.py
+        run: python scripts/checks/check_repo.py
 
   api:
     runs-on: ubuntu-latest

@@ -20,7 +20,7 @@
 │  └─ redteam/           # 诱导、边界、泄漏测试
 ├─ infra/                 # Compose / Nginx / 可观测性配置（M1 落）
 ├─ tools/                 # 文档生成与图，不是运行时依赖
-├─ scripts/               # CI/本地检查，不是业务代码
+├─ scripts/               # 按职责分组：dev / contracts / checks / release
 ├─ docs/
 │  ├─ adr/               # 架构决策记录（为什么这样选）
 │  ├─ design/
@@ -54,7 +54,7 @@ docs/design/release/      # 合并 MD / DOCX / PDF；生成物，不进 Git
 | `eval/redteam/` | 诱导、越界、答案泄漏、提示注入用例 | 普通单元测试 | `README.md` |
 | `infra/` | `compose.yaml`、Dockerfile、Nginx、OTel 配置 | 业务代码、前端组件 | `README.md`；M2 起容器文件 |
 | `tools/` | `diagrams.py`、`merge_markdown.py`、`generate_docx.py`、TOC/PDF 脚本 | 运行时依赖、业务逻辑 | 5 个脚本 + `requirements.txt` |
-| `scripts/` | `check_repo.py`、`dev.py`、`contracts.py` 等仓库级检查/启动/导出 | 应用入口、部署脚本 | 4 个脚本 + `README.md` |
+| `scripts/` | 按职责分组：`dev/` 启动、`contracts/` 契约、`checks/` 检查、`release/` 可选导出 | 应用入口、部署脚本 | 4 组脚本 + `README.md` |
 | `docs/adr/` | 一个决策一个文件：背景、选项、评分、后果、改选条件 | 教程、会议记录、未决讨论 | `0001` 语言与代码架构 |
 | `docs/design/chapters/` | 第 0–12 章 Markdown，按编号排序 | DOCX/PDF、合并稿、图片 | 13 个章节源文件 |
 | `docs/design/assets/` | 由 `tools/diagrams.py` 生成的 3 张 PNG | 手工改图、截图堆 | 3 张图 |

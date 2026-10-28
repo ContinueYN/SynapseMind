@@ -6,9 +6,9 @@ be published. This script copies only the runnable code, public docs, and the
 public CI workflow into a separate directory with a fresh history.
 
 Usage:
-    python scripts/export_public.py
-    python scripts/export_public.py --target ../SynapseMind-public
-    python scripts/export_public.py --target ../SynapseMind-public --force
+    python scripts/release/export_public.py
+    python scripts/release/export_public.py --target ../SynapseMind-public
+    python scripts/release/export_public.py --target ../SynapseMind-public --force
 """
 
 from __future__ import annotations
@@ -19,9 +19,9 @@ import shutil
 import stat
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_TARGET = ROOT.parent / "SynapseMind-public"
-TEMPLATES = ROOT / "scripts" / "templates"
+TEMPLATES = ROOT / "scripts" / "release" / "templates"
 
 EXCLUDED_DIRS = {
     ".next",
@@ -75,14 +75,17 @@ def _copy_tree(source: Path, target: Path) -> None:
 def _copy_public_scripts(target: Path) -> None:
     scripts = target / "scripts"
     scripts.mkdir()
-    for path in sorted((ROOT / "scripts").iterdir()):
-        if not path.is_file():
-            continue
-        if path.name in {"export_public.py", "README.md"}:
-            continue
-        if path.suffix not in {".py", ".ps1"}:
-            continue
-        shutil.copy2(path, scripts / path.name)
+    public_scripts = (
+        "dev/run.py",
+        "dev/run.ps1",
+        "contracts/generate.py",
+        "contracts/export_openapi.py",
+        "checks/check_repo.py",
+    )
+    for rel in public_scripts:
+        destination = scripts / rel
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / "scripts" / rel, destination)
     shutil.copy2(TEMPLATES / "README.scripts.md", scripts / "README.md")
 
 

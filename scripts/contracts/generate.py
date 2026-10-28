@@ -2,7 +2,7 @@
 
 Run from the repository root with the API venv available:
 
-    python scripts/contracts.py
+    python scripts/contracts/generate.py
 
 It writes the local OpenAPI artifact, then asks ``openapi-typescript`` to
 regenerate ``apps/web/src/lib/api/generated.ts``. The generated file is checked
@@ -17,9 +17,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 WEB = ROOT / "apps" / "web"
-EXPORT_SCRIPT = ROOT / "scripts" / "export_openapi.py"
+EXPORT_SCRIPT = ROOT / "scripts" / "contracts" / "export_openapi.py"
 
 
 def api_python() -> Path:

@@ -2,21 +2,24 @@
 
 仓库级脚本，不参与运行时。
 
-| 脚本 | 用途 |
-|---|---|
-| `check_repo.py` | CI/本地检查：必需文件、Markdown 链接、JSON 可解析、11 项 skill 映射 |
-| `dev.py` | 一键启动 API + Web；首次建 venv/装依赖；`--check` 只检查，`--smoke` 启动后自动停 |
-| `dev.ps1` | Windows 包装：`.\scripts\dev.ps1` |
-| `contracts.py` | 导出 OpenAPI 并生成 `apps/web/src/lib/api/generated.ts` |
-| `export_openapi.py` | 只导出 OpenAPI；默认写到本地忽略的 `.tmp/openapi.json` |
-| `export_public.py` | 生成不含设计/评测材料的公开仓库目录 |
-| `new_chapter.py` | **待加**：新建章节并自动编号 |
-| `serve_docs.sh` | **待加**：本地预览 Markdown |
+```text
+scripts/
+├─ dev/
+│  ├─ run.py             # 一键启动 API + Web
+│  └─ run.ps1            # Windows 包装
+├─ contracts/
+│  ├─ generate.py        # OpenAPI -> generated.ts
+│  └─ export_openapi.py  # 只导出 OpenAPI
+├─ checks/
+│  └─ check_repo.py      # 文件、链接、JSON、skill 映射检查
+└─ release/
+   └─ export_public.py   # 可选的公开树导出工具
+```
 
 ## 检查
 
 ```bash
-python scripts/check_repo.py
+python scripts/checks/check_repo.py
 ```
 
 检查内容：
@@ -30,11 +33,13 @@ python scripts/check_repo.py
 ## 一键启动
 
 ```powershell
-python scripts/dev.py
+python scripts/dev/run.py
+# Windows 包装
+.\scripts\dev\run.ps1
 # 只检查环境
-python scripts/dev.py --check
+python scripts/dev/run.py --check
 # 启动、确认健康、再自动停（用于验证）
-python scripts/dev.py --smoke --no-install
+python scripts/dev/run.py --smoke --no-install
 ```
 
 ## 导出 OpenAPI 与生成 TS 类型
@@ -42,14 +47,14 @@ python scripts/dev.py --smoke --no-install
 需要先安装 API 依赖：
 
 ```powershell
-python scripts/contracts.py
+python scripts/contracts/generate.py
 ```
 
 它等价于：
 
 ```powershell
 # 1. 用 API venv 导出 OpenAPI
-apps\api\.venv\Scripts\python.exe scripts\export_openapi.py
+apps\api\.venv\Scripts\python.exe scripts\contracts\export_openapi.py
 # 2. 在 apps/web 生成 TS 类型
 cd apps/web
 npm run generate:api
@@ -57,4 +62,6 @@ npm run generate:api
 
 生成物默认在 `.tmp/`（忽略）；`apps/web/src/lib/api/generated.ts` 入库，供 fresh clone 直接 typecheck/build。不要把它粘回 `specs/`；`specs/` 只放人写的契约源。
 
-不检查 Word/PDF 的版式；版式用 `tools/update_toc_and_export.ps1` 后人工抽查。
+## 公开树（可选）
+
+`scripts/release/export_public.py` 只在需要发布公开代码时使用；它不是日常开发步骤，也不会创建/推送任何远程仓库。

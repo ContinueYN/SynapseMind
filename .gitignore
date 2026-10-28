@@ -75,12 +75,9 @@ data/local/
 _local/
 docs/design/release/
 
-# Private product/evaluation material. The public GitHub tree is produced by
-# scripts/export_public.py; .gitignore alone does not remove files already in
-# Git history or in the index.
+# Private product/evaluation material. To publish a reduced tree, run
+# scripts/release/export_public.py when needed.
 docs/design/
 docs/reference/
 eval/
 tools/
-Project_try-public/
-SynapseMind-public/

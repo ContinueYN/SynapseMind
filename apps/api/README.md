@@ -88,7 +88,7 @@ domain 不 import FastAPI / SQLAlchemy / OpenAI
 在仓库根目录一条命令启动 API + Web：
 
 ```powershell
-python scripts/dev.py
+python scripts/dev/run.py
 ```
 
 只跑 API 检查：
@@ -109,7 +109,7 @@ mypy src
 生成接口契约与 Web 类型（本地产物，`generated.ts` 入库）：
 
 ```powershell
-python ..\..\scripts\contracts.py
+python ..\..\scripts\contracts\generate.py
 ```
 
 ## M1 明确不做

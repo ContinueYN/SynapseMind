@@ -2,14 +2,16 @@
 
 ## 0.5.0 — 2026-10-28
 
-**Web 视觉重构 + 公开仓库导出。**
+**Web 视觉重构 + CSS/scripts 分层。**
 
 - Web 改为深色诊断工作台：Aurora 背景、渐变标题、Spotlight 卡片、StarBorder 主按钮；保留三个路由与“一次一问”的交互硬规则；
 - 交题页、追问页、卡点卡页完成响应式与 reduced-motion 适配；不引入 Tailwind 或新运行时依赖；
 - React Bits 组件按第三方许可单独声明，见 `THIRD_PARTY_NOTICES.md`；
-- 新增 `scripts/export_public.py`，把可公开的代码与文档导出为独立目录，避免主仓库历史泄露设计/评测材料；
-- OpenAPI 生成物从 `docs/design/release/` 移到忽略目录 `.tmp/`，公开仓库也能生成契约；
-- `scripts/check_repo.py` 支持 `.public-repo` 标记，公开仓库只检查公开文件集。
+- `globals.css` 拆为 `app/styles/{tokens,base,layout,components,responsive}.css`，按加载顺序显式引入；
+- `scripts/` 按职责拆为 `dev/`、`contracts/`、`checks/`、`release/`；启动、契约、检查命令同步更新；
+- `scripts/release/export_public.py` 保留为可选的公开树导出工具，不作为日常步骤；
+- OpenAPI 生成物从 `docs/design/release/` 移到忽略目录 `.tmp/`；
+- `scripts/checks/check_repo.py` 兼容主仓库与可选的公开树文件集。
 
 ## 0.4.0 — 2026-10-28
 
@@ -20,10 +22,10 @@
 - 证据链 `Evidence`/`EvidenceChain`：记录来源、主张、支持假设与轮次，卡点卡从链上取证据；
 - 答案泄漏防护：禁用词 + 5-gram 出口装饰器；学习模式 DTO 无 `solution`/`final_answer`；
 - `apps/web`：Next.js 15 App Router 三个页面（交题 / 追问 / 卡点卡）、可复用组件、typed API client；
-- 契约生成：`scripts/contracts.py` 从 FastAPI OpenAPI 生成 `generated.ts`，Web 响应类型不再手抄；
-- 一键启动：`python scripts/dev.py` 自动建 venv/装依赖/起两个进程，`--check` 只检查，`--smoke` 启动后自动停；
+- 契约生成：`scripts/contracts/generate.py` 从 FastAPI OpenAPI 生成 `generated.ts`，Web 响应类型不再手抄；
+- 一键启动：`python scripts/dev/run.py` 自动建 venv/装依赖/起两个进程，`--check` 只检查，`--smoke` 启动后自动停；
 - 26 个后端测试、ruff/mypy/import-linter 通过；前端 typecheck/lint/build 通过；
-- CI 增加 API 与 Web 两组检查；`scripts/check_repo.py` 跳过 `node_modules`/`.next` 等生成目录；
+- CI 增加 API 与 Web 两组检查；`scripts/checks/check_repo.py` 跳过 `node_modules`/`.next` 等生成目录；
 - 明确边界：仅一道种子题、无数据库/LLM/OCR/鉴权；换题返回 422，不静默套用示例图。
 
 ## 0.3.0 — 2026-10-28

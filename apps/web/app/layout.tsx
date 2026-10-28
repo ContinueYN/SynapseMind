@@ -2,7 +2,11 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 import { AppShell } from "@/components/AppShell";
-import "./globals.css";
+import "./styles/tokens.css";
+import "./styles/base.css";
+import "./styles/layout.css";
+import "./styles/components.css";
+import "./styles/responsive.css";
 
 export const metadata: Metadata = {
   title: "SynapseMind 突触智学",

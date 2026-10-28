@@ -1,0 +1,80 @@
+/* Reset, base typography, selection policy, and focus. */
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--bg);
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--text);
+  font-family: var(--font-sans);
+  background:
+    radial-gradient(circle at 50% -20%, rgba(45, 212, 191, 0.12), transparent 38rem),
+    radial-gradient(circle at 95% 12%, rgba(129, 140, 248, 0.1), transparent 32rem),
+    var(--bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+::selection {
+  background: rgba(94, 234, 212, 0.35);
+  color: #fff;
+}
+
+/* This is a reading/diagnosis surface, not a document: display text should
+   not be draggable/selectable. Form controls stay editable and selectable. */
+input,
+textarea,
+select,
+option {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
+input::selection,
+textarea::selection {
+  background: var(--accent);
+  color: #04111c;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+a {
+  color: var(--accent);
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 650;
+  letter-spacing: -0.03em;
+}

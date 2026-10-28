@@ -20,7 +20,7 @@
 ## 校验
 
 ```bash
-python scripts/check_repo.py
+python scripts/checks/check_repo.py
 ```
 
 当前只校验 JSON 可解析与文件存在；后续接入 `jsonschema` 做严格校验。

@@ -24,8 +24,8 @@
 需要 Python 3.12+、Node.js 22+。一条命令启动 API + Web（首次会建 venv、装依赖）：
 
 ```powershell
-python scripts/dev.py
-# Windows 也可以：.\scripts\dev.ps1
+python scripts/dev/run.py
+# Windows 也可以：.\scripts\dev\run.ps1
 ```
 
 打开 `http://localhost:3000`；API 文档在 `http://localhost:8000/docs`。`Ctrl+C` 会同时停掉两个进程。
@@ -33,7 +33,7 @@ python scripts/dev.py
 只检查环境、不启动：
 
 ```powershell
-python scripts/dev.py --check
+python scripts/dev/run.py --check
 ```
 
 手动分开启动（调试用）：
@@ -57,7 +57,7 @@ npm run dev
 接口 DTO 是源，Web 的 TS 类型是生成物：
 
 ```powershell
-python scripts/contracts.py
+python scripts/contracts/generate.py
 ```
 
 它先导出 OpenAPI 到本地忽略目录，再用 `openapi-typescript` 生成 `apps/web/src/lib/api/generated.ts`；该文件已入库，fresh clone 不跑 Python 也能 typecheck/build。
@@ -262,7 +262,7 @@ python tools/diagrams.py
 python tools/merge_markdown.py
 python tools/generate_docx.py
 pwsh tools/update_toc_and_export.ps1   # Windows + Word
-python scripts/check_repo.py
+python scripts/checks/check_repo.py
 ```
 
 产物写到 `docs/design/release/`，该目录已忽略、不上传；发布时把 PDF 作为 GitHub Release 附件。
@@ -280,16 +280,15 @@ CI 跑三组：`check_repo.py`（链接/契约）、API（ruff/mypy/import-linte
 - 旧版“12 分钟测评 + 学习 OS + 增长”方案已移到本地 `_local/archive/v0-broad-os/`，不上传；Git 历史里仍可追溯，但不占用仓库首页。
 - 当前代码是 M1 walking skeleton；正式题集、用户数据和效果证据仍未就绪，边界见“当前边界”。
 
-## 公开仓库
+## 公开导出（可选）
 
-本仓库包含产品设计、评测与工具脚本等不公开材料；**不要直接把当前 `main` 推到公开 GitHub**（`.gitignore` 不会移除历史提交里的文件）。生成独立的公开树：
+本项目按私有开发仓库管理，不维护独立的公开目录。需要对外发布代码时，再运行：
 
 ```powershell
-python scripts/export_public.py
-# 默认输出 ../SynapseMind-public，已初始化 Git 后可直接加 remote
+python scripts/release/export_public.py
 ```
 
-公开树只包含 `apps/`、`infra/`、`specs/`、`scripts/`、ADR、根级许可证/说明与公开 CI；设计、参考、评测、工具和历史记录不进入公开树。细节见脚本头部说明。
+脚本只生成公开文件树，不会初始化或推送任何远程仓库；设计、参考、评测、工具和历史记录不进入导出树。发布前仍需人工检查许可证与第三方声明。
 
 ## License
 

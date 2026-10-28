@@ -2,7 +2,7 @@
 """Repository consistency checks for the SynapseMind repo.
 
 No third-party dependencies. Run from anywhere:
-    python scripts/check_repo.py
+    python scripts/checks/check_repo.py
 
 A `.public-repo` marker switches the check to the curated public file set.
 """
@@ -14,7 +14,7 @@ import re
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 PUBLIC = (ROOT / ".public-repo").is_file()
 
 PUBLIC_REQUIRED = [
@@ -82,7 +82,7 @@ SKIP_DIRS = {
     "__pycache__",
     ".venv",
     "docs/design/release",
-    "scripts/templates",
+    "scripts/release/templates",
     "_local",
 }
 
