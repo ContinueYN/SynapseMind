@@ -42,6 +42,8 @@ body {
     var(--bg);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 ::selection {
@@ -49,24 +51,20 @@ body {
   color: #fff;
 }
 
-/* Keep the app’s text copyable, including gradient headlines whose fill is
-   transparent. Without this override the highlight can be invisible even
-   though the browser has a selection. */
-.app-root {
-  user-select: text;
+/* This is a reading/diagnosis surface, not a document: display text should
+   not be draggable/selectable. Form controls stay editable and selectable. */
+input,
+textarea,
+select,
+option {
   -webkit-user-select: text;
+  user-select: text;
 }
 
-.gradient-text__content::selection {
+input::selection,
+textarea::selection {
   background: var(--accent);
   color: #04111c;
-  -webkit-text-fill-color: #04111c;
-}
-
-.option-button,
-.text-button {
-  user-select: text;
-  -webkit-user-select: text;
 }
 
 button,
