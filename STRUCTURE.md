@@ -46,15 +46,15 @@ docs/design/release/      # 合并 MD / DOCX / PDF；生成物，不进 Git
 
 | 目录 | 放这里 | 不放这里 | 当前有什么 |
 |---|---|---|---|
-| `apps/web/` | 页面、组件、RSC/ISR、SEO、SSE 客户端、BFF 透传 | 状态机、诊断规则、Prompt 编排、答案判定 | `README.md`；M1 起 Next.js |
-| `apps/api/` | `domain`（纯函数）、`application`（用例/ports）、`infrastructure`（LLM/RAG/DB）、`api`（路由/SSE）、`workers`（任务） | 前端页面、文档生成、部署脚本 | `README.md`；M1 起 Python 包 |
-| `apps/worker/` | 部署入口与任务说明；与 api 同镜像、不同 command | 第二份领域代码、第二套模型 | `README.md` |
+| `apps/web/` | 页面、组件、RSC/ISR、SEO、SSE 客户端、BFF 透传 | 状态机、诊断规则、Prompt 编排、答案判定 | `app/`、`components/`、`src/lib/api/`、`package.json` |
+| `apps/api/` | `domain`（纯函数）、`application`（用例/ports）、`infrastructure`（LLM/RAG/DB）、`api`（路由/SSE）、`workers`（任务） | 前端页面、文档生成、部署脚本 | `src/synapse/`、`tests/`、`pyproject.toml` |
+| `apps/worker/` | 部署入口与任务说明；与 api 同镜像、不同 command | 第二份领域代码、第二套模型 | `README.md`；M2 起任务 |
 | `specs/` | 状态机转移表、输入/解法图/诊断卡 JSON Schema | 生成的 TS 类型、运行时代码、草稿 | 1 个状态机文档 + 3 个 schema |
 | `eval/golden/` | 黄金对话、双教师标注、评分 rubric | 真实学生隐私数据、生产日志 | `README.md`；完整 100 条本地/私有 |
 | `eval/redteam/` | 诱导、越界、答案泄漏、提示注入用例 | 普通单元测试 | `README.md` |
-| `infra/` | `compose.yaml`、Dockerfile、Nginx、OTel 配置 | 业务代码、前端组件 | `README.md`；M1 落文件 |
+| `infra/` | `compose.yaml`、Dockerfile、Nginx、OTel 配置 | 业务代码、前端组件 | `README.md`；M2 起容器文件 |
 | `tools/` | `diagrams.py`、`merge_markdown.py`、`generate_docx.py`、TOC/PDF 脚本 | 运行时依赖、业务逻辑 | 5 个脚本 + `requirements.txt` |
-| `scripts/` | `check_repo.py` 等仓库级检查 | 应用入口、部署脚本 | 1 个检查脚本 + README |
+| `scripts/` | `check_repo.py`、`export_openapi.py` 等仓库级检查/导出 | 应用入口、部署脚本 | 2 个脚本 + `README.md` |
 | `docs/adr/` | 一个决策一个文件：背景、选项、评分、后果、改选条件 | 教程、会议记录、未决讨论 | `0001` 语言与代码架构 |
 | `docs/design/chapters/` | 第 0–12 章 Markdown，按编号排序 | DOCX/PDF、合并稿、图片 | 13 个章节源文件 |
 | `docs/design/assets/` | 由 `tools/diagrams.py` 生成的 3 张 PNG | 手工改图、截图堆 | 3 张图 |

@@ -1,0 +1,59 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "synapsemind-api"
+version = "0.1.0"
+description = "SynapseMind single-problem diagnosis API"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "uvicorn[standard]>=0.30,<1",
+  "pydantic>=2.8,<3",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.27,<1",
+  "pytest>=8,<9",
+  "ruff>=0.6,<1",
+  "mypy>=1.11,<2",
+  "import-linter>=2.0,<3",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/synapse"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = ["B008"]  # FastAPI Depends() in defaults is intentional
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_ignores = true
+mypy_path = "src"
+files = ["src"]
+
+[tool.importlinter]
+root_packages = ["synapse"]
+
+[[tool.importlinter.contracts]]
+name = "API -> application -> domain"
+type = "layers"
+layers = [
+  "synapse.api",
+  "synapse.infrastructure",
+  "synapse.application",
+  "synapse.domain",
+]

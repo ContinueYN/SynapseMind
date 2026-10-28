@@ -48,6 +48,8 @@ python scripts/check_repo.py
 ## PR 检查清单
 
 - [ ] `python scripts/check_repo.py` 通过
+- [ ] 后端：`cd apps/api && ruff check src tests && ruff format --check src tests && mypy src && lint-imports && pytest`
+- [ ] 前端：`cd apps/web && npm run typecheck && npm run lint && npm run build`
 - [ ] 新增/修改的接口有 spec 或 JSON Schema
 - [ ] 学习模式响应没有 `solution` 字段
 - [ ] 新增 Prompt 有对应的红队用例

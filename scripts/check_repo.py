@@ -45,15 +45,27 @@ SKILL_ROW_RE = re.compile(r"^\|\s*\*\*(\d+)\*\*\s*\|", re.MULTILINE)
 SKIP_DIRS = {
     ".git",
     ".tmp",
+    ".next",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
     "node_modules",
     "target",
     "dist",
     "build",
+    "coverage",
     "__pycache__",
     ".venv",
     "docs/design/release",
     "_local",
 }
+
+
+def _skip(rel: str) -> bool:
+    parts = Path(rel).parts
+    if any(part in SKIP_DIRS for part in parts):
+        return True
+    return any(rel == d or rel.startswith(d + "/") for d in SKIP_DIRS if "/" in d)
 
 
 def walk_markdown() -> list[Path]:
@@ -82,7 +94,7 @@ def walk_markdown() -> list[Path]:
             continue
         for path in root.rglob("*.md"):
             rel = path.relative_to(ROOT).as_posix()
-            if any(rel == d or rel.startswith(d + "/") for d in SKIP_DIRS):
+            if _skip(rel):
                 continue
             files.append(path)
     return sorted(set(files))

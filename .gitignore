@@ -28,6 +28,7 @@ dist/
 build/
 .turbo/
 coverage/
+*.tsbuildinfo
 
 # Local config / secrets
 .env

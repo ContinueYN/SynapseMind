@@ -4,7 +4,59 @@
 
 一个“单题诊断引导”产品：学生发来一道**不会/做错的题**，加上**自己的答案或过程**（也可以只说“完全不会”），系统用 2–6 轮追问，找到他**最早断掉的认知动作**，给一张带证据的卡点卡、3 分钟微干预和一道迁移题。
 
-**状态**：产品设计方案 v0.2、技术选型 v0.3 已完成；仓库已按可公开托管的结构搭好；技术栈由 [ADR-0001](docs/adr/0001-language-and-code-architecture.md) 定为 **TypeScript Web + Python 后端**；MVP 代码尚未开始。不是已上线产品。
+**状态**：产品设计方案 v0.2、技术选型 v0.3 已完成；**M1 walking skeleton 已可本地运行**：单题交题 → 解法图对齐 → 2 轮探针 → L2 卡点卡；M2 的 LLM 生成、RAG、迁移验证、数据库与鉴权尚未接入。不是已上线产品。
+
+## 现在能跑什么
+
+| 能力 | 状态 | 位置 |
+|---|---|---|
+| 交题 + 过程 | ✅ 文本、预填示例题 | `apps/web` |
+| 状态机（显式转移表） | ✅ 10 个状态、事件驱动 | `apps/api/src/synapse/domain/dialogue/` |
+| 步骤对齐 + 首个断点 | ✅ 规则版（M2 换 LLM 策略） | `domain/problem/alignment.py` |
+| 假设后验 + 探针选择 | ✅ 3 个假设、2–6 轮、0.80/0.25 阈值 | `domain/diagnosis/` + `application/planner.py` |
+| 答案泄漏防护 | ✅ 禁用词 + 5-gram 出口装饰器 | `domain/guard/` + `application/composer.py` |
+| 卡点卡 + 独立卡页 | ✅ L2 示例、证据/排除/置信度/下一练 | `application/card_builder.py` + `/card/[sessionId]` |
+| 持久化 | ⏳ 内存仓储（重启即丢） | `infrastructure/in_memory.py` |
+| 拍照、LLM、RAG、24h 验证 | ⏳ M2/M3 | 设计见 `docs/design/` |
+
+## 本地启动
+
+需要 Python 3.12+、Node.js 22+。两个终端：
+
+```powershell
+# 终端 1：API
+cd apps/api
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -e ".[dev]"
+uvicorn --app-dir src synapse.api.main:app --reload --port 8000
+```
+
+```powershell
+# 终端 2：Web
+cd apps/web
+npm install
+npm run dev
+```
+
+打开 `http://localhost:3000`。API 文档在 `http://localhost:8000/docs`；Web 通过 `NEXT_PUBLIC_API_BASE`（默认 `http://localhost:8000`）访问 API。
+
+```powershell
+# 后端检查
+cd apps/api
+pytest
+ruff check src tests
+mypy src
+.\.venv\Scripts\lint-imports.exe
+
+# 前端检查
+cd apps/web
+npm run typecheck
+npm run lint
+npm run build
+```
+
+当前只支持一道种子题（函数与导数、参数分类）。换题会返回 422，这是 M1 的显式边界，不是静默降级。
 
 ## 它怎么工作
 
@@ -82,7 +134,7 @@
 
 ```text
 .
-├─ apps/                    # 运行单元（当前是脚手架）
+├─ apps/                    # 运行单元（M1：web + api 可运行；worker 仍设计）
 │  ├─ web/                  # Next.js + TS：交题/追问/卡点卡/SEO
 │  ├─ api/                  # Python + FastAPI：状态机/诊断/AI/SSE
 │  └─ worker/               # Python + Arq：OCR 后处理/ETL/评测（与 api 同镜像）
@@ -152,25 +204,31 @@
 
 ## 开发入口
 
-当前没有可运行的业务代码，只有**目录、契约、设计**。下一步按这个顺序：
+M1 已落地一条可运行的最小闭环；下一步按这个顺序：
 
 1. 读 [`specs/dialogue-state.md`](specs/dialogue-state.md)、三个 JSON Schema 与 [ADR-0001](docs/adr/0001-language-and-code-architecture.md)；
-2. 在 `apps/api` 建 Python 包，先实现 `dialogue` + `problem` + `diagnosis` 文本闭环；
-3. 在 `apps/web` 做 `/diagnose/[sessionId]` 一页；
-4. 用 3 道题跑通，再接模型；
-5. 把 10 条 golden 写进 `eval/golden/`，再谈 100 条。
+2. 在 `apps/api` 用现有 `StepAligner`/`ProbePlanner` 端口替换规则版，接 LLM 与 3 道题；
+3. 在 `apps/web` 补 `/practice/[taskId]`、`/verify/[sessionId]`；
+4. 把 10 条 golden 写进 `eval/golden/`，再谈 100 条；
+5. 最后接 PostgreSQL/Redis，保持状态机与路由不变。
 
-### 目标命令
+### 本地命令
 
-```bash
+```powershell
 # API
-cd apps/api && uv sync && uv run fastapi dev src/synapse/api/main.py
+cd apps/api
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -e ".[dev]"
+uvicorn --app-dir src synapse.api.main:app --reload --port 8000
 
 # Web
-cd apps/web && pnpm install && pnpm dev
+cd apps/web
+npm install
+npm run dev
 
-# Worker
-uv run --project apps/api arq synapse.workers.settings.WorkerSettings
+# Worker（M2）
+# uv run --project apps/api arq synapse.workers.settings.WorkerSettings
 ```
 
 ### 构建设计文档
@@ -186,7 +244,7 @@ python scripts/check_repo.py
 
 产物写到 `docs/design/release/`，该目录已忽略、不上传；发布时把 PDF 作为 GitHub Release 附件。
 
-CI 只跑 `python scripts/check_repo.py`，不依赖 Word/网络。
+CI 跑三组：`check_repo.py`（链接/契约）、API（ruff/mypy/import-linter/pytest）、Web（typecheck/lint/build）；不依赖 Word/网络。
 
 ## 诚实说明
 

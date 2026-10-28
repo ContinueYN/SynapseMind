@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0 — 2026-10-28
+
+**M1 walking skeleton：单题文本闭环可本地运行。**
+
+- `apps/api`：FastAPI + Pydantic v2 + 分层包（domain/application/infrastructure/api），内存仓储；
+- 显式状态转移表（10 状态）、规则版步骤对齐、3 假设后验、2–6 轮探针、L2 卡点卡；
+- 答案泄漏防护：禁用词 + 5-gram 出口装饰器；学习模式 DTO 无 `solution`/`final_answer`；
+- `apps/web`：Next.js 15 App Router 三个页面（交题 / 追问 / 卡点卡）、可复用组件、typed API client；
+- 24 个后端测试、ruff/mypy/import-linter 通过；前端 typecheck/lint/build 通过；
+- CI 增加 API 与 Web 两组检查；`scripts/check_repo.py` 跳过 `node_modules`/`.next` 等生成目录；
+- 明确边界：仅一道种子题、无数据库/LLM/OCR/鉴权；换题返回 422，不静默套用示例图。
+
 ## 0.3.0 — 2026-10-28
 
 **技术选型重做：从 Java/Spring 主栈改为 TypeScript Web + Python 后端。**
