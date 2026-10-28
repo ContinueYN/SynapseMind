@@ -2,9 +2,10 @@
 
 | 目录 | 内容 |
 |---|---|
+| [`adr/`](adr/README.md) | 架构决策记录；[0001 语言与代码架构](adr/0001-language-and-code-architecture.md) 是技术选型的准绳 |
 | [`design/`](design/README.md) | 产品与工程设计方案：分章 Markdown、合并版 MD/DOCX/PDF、三张图 |
 | [`design/chapters/`](design/chapters/) | 第 0–12 章源文件，改内容从这里改 |
-| [`design/release/`](design/release/) | 合并版 Markdown、Word、PDF；由 `tools/generate_docx.py` 生成 |
+| [`design/release/`](design/release/) | 合并版 Markdown、Word、PDF；由 `tools/merge_markdown.py` + `tools/generate_docx.py` 生成 |
 | [`design/assets/`](design/assets/) | 单题闭环图、诊断引擎图、技术架构图；由 `tools/diagrams.py` 生成 |
 | [`reference/skill.txt`](reference/skill.txt) | 能力清单原文，第 8 章逐条映射的依据 |
 | [`archive/v0-broad-os/`](archive/v0-broad-os/) | 已废弃的“12 分钟测评 / 学习 OS”版本，仅作对照 |
@@ -16,15 +17,17 @@
 3. [诊断引擎](design/chapters/04-诊断引擎.md)
 4. [Prompt 与 Agent](design/chapters/05-Prompt与Agent.md)
 5. [RAG 与内容](design/chapters/06-RAG与内容.md)
-6. [技术架构](design/chapters/07-技术架构.md)
-7. [skill.txt 映射](design/chapters/08-skill映射.md)
-8. [可行性与 MVP](design/chapters/09-可行性与MVP.md)
+6. [语言与代码架构 ADR](adr/0001-language-and-code-architecture.md)（技术选型先看这篇）
+7. [技术架构](design/chapters/07-技术架构.md)（v0.3：Next.js + Python/FastAPI + PostgreSQL/pgvector，3 容器）
+8. [skill.txt 映射](design/chapters/08-skill映射.md)
+9. [可行性与 MVP](design/chapters/09-可行性与MVP.md)
 
 ## 构建文档
 
 ```bash
 python -m pip install -r tools/requirements.txt
 python tools/diagrams.py
+python tools/merge_markdown.py
 python tools/generate_docx.py
 # Windows + Word 环境：更新目录并导出 PDF
 pwsh tools/update_toc_and_export.ps1

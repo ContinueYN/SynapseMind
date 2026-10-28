@@ -241,7 +241,7 @@ sec.different_first_page_header_footer = True
 hp = sec.header.paragraphs[0]
 hp.paragraph_format.tab_stops.add_tab_stop(USABLE, WD_TAB_ALIGNMENT.RIGHT)
 r = hp.add_run("SynapseMind 突触智学 · 单题诊断引导"); set_run_font(r, CN_HEAD, 8.5, MUTED)
-r = hp.add_run("\tv0.2"); set_run_font(r, CN_HEAD, 8.5, MUTED)
+r = hp.add_run("\tv0.3"); set_run_font(r, CN_HEAD, 8.5, MUTED)
 border_para(hp, "bottom", BORDER, 4, 2)
 
 fp = sec.footer.paragraphs[0]
@@ -292,8 +292,8 @@ r = cp2.add_run("学生发来一道题 + 自己的答案；系统用 2–6 轮�
 set_run_font(r, CN_BODY, 10.5, INK)
 
 para("", 10, INK, before=0, after=0)
-para("高中数学 · 函数与导数    |    100 题 · 30 题深标    |    3 人 · 8 周    |    4 个部署单元 → 7 个服务", 10, MUTED, False, False, WD_ALIGN_PARAGRAPH.LEFT, before=18, after=0)
-para("项目设计方案  v0.2    ·    2026 年 10 月", 10, MUTED, False, False, WD_ALIGN_PARAGRAPH.LEFT, before=6, after=0)
+para("高中数学 · 函数与导数    |    100 题 · 30 题深标    |    3 人 · 8 周    |    3 个容器 · 2 种语言", 10, MUTED, False, False, WD_ALIGN_PARAGRAPH.LEFT, before=18, after=0)
+para("项目设计方案  v0.3    ·    2026 年 10 月", 10, MUTED, False, False, WD_ALIGN_PARAGRAPH.LEFT, before=6, after=0)
 para("", 10, INK, before=0, after=0)
 para("本文为设计方案，不是已上线产品。所有指标均为设计目标或估算；缺口见第 9.8 节。", 9, MUTED, False, True, WD_ALIGN_PARAGRAPH.LEFT, before=30, after=0)
 
@@ -715,7 +715,7 @@ doc.core_properties.title = "SynapseMind 突触智学 · 单题诊断引导"
 doc.core_properties.author = "SynapseMind"
 doc.core_properties.subject = "输入一道题与自己的答案，通过苏格拉底式追问定位具体卡点"
 doc.core_properties.keywords = "单题诊断, 苏格拉底追问, 认知诊断, 多Agent, RAG, Spring Cloud, 教育产品"
-doc.core_properties.comments = "v0.2 单题诊断引导方案；指标为设计目标或估算。"
+doc.core_properties.comments = "v0.3 单题诊断引导方案；技术选型见 ADR-0001；指标为设计目标或估算。"
 
 doc.save(DST)
 print("saved", DST)

@@ -4,7 +4,9 @@
 
 ## 为什么不提前拆
 
-3 个人 8 周，拆 7 个进程会带来：Nacos 配置、Feign 契约、分布式事务、链路排查、联调排队。当前阶段用一个模块化单体 + 明确包边界，收益更大。
+3 个人 8 周，拆 7 个进程会带来配置中心、跨进程契约、分布式事务、链路排查、联调排队。当前阶段用**一个 Python 模块化单体 + 明确包边界**，收益更大。
+
+选型见 [ADR-0001](../docs/adr/0001-language-and-code-architecture.md)：MVP 只有 3 个容器（`web` / `api` / `worker`），没有 7 个服务。
 
 ## 拆分触发条件
 
@@ -14,11 +16,11 @@
 - AI 调用与业务事务的资源画像差异 > 3 倍（CPU/内存/超时/扩缩）；
 - 故障域需要隔离（AI 挂了，诊断卡仍可出）；
 - 团队 > 6 人，包边界已经出现跨组合并冲突；
-- 单表/单库写入达到分片阈值，且缓存无法吸收。
+- 单表/单库写入达到分区/分片阈值，且缓存无法吸收。
 
-## 目标服务
+## 目标服务（仅当触发）
 
-`gateway`、`session`、`problem`、`diagnosis`、`knowledge`、`evidence`、`ai-orchestrator`。
+`session`、`problem`、`diagnosis`、`knowledge`、`evidence`、`ai-orchestrator`。网关在 MVP 由 Nginx + FastAPI 中间件承担，不单独拆。
 
 拆分时每个服务必须有：独立数据库 schema、契约测试、SLO、回滚脚本。没有这四样，不拆。
 
@@ -34,4 +36,4 @@ services/
 └─ ai-orchestrator/
 ```
 
-> 当前为空。代码先落在 `apps/api` 的对应包。**目录先不创建，避免“看起来拆了、实际没拆”。**
+> 当前为空。代码先落在 `apps/api/src/synapse/` 的对应包。**目录先不创建，避免“看起来拆了、实际没拆”。**

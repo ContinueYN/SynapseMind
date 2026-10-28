@@ -9,7 +9,7 @@
 - 4. 诊断引擎：从“答案”到“卡点”
 - 5. Prompt 与 Agent：让“追问”可测试
 - 6. RAG 与内容：让追问有据可查
-- 7. 技术架构：为“一次对话”设计
+- 7. 技术架构：2 种语言，3 个容器
 - 8. skill.txt 逐条映射
 - 9. 可行性与 MVP：3 个人 8 周
 - 10. 3 分钟演示与高频追问
@@ -1057,43 +1057,43 @@ MVP 不追求“全题库”，追求“可诊断的密度”。
 
 公开页的作用不是“引流”，而是让教研内容被检索、被引用、被纠错，反哺诊断库。
 
-## 7. 技术架构：为“一次对话”设计，不为“大平台”设计
+## 7. 技术架构：2 种语言，3 个容器
 
-### 7.1 四个部署单元，七个服务边界
+> 本章按 [ADR-0001](../../adr/0001-language-and-code-architecture.md) 重写。旧版 Java/Spring/4 单元/7 边界已废弃；下面只描述 MVP 实际要跑的形态。
 
-MVP 只跑 4 个进程，避免 3 个人被 Nacos/K8s 拖死；但边界按 7 个服务设计，后续可拆。
+### 7.1 两个语言，三个容器
 
-| 部署单元 | 包含的服务边界 | 职责 |
+MVP 只跑 3 个容器，避免 3 个人被 Nacos/K8s/七服务拖死；但 Python 包边界按未来可拆的服务设计。
+
+| 容器 | 技术 | 职责 |
 |---|---|---|
-| **gateway** | API Gateway | 鉴权、限流、SSE 转发、灰度 |
-| **core** | session、problem、diagnosis、evidence | 会话、题目图、对齐、假设、诊断卡 |
-| **ai** | ai-orchestrator、parser、coach、verifier | OCR、LLM 调用、追问生成、校验 |
-| **content** | knowledge、content-admin | 知识库、提示卡、迁移题、标注后台 |
+| **web** | Next.js 15 + TypeScript | 学生端、教师后台、SEO 公开页；RSC/ISR；SSE 外壳 |
+| **api** | Python 3.12 + FastAPI | 会话、状态机、题目、诊断、证据、AI 编排、SSE |
+| **worker** | Python + Arq | OCR 后处理、知识 ETL、golden 评测、红队 |
 
-目标 7 服务：
+数据层只有 **PostgreSQL 16 + pgvector** 与 **Redis 7**；对象存储放题目原图。没有 MySQL、没有独立 AI 服务、没有消息队列、没有 K8s。
 
 ```text
-gateway
-session-service
-problem-service
-diagnosis-service
-knowledge-service
-evidence-service
-ai-orchestrator
+Browser
+  │
+Nginx（SSE 关闭缓冲、限流）
+  ├─ web（Next.js）
+  └─ api（FastAPI）
+        ├─ worker（Arq，离线）
+        ├─ PostgreSQL 16 + pgvector
+        ├─ Redis 7
+        └─ 对象存储
 ```
 
-拆分触发（写进 ADR，不拍脑袋）：
+![图 7-1 技术架构：2 种语言、3 个容器](../assets/03-architecture.png)
 
-- 日均诊断 > 20 万次；
-- AI 调用与业务事务的资源画像差 > 3 倍；
-- 周发布 > 2 次且互相阻塞；
-- 故障域需要隔离（AI 挂了，诊断卡仍可出）。
+*图 7-1 Next.js 负责 Web/SEO/SSE 外壳；FastAPI 负责状态机/诊断/AI；worker 负责离线任务；PostgreSQL 一个主库同时承载业务与向量。*
 
-![图 7-1 技术架构：4 个部署单元、7 个服务边界](../assets/03-architecture.png)
-
-*图 7-1 4 个部署单元、7 个服务边界；MySQL/Redis/pgvector 数据层；可观测性横贯全链路。*
+**为什么不是 7 个服务**：40–60 beta 的流量、3 人 8 周的团队，拆进程只会增加契约、联调、部署和排障成本。拆分触发条件写在 [`services/README.md`](../../../services/README.md)：单模块周发布 >2 次且互相阻塞、资源画像差 >3 倍、故障域必须隔离、团队 >6 人、单库写入达到分区阈值。没有数据不拆。
 
 ### 7.2 核心表
+
+MVP 14 张逻辑表，全部在 PostgreSQL；不引 MySQL，不做 16 片分库。
 
 | # | 表 | 作用 | 关键字段 | 索引 |
 |---|---|---|---|---|
@@ -1112,178 +1112,177 @@ ai-orchestrator
 | 13 | `t_hint` | 提示卡 | `id`, `node_id`, `level`, `content` | `(node_id, level)` |
 | 14 | `t_llm_call` | LLM 调用审计 | `id`, `session_id`, `model`, `tokens`, `cost`, `latency` | `(session_id, created_at)` |
 
-**分片**：`t_attempt`、`t_attempt_step`、`t_dialogue_turn`、`t_evidence` 按 `user_id` 16 片；MVP 单库 + 月分区，ShardingSphere 配置就绪但不路由。
-
 **索引原则**：
 
 - 所有“按会话取”的查询走 `(session_id, seq)`；
 - 所有“按用户取最近”的查询走 `(user_id, created_at desc)`；
-- `t_llm_call` 按月分区，保留 90 天，聚合后归档。
+- `t_llm_call` 按月分区，保留 90 天，聚合后归档；
+- `t_dialogue_turn` 数据量最大时按月分区，MVP 先建普通索引；
+- 向量检索用 pgvector HNSW，元数据过滤走 `(grade, kp, chunk_type)` 联合索引。
+
+**不做的**：`user_id` 16 片、ShardingSphere、MySQL 主从、Druid 慢 SQL 日报。MVP 单库 + 月分区 + 慢查询日志；到分片阈值再按 ADR 拆。
 
 ### 7.3 一次诊断的调用链
 
 ```text
 Client
   → Nginx (SSE, no buffering)
-  → Gateway (JWT, rate limit)
-  → Session (create session)
-  → Parser (OCR/LaTeX)
-  → Problem (load graph)
-  → Diagnosis (align steps)
-  → AI Orchestrator (hypotheses + next probe)
-  → Knowledge (RAG: concept/hint)
-  → Coach (generate question)
-  → Verifier (answer leak / SymPy)
+  → Next.js (RSC/SEO; POST 走 fetch 流)
+  → FastAPI (JWT, rate limit, idempotency)
+  → Session (load state from PostgreSQL)
+  → Parser (OCR worker; text first, image later)
+  → Problem (load graph; cachetools/Redis cache)
+  → Diagnosis (align steps; hypothesis posterior)
+  → Brain (LLM gateway: prompt, schema, retry, route)
+  → RAG (pgvector + pg_trgm, RRF; cards only, no answer)
+  → Guard (citation, answer leak, SymPy)
   → SSE stream back
+  → Session event append + state transition
 ```
 
 耗时目标：
 
 | 阶段 | P95 |
 |---|---|
-| 图片 OCR | <3s |
-| 解法图加载 | <100ms（Caffeine） |
+| 图片 OCR | <3s（不阻塞首问） |
+| 解法图加载 | <100ms（cachetools/Redis） |
 | 步骤对齐 | <2s |
-| 下一问生成 | <3s |
+| 下一问生成 | <3s（首 token 流式） |
 | 首条追问（端到端） | <8s |
+
+**首问策略**：文本题先走；图片题先返回“已收到，先确认文本”，OCR 并行；解法图离线预计算；RAG 并行召回；首问跳过 rerank；`max_tokens` 限死。不要把 OCR、rerank、SymPy 全串在首 token 前面。
 
 ### 7.4 缓存与并发
 
 | 缓存 | 内容 | TTL | 说明 |
 |---|---|---|---|
-| Caffeine | 解法图、概念卡 | 30min | 本地热数据，抗 Redis 故障 |
+| `cachetools` | 解法图、概念卡 | 30min | 进程内热数据，抗 Redis 故障 |
 | Redis | 会话状态、最近 6 轮 | 2h | SSE 断线可恢复 |
 | Redis | 提示卡 | 6h | 按 `node_id + level` |
 | Redis | 幂等键 | 10min | 防止重复提交 |
-| 布隆过滤器 | 不存在的 `problem_id` | — | 防穿透 |
+| Redis | 限流计数 | 1min | 按用户/IP/会话 |
+| Redis | SSE 事件 | 30min | `Last-Event-ID` 重放 |
 
-并发控制：
+**并发红线**：
 
-- 同一 `session_id` 的追问串行（Redisson 锁，TTL 30s）；
-- 同一用户同时最多 2 个会话；
-- LLM 调用用信号量隔离，避免慢请求拖垮整个 ai 单元；
-- SSE 断线重连从 `last_event_id` 续传。
+- FastAPI 全链路 `async`；禁止在事件循环里跑同步 ORM、`requests`、SymPy、PaddleOCR；
+- CPU 活（SymPy、OCR、embedding）一律进 worker 或子进程；SymPy 2s 强杀；
+- 状态迁移用 `UPDATE ... WHERE version = ?` 乐观锁；`(session_id, seq)` 唯一索引；
+- 幂等键存请求哈希 + 响应；重复请求直接返回，不重复扣 token；
+- SSE 15s 心跳；Nginx `proxy_buffering off`；断线从 `Last-Event-ID` 续播；
+- 单实例 SSE 500 并发压测通过再上线；不先上 WebSocket。
 
-### 7.5 可观测性
+### 7.5 LLM 网关与答案泄漏
 
-每次对话是一个 trace：
-
-```text
-trace_id = session_id
-span: gateway → session → parser → diagnosis → llm → rag → verifier
-```
-
-核心指标：
-
-| 指标 | 目标 | 告警 |
-|---|---|---|
-| 首条追问 P95 | <8s | >12s 5min |
-| 诊断完成率 | ≥70% | <55% 1h |
-| 平均轮数 | 4–6 | >7 |
-| 答案泄漏 | 0 | 任何一次 |
-| LLM 错误率 | <1% | >3% 5min |
-| 单次成本 | ≤¥0.8 | >¥1.2 |
-| 用户“说中了” | ≥70% | <60% 1d |
-
-Grafana 三张大盘：
-
-1. **业务**：进入 → 交题 → 首问 → 诊断卡 → 微干预 → 24h 验证；
-2. **AI**：模型延迟、token、成本、JSON 失败率、RAG 命中率、泄漏拦截；
-3. **系统**：JVM、GC、连接池、Redis 命中率、MySQL 慢 SQL。
-
-### 7.6 部署
+所有模型调用只走 `apps/api/src/synapse/infrastructure/llm/gateway.py`：
 
 ```text
-docker-compose:
-  nginx
-  gateway
-  core
-  ai
-  content
-  mysql
-  redis
-  postgres(pgvector)
-  prometheus
-  grafana
+decide(view, schema) -> T
+  ├─ 选择模型（按 purpose/难度/预算）
+  ├─ 渲染 prompt（版本哈希）
+  ├─ 调用（超时/重试 1 次）
+  ├─ Pydantic/JSON Schema 校验
+  ├─ 失败 → 修复一次 → 仍失败 → 确定性模板
+  └─ 落 t_llm_call（prompt_hash/model/tokens/cost/latency/校验结果）
 ```
 
-- **Dockerfile**：多阶段构建，运行镜像 <250MB；
-- **Nginx**：`proxy_buffering off`、`X-Accel-Buffering: no`、SSE 超时 300s；
-- **Serverless**：OCR 批处理、PDF 导出、离线评测跑在 FC，避免占常驻内存；
-- **K8s**：Phase 2，按 7 服务拆，HPA 按 CPU + 队列长度。
+- **LLM 不决定状态**：只填槽位、给动作候选；状态转移由 `domain/dialogue/table.py` 的显式表决定。
+- **评测可回放**：`ReplayBrain` 用录制的 `t_llm_call` 跑 golden，零成本、零抖动。
+- **答案泄漏四道闸**：
+  1. 检索：`chunk_type != solution` 硬过滤；答案独立表，Prompt 构建器读不到；
+  2. Schema：输出无 `final_answer`/`solution` 字段；微干预只给“动作名 + 一步示例”；
+  3. 出口：`guard/leak.py` 抽数值/区间/集合，SymPy 等价 + LaTeX 归一化 + 参考解 n-gram；命中降级改写；
+  4. 回归：50 条红队 + 200 条等价变形进 CI，泄漏 0、误杀 ≤2% 才发布。
 
-### 7.7 安全与合规
+**fail-closed**：guard 超时/异常时不放行，降级为固定苏格拉底问句或“转人工”，不静默重试。
 
-| 风险 | 措施 |
+### 7.6 可观测性
+
+| 层 | 做法 |
 |---|---|
-| 学生照片含隐私 | 原图加密存储 7 天；只留 OCR 文本；默认不展示原图 |
-| 未成年人 | 监护人同意；最小化收集；不做画像广告 |
-| Prompt 注入 | 题目/答案中的指令隔离；系统提示优先级；输出 schema |
-| 答案泄漏 | 四道闸；红队 100 条；线上采样 |
-| 模型幻觉 | SymPy 校验；引用必须带 `source_id`；置信度低不硬判 |
-| 数据删除 | 用户可一键删除会话与证据；30 天内彻底清理 |
+| Trace | OpenTelemetry：`session_id + turn` 贯穿 Nginx → FastAPI → LLM → RAG → guard → DB |
+| LLM | 每次调用记 `prompt_hash`、模型、token、成本、延迟、校验结果；Langfuse 可选 |
+| Metrics | 首问 P95、无证据 claim 率、泄漏拦截数、单次成本、SSE 断线率、状态迁移失败数 |
+| Logs | 结构化 JSON；学生原文脱敏；答案字段禁止入日志 |
+| Dashboard | Grafana 三张：对话链路、模型成本、诊断质量；不做 JVM/GC 大盘 |
+| Alert | 首问 P95 >8s 5min；泄漏拦截 >0 立即；LLM 错误率 >5%；DB 连接池 >80% |
 
-### 7.8 为什么不是“一上来微服务”
+### 7.7 部署与安全
 
-3 个人、8 周，如果先搭 Nacos + Gateway + 7 个服务 + K8s，真正做诊断的时间不到 3 周。正确顺序：
+- **本地**：`docker compose up` 起 web/api/worker/postgres/redis/minio；Nginx 可选。
+- **生产**：3 个容器 + 托管 PostgreSQL/Redis；Nginx 或云 LB；不引 K8s。
+- **发布**：镜像 tag = git sha；Alembic 只做 expand 迁移；回滚保留 N-1 应用兼容。
+- **鉴权**：JWT；教师后台白名单；上传签名直传对象存储；图片 7 天删除。
+- **限流**：Nginx + FastAPI 双层；按用户/IP/会话；LLM 调用加预算上限。
+- **数据**：学生原文脱敏；答案与学习数据分表；导出/删除接口在 Phase 2。
+- **Serverless**：只给 OCR/PDF 导出等离线任务，不把 FastAPI/SSE 放 Serverless。
 
-1. 先把 30 道深标题的解法图和探针跑通；
-2. 用一个 core 进程 + 一个 ai 进程上线；
-3. 当 AI 调用量/故障域/发布节奏真的需要时，再按 7 服务拆。
+### 7.8 为什么不是 Java/Spring/MySQL
 
-**架构判断力不是“会用多少中间件”，而是知道什么时候不用。**
+| 选项 | 为什么不在 MVP |
+|---|---|
+| Java 21 + Spring Boot 核心 | 状态机/事务/审计确实强，但 AI/数学/评测生态弱一代；SymPy/Pydantic 仍要 Python，变成三语言两运行时。3 人 8 周的故障主要来自 LLM 输出与跨进程契约，不是 JVM 吞吐。 |
+| Spring Cloud/Nacos/Feign/Sentinel | 3 个容器不需要服务发现/配置中心；Nginx + FastAPI 中间件足够。 |
+| MySQL + Druid | 业务与向量统一到 PostgreSQL + pgvector，避免双库事务、双份备份、跨库 join；MySQL/Druid 留作 Phase 2 企业适配器。 |
+| 7 个服务/K8s | 没有流量与团队规模支撑；拆分触发条件未满足。 |
+| 多 Agent 框架 | 4 个角色 + 一张状态机就够；框架容易把控制流交给 LLM，破坏确定性。 |
+
+**改选条件**：出现机构采购级多租户 + 强审计 + 跨系统事务补偿，或团队以 Spring 为主且 Python 生产经验不足，按 [ADR-0001 §10](../../adr/0001-language-and-code-architecture.md) 切 JVM/TS 方案。没有这些条件，不预支复杂度。
 
 ## 8. skill.txt 逐条映射：每个能力落在哪个文件、哪次演示
 
+> **架构变更（2026-10-28）**：技术选型已由 [ADR-0001](../../adr/0001-language-and-code-architecture.md) 改为 **Next.js + TypeScript（Web）+ Python 3.12 + FastAPI（后端）+ PostgreSQL/pgvector + Redis**。下表把“MVP 已落”与“Phase 2/作品集分支”分开标注；Java/Spring/MySQL/Caffeine 不再冒充 MVP 主链路。
+>
 > 原则：**不堆名词。** 每一项都要回答：在本项目里，哪个模块用它？演示时看什么？怎么证明不是 PPT 工程？
 
 ### 8.1 开发技术 1–7
 
 | # | 能力 | 本项目落点 | 可演示证据 | 验收指标 |
 |---|---|---|---|---|
-| **1** | AI 辅助编程；Java/Python/Go；Hutool、Lombok；代码规范 | Java 21 主栈（gateway/core/content）；Python 做 OCR 后处理、离线评测、标注 ETL；Go 写 SSE 事件采集 sidecar（可选）；Hutool 做 LaTeX 清洗、JSON 树、周区间；Lombok 全量；Spotless + Checkstyle + ArchUnit | `collector/`、`eval/`、`etl/` 目录；CI 报告；AI 生成单测的 commit；Code Review 记录 | 单测覆盖率 ≥60%；Checkstyle 0 error；核心规则手写率 100% |
-| **2** | 微服务、Spring Cloud、MyBatis、单体拆微服务治理 | Gateway + Nacos + OpenFeign + Sentinel；4 单元 → 7 服务边界；MyBatis-Plus 分页/逻辑删除；ArchUnit 禁止跨层依赖；拆分 ADR | `docker-compose.yml`；Feign 契约；Nacos 快照；ADR-001；灰度发布记录 | 4 单元一键起；服务边界依赖 0 违规；拆分触发条件有数据 |
-| **3** | MySQL 设计、SQL 调优、分库分表、索引优化、Druid | 14 张核心表；`user_id` 16 片；联合索引/覆盖索引；3 条关键 SQL 优化；Druid StatFilter 慢 SQL 日报；月分区 | `schema.sql`；`sharding-config.yaml`；EXPLAIN 前后对比；慢 SQL Top20 | 诊断会话查询 P95 <50ms；慢 SQL <10 条/天 |
-| **4** | Redis、Caffeine 多级缓存、分布式锁、雪崩/穿透/击穿、哨兵 | Caffeine 解法图；Redis 会话/提示卡/幂等；Redisson 会话锁；布隆过滤器；逻辑过期 + 随机 TTL；Redis Sentinel 哨兵集群 | Grafana 命中率；Redisson 配置；故障演练：Redis 挂 30s 仍可出诊断卡 | 缓存命中率 ≥85%；故障演练通过 |
-| **5** | Docker、Nginx、Dockerfile、Serverless | 多阶段镜像；Compose 一键起；Nginx SSE 关闭缓冲 + 限流；OCR/PDF 导出跑 FC | `Dockerfile`；`nginx.conf`；FC 日志；镜像大小对比 | 镜像 <250MB；SSE 不中断；冷启动 <3s |
-| **6** | Prometheus + Grafana + ARMS、全链路追踪、JVM 诊断大盘 | 每次对话一个 trace；LLM span；三张大盘；5 条 SLO；ARMS Agent；一次 OOM/GC 复盘 | 大盘 JSON；告警规则；Trace 截图（含 LLM span）；OOM 复盘 | 首问 P95 <8s；告警 5min 内触发 |
-| **7** | SEO 与 GEO、结构化内容、TDK、收录与 AI 推荐排名 | 公开“题目卡点库”：`/q/{id}/breakpoints`、`/concept/{slug}`；SSR；TDK 模板；JSON-LD `LearningResource`/`FAQPage`；`llms.txt`；sitemap 分片；收录监测；AI 引用监测 | 页面 URL；Rich Results 校验；Search Console；llms.txt；AI 搜索引用截图 | 100 页被收录；20 个概念页被 AI 引用/提及 |
+| **1** | AI 辅助编程；Java/Python/Go；Hutool、Lombok；代码规范 | **Python 主栈**（FastAPI/Pydantic/SQLAlchemy）；Python worker 做 OCR 后处理、ETL、评测；Go/Java **不进 MVP**；Hutool/Lombok 不适用；`ruff` + `mypy` + `import-linter` + `pytest` 守规范 | `apps/api/`、`apps/worker/`、`eval/`；CI 报告；AI 生成单测的 commit；Code Review 记录 | 单测覆盖率 ≥60%；`ruff`/`mypy` 0 error；核心规则手写率 100% |
+| **2** | 微服务、Spring Cloud、MyBatis、单体拆微服务治理 | MVP **不引** Spring Cloud/MyBatis；`apps/api` 是 Python 模块化单体，按包边界拆；拆分触发条件写进 [ADR](../../adr/0001-language-and-code-architecture.md) 与 `services/README.md`；网关由 Nginx + FastAPI 中间件承担 | `apps/api/src/synapse/` 包边界；import-linter 报告；拆分 ADR；Compose 一键起 | 3 容器一键起；跨层依赖 0 违规；拆分触发条件有数据 |
+| **3** | MySQL 设计、SQL 调优、分库分表、索引优化、Druid | MVP 用 **PostgreSQL 16 + pgvector**：14 张逻辑表、联合/覆盖索引、月分区、慢查询日志；**不用 MySQL/Druid**；分库分表留到 Phase 2，MVP 单库 | `schema.sql`；EXPLAIN 前后对比；慢查询 Top20；pgvector HNSW 索引 | 诊断会话查询 P95 <50ms；慢 SQL <10 条/天 |
+| **4** | Redis、Caffeine 多级缓存、分布式锁、雪崩/穿透/击穿、哨兵 | Redis 7：会话/提示卡/幂等/限流/SSE 重放；本地缓存用 `cachetools`（Caffeine 等价物）；锁用 Redis Lua 原子命令；布隆/空值缓存防穿透；随机 TTL + 逻辑过期；**Caffeine/Redisson 不适用** | 缓存命中率；锁/幂等测试；故障演练：Redis 挂 30s 仍可出诊断卡 | 缓存命中率 ≥85%；故障演练通过 |
+| **5** | Docker、Nginx、Dockerfile、Serverless | 3 容器 Compose（web/api/worker）；Nginx SSE 关闭缓冲 + 限流；OCR/PDF 导出可选 FC | `Dockerfile`；`nginx.conf`；FC 日志；镜像大小对比 | 镜像 <250MB；SSE 不中断；冷启动 <3s（若用 FC） |
+| **6** | Prometheus + Grafana + ARMS、全链路追踪、JVM 诊断大盘 | OpenTelemetry + Prometheus/Grafana；每次对话一个 trace，含 LLM span；三张大盘与 5 条 SLO；**不做 JVM/ARMS 大盘**，做 Python/Node runtime 大盘 | 大盘 JSON；告警规则；Trace 截图（含 LLM span）；一次慢请求复盘 | 首问 P95 <8s；告警 5min 内触发 |
+| **7** | SEO 与 GEO、结构化内容、TDK、收录与 AI 推荐排名 | Next.js ISR/SSG 公开“题目卡点库”：`/q/{id}`、`/concept/{slug}`；TDK 模板；JSON-LD `LearningResource`/`FAQPage`；`llms.txt`；sitemap；收录监测；AI 引用监测 | 页面 URL；Rich Results 校验；Search Console；llms.txt；AI 搜索引用截图 | 100 页被收录；20 个概念页被 AI 引用/提及 |
 
 ### 8.2 AI 应用开发 1–4
 
 | # | 能力 | 本项目落点 | 可演示证据 | 验收指标 |
 |---|---|---|---|---|
-| **8** | Spring AI、LangChain4j；RAG、工具调用、MCP、多 Agent | Spring AI 编排；LangChain4j 结构化输出；Parser/Diagnostician/Coach/Verifier 四角色状态机；RAG 五类卡片；6 个 MCP 工具 | 一次完整诊断 trace；MCP Inspector 录屏；Agent 状态转移图；`handoff` 日志 | 追问 JSON 合法率 ≥99%；状态机回放一致 |
-| **9** | Prompt 工程；PGvector；ETL；检索；查询增强 | 系统提示 + JSON Schema；pgvector HNSW；文档 ETL（Tika/PaddleOCR）；BM25 + dense + RRF + rerank；结构感知切分；查询改写；引用校验 | `kb_chunk` 表；加/不加 rerank 对比；引用日志；prompt 版本记录；100 条 golden | recall@8 ≥0.85；引用可追溯 100% |
+| **8** | Spring AI、LangChain4j；RAG、工具调用、MCP、多 Agent | **MVP 不用 Spring AI/LangChain4j**；Python `infrastructure/llm` 做模型路由 + Pydantic/JSON Schema + 重试；Parser/Diagnostician/Coach/Verifier 四角色由状态机编排，不是自由多 Agent；MCP 工具 Phase 2 | 一次完整诊断 trace；状态转移图；`handoff` 日志；MCP Inspector（Phase 2） | 追问 JSON 合法率 ≥99%；状态机回放一致 |
+| **9** | Prompt 工程；PGvector；ETL；检索；查询增强 | 系统提示 + JSON Schema；pgvector HNSW + pg_trgm + RRF；文档 ETL（PaddleOCR/Tika）；结构感知切分；查询改写；引用校验；rerank 可选 | `kb_chunk` 表；加/不加 rerank 对比；引用日志；prompt 版本记录；100 条 golden | recall@8 ≥0.85；引用可追溯 100% |
 | **10** | Cursor / Claude Code / GitHub Copilot 全栈开发；MCP Server / Agent Skills | 自建 MCP Server；`diagnostic-review`、`hint-policy` 两个 Skill；CI 回归；canary 发布 | Cursor/Claude Code 里经 MCP 取解法图、校对一个节点；`skills/` 目录；canary 记录 | Skill 在 CI 跑通；MCP 工具 6/6 可用 |
-| **11** | Vibe Coding、SDD、Harness、Spec-Kit/OpenSpec | spec 先行：`specs/dialogue-state.md`、`specs/diagnosis.schema.json` 为唯一真源；OpenSpec 变更单；golden 回归；回滚演练 | spec 目录；变更单；回归报告；回滚记录 | 需求变更 100% 有 spec；回滚 <10min |
+| **11** | Vibe Coding、SDD、Harness、Spec-Kit/OpenSpec | spec 先行：`specs/dialogue-state.md`、`specs/diagnosis.schema.json` 为唯一真源；ADR 记录决策；golden 回归；回滚演练 | spec 目录；ADR；回归报告；回滚记录 | 需求变更 100% 有 spec；回滚 <10min |
 
 ### 8.3 覆盖度自检
 
 | 能力域 | 覆盖 | 说明 |
 |---|---|---|
-| Java/Python/Go | ✅ | Java 主栈；Python ETL/评测；Go 采集 sidecar |
-| Hutool/Lombok | ✅ | LaTeX 清洗、JSON 树、周区间；Lombok 全量 |
-| Spring Cloud | ✅ | Gateway/Nacos/Feign/Sentinel；4→7 边界 |
-| MySQL/分表/Druid | ✅ | 14 表、16 片、3 条 SQL、慢 SQL |
-| Redis/Caffeine/锁/三防 | ✅ | 多级缓存、会话锁、布隆、逻辑过期 |
-| Docker/Nginx/Serverless | ✅ | 多阶段、SSE、FC |
-| 监控/追踪/JVM | ✅ | 三张大盘、5 条 SLO、一次复盘 |
-| SEO/GEO | ✅ | 100 页卡点库、JSON-LD、llms.txt |
-| Spring AI/LangChain4j/RAG/MCP/多 Agent | ✅ | 四角色状态机 + 五类卡片 + 6 工具 |
-| Prompt/PGvector/ETL | ✅ | Schema、HNSW、切分、改写、引用 |
-| Cursor/Claude Code/MCP/Skills | ✅ | 自建 Server + 两个 Skill |
-| SDD/Harness/Spec-Kit | ✅ | spec 先行、golden、回滚 |
+| Java/Python/Go | ◐ | **Python 主栈**；Java/Go 不在 MVP；不假装三语言 |
+| Hutool/Lombok | ✗ | 不适用；用 Python 标准库/Pydantic |
+| Spring Cloud | ✗ | MVP 不引；Phase 2 企业适配器可选，不是主链路 |
+| MySQL/分表/Druid | ✗ | 改用 PostgreSQL + pgvector；MySQL 仅作 Phase 2 备选 |
+| Redis/Caffeine/锁/三防 | ◐ | Redis + cachetools + Lua 锁；无 Caffeine/Redisson |
+| Docker/Nginx/Serverless | ✅ | 3 容器、SSE、FC 可选 |
+| 监控/追踪/JVM | ◐ | OTel + Grafana；无 JVM/ARMS |
+| SEO/GEO | ✅ | Next.js ISR、JSON-LD、llms.txt |
+| Spring AI/LangChain4j/RAG/MCP/多 Agent | ◐ | Python RAG + 状态机；无 Spring AI/LangChain4j；MCP Phase 2 |
+| Prompt/PGvector/ETL | ✅ | Pydantic、HNSW、切分、改写、引用 |
+| Cursor/Claude Code/MCP/Skills | ✅ | 自建 MCP Server + 两个 Skill |
+| SDD/Harness/Spec-Kit | ✅ | spec 先行、ADR、golden、回滚 |
 
 **诚实标注**：
 
-- Go sidecar、K8s、16 片真实分库、ARMS 全量接入属于 **Phase 2**；MVP 有配置/脚本/演练，但不假装已跑过大规模流量。
+- **这是“产品最优”对“技能清单”的代价**：Java/Spring/MySQL/Caffeine 四项在 MVP 主链路没有落点。如果目标是 Java 岗作品集，见 [ADR §4 方案 C 与 §10 改选条件](../../adr/0001-language-and-code-architecture.md)；不要为了简历把主产品做成三语言。
+- Go sidecar、K8s、真实分库、ARMS 全量接入属于 **Phase 2**；MVP 有配置/脚本/演练，但不假装已跑过大规模流量。
 - SEO/GEO 在 MVP 只做 100 页公开卡点库，不追求全站内容矩阵。
 - MCP 的写工具（`record_evidence`）需要双人复核，MVP 只对教研开放。
 
 ### 8.4 面试时怎么讲
 
-> “这个项目不是‘我用了 Spring Cloud 和 RAG’，而是：
+> “这个项目不是‘我用了 FastAPI 和 RAG’，而是：
 >
 > 为了让学生一次只回答一个问题，我把追问做成状态机，LLM 只能在 `PROBE` 状态里选探针；
 >
@@ -1291,7 +1290,7 @@ docker-compose:
 >
 > 为了让‘卡点’可追溯，每张诊断卡都带证据、排除项和置信度；
 >
-> 为了 3 个人 8 周能做出来，我只跑 4 个部署单元，但边界按 7 个服务设计。
+> 为了 3 个人 8 周能做出来，我只跑 3 个容器，但包边界按未来可拆的服务设计。
 >
 > 这些取舍，比堆中间件更能说明我会做工程。”
 
@@ -1309,10 +1308,10 @@ docker-compose:
 
 - **S**：学生遇到错题，只得到“对/错”或完整解答，不知道自己具体卡在哪个认知动作，导致重复无效刷题。
 - **T**：设计一个单题诊断引导系统，输入题目 + 学生答案，输出可解释的卡点与下一步训练。
-- **A**：定义 L0–L6 卡点分类与解法图；设计“规则/贝叶斯 + LLM 追问”的状态机；实现 RAG 五类卡片与答案四道闸；用 4 单元/7 服务边界控制 3 人 8 周范围；建立 100 条 golden 对话评测。
+- **A**：定义 L0–L6 卡点分类与解法图；设计“规则/贝叶斯 + LLM 追问”的状态机；实现 RAG 五类卡片与答案四道闸；用 3 容器 Python 模块化单体控制 3 人 8 周范围；建立 100 条 golden 对话评测。
 - **R（目标）**：诊断与双教师一致率 ≥75%；用户“说中了” ≥70%；平均 4–6 轮；答案泄漏 0；单次成本 ≤¥0.8。
 
-**技术关键词**（按 JD 取舍）：Java 21、Spring Boot 3、Spring Cloud、Nacos、Gateway、Sentinel、OpenFeign、MyBatis-Plus、MySQL、Redis、Caffeine、Redisson、PostgreSQL/pgvector、Spring AI、LangChain4j、RAG、MCP、多 Agent、Docker、Nginx、Prometheus、Grafana、Next.js、SEO/GEO。
+**技术关键词**（按 JD 取舍）：Python 3.12、FastAPI、Pydantic v2、SQLAlchemy 2、Alembic、PostgreSQL/pgvector、Redis、Arq、SymPy、RAG、MCP、多 Agent、Docker、Nginx、OpenTelemetry、Prometheus、Grafana、Next.js、TypeScript、SEO/GEO。Java 21/Spring Boot/Spring Cloud/MyBatis/MySQL 作为 Phase 2 企业适配器的备选，不列在 MVP 已实现项。
 
 ## 9. 可行性与 MVP：3 个人 8 周，先证明“说得准”
 
@@ -1530,6 +1529,8 @@ docker-compose:
 
 > 这一章不是产品功能，而是说明这份方案是怎么被“吵”出来的。
 > 5 个子 Agent 共享同一份事实包，但彼此看不到对方的输出；主 Agent 只做冲突裁决与整合。
+>
+> **历史记录（2026-10-28）**：本章记录 v0.2 的 Java/Spring 设计过程与提示词，里面的“4 单元/7 边界”已被 [ADR-0001](../../adr/0001-language-and-code-architecture.md) 取代。保留它，是为了展示“无共享记忆子 Agent + 冲突裁决”的方法，不是当前架构。
 
 ### 11.1 为什么要无共享记忆
 

@@ -4,7 +4,7 @@
 
 一个“单题诊断引导”产品：学生发来一道**不会/做错的题**，加上**自己的答案或过程**（也可以只说“完全不会”），系统用 2–6 轮追问，找到他**最早断掉的认知动作**，给一张带证据的卡点卡、3 分钟微干预和一道迁移题。
 
-**状态**：设计方案 v0.2 已完成；仓库已按可公开托管的结构搭好；MVP 代码尚未开始。不是已上线产品。
+**状态**：产品设计方案 v0.2、技术选型 v0.3 已完成；仓库已按可公开托管的结构搭好；技术栈由 [ADR-0001](docs/adr/0001-language-and-code-architecture.md) 定为 **TypeScript Web + Python 后端**；MVP 代码尚未开始。不是已上线产品。
 
 ## 它怎么工作
 
@@ -73,7 +73,8 @@
 | 输入 | 文本 + 拍照；答案可文本/手写 |
 | 输出 | 卡点卡 + 3 分钟微干预 + 1 道迁移题 |
 | 团队/周期 | 3 人 / 8 周 |
-| 架构 | 4 个部署单元，7 个服务边界 |
+| 架构 | 3 个容器（web/api/worker）；PostgreSQL + pgvector；Redis；无 K8s/Spring Cloud/MySQL |
+| 技术栈 | Next.js + TypeScript；Python 3.12 + FastAPI + Pydantic v2；Arq worker |
 | 评测 | 与双教师卡点一致率 ≥75%；“说中了” ≥70%；答案泄漏 0 |
 | 生死线 | 50 次诊断一致率 <60%，停止扩张 |
 
@@ -82,13 +83,14 @@
 ```text
 .
 ├─ apps/                    # 运行单元（当前是脚手架）
-│  ├─ api/                  # Java 21 + Spring Boot，模块化单体
-│  ├─ web/                  # Next.js，交题/追问/卡点卡
-│  └─ ai-worker/            # Python：OCR 后处理/ETL/评测
+│  ├─ web/                  # Next.js + TS：交题/追问/卡点卡/SEO
+│  ├─ api/                  # Python + FastAPI：状态机/诊断/AI/SSE
+│  └─ worker/               # Python + Arq：OCR 后处理/ETL/评测
 ├─ services/                # Phase 2 拆分；当前不建，避免“假微服务”
-├─ packages/contracts/      # OpenAPI、生成的 DTO、事件契约
+├─ packages/contracts/      # Pydantic→OpenAPI→TS 类型、事件契约
 ├─ specs/                   # 状态机 + JSON Schema（先于代码）
 ├─ docs/
+│  ├─ adr/                  # 架构决策记录；0001 是技术选型准绳
 │  ├─ design/
 │  │  ├─ chapters/          # 第 0–12 章，手写源
 │  │  ├─ release/           # 合并版 MD + DOCX + PDF
@@ -104,17 +106,19 @@
 └─ .github/workflows/ci.yml # 只跑无依赖检查
 ```
 
-### 三条目录约定
+### 四条目录约定
 
-1. **文档源与产物分开**：改 `docs/design/chapters/`，不直接改 `release/` 里的 DOCX/PDF。
-2. **spec 先于代码**：改接口/状态机，先改 `specs/`，再改 `apps/`。
-3. **先单体后拆分**：代码先落在 `apps/api` 的包边界；`services/` 等触发条件满足再建。
+1. **按可部署单元与领域分，不按语言/文件类型分**：`apps/` 放能独立构建/部署的单元，不建 `frontend/`、`backend/`、`java/`、`python/` 这类名字。
+2. **文档源与产物分开**：改 `docs/design/chapters/`，不直接改 `release/` 里的 DOCX/PDF。
+3. **spec 先于代码**：改接口/状态机，先改 `specs/`，再改 `apps/`；`packages/contracts` 只放生成物。
+4. **先单体后拆分**：代码先落在 `apps/api/src/synapse/` 的包边界；`services/` 等触发条件满足再建。
 
 ## 从哪里读
 
 | 文档 | 内容 |
 |---|---|
-| [Word 版](docs/design/release/SynapseMind-单题诊断引导-设计方案.docx) | 56 页，封面、自动目录、页眉页脚、49 张表、3 张图 |
+| [语言与代码架构 ADR](docs/adr/0001-language-and-code-architecture.md) | **先看这篇**：5 个独立评审、评分、最终选型、迁移与改选条件 |
+| [Word 版](docs/design/release/SynapseMind-单题诊断引导-设计方案.docx) | 56 页，封面、自动目录、页眉页脚、49 张表、3 张图；v0.3 已按 ADR 重写第 7/8 章 |
 | [PDF 版](docs/design/release/SynapseMind-单题诊断引导-设计方案.pdf) | 与 Word 同版式，适合预览/发送 |
 | [Markdown 全文](docs/design/release/SynapseMind-单题诊断引导-设计方案.md) | 12 章 + 附录，约 1.6 万字 |
 | [一页纸](docs/design/chapters/00-一页纸.md) | 定位、示例、指标 |
@@ -122,27 +126,29 @@
 | [诊断引擎](docs/design/chapters/04-诊断引擎.md) | 解法图、L0–L6、假设与探针 |
 | [Prompt 与 Agent](docs/design/chapters/05-Prompt与Agent.md) | 状态机、系统提示、JSON Schema、答案四道闸 |
 | [RAG 与内容](docs/design/chapters/06-RAG与内容.md) | 五类知识卡、混合检索、引用 |
-| [技术架构](docs/design/chapters/07-技术架构.md) | 4 单元 / 7 服务边界、14 张表 |
-| [skill.txt 映射](docs/design/chapters/08-skill映射.md) | 11 项逐条落点与验收 |
+| [技术架构](docs/design/chapters/07-技术架构.md) | v0.3：2 种语言、3 个容器、14 张表、调用链、缓存与泄漏防线 |
+| [skill.txt 映射](docs/design/chapters/08-skill映射.md) | 11 项落点与验收；Java/Spring/MySQL 项已标注 Phase 2 |
 | [可行性与 MVP](docs/design/chapters/09-可行性与MVP.md) | 8 周计划、评测、成本、风险 |
 | [状态机 spec](specs/dialogue-state.md) | 运行前先看这个 |
 | [诊断卡 schema](specs/diagnosis.schema.json) | 输出契约 |
 
 ## skill.txt 的 11 项能力落在哪
 
+> 选型原则：产品最优优先，不为“技能清单”硬加语言。Java/Spring/MySQL/Caffeine 在 MVP 主链路不再使用；如果目标是 Java 岗作品集，见 ADR §4 方案 C 与 §10 改选条件，而不是把主产品做成三语言。
+
 | 能力 | 本项目落点 |
 |---|---|
-| Java/Python/Go + Hutool/Lombok + 规范 | Java 21 主栈；Python 做 OCR 后处理/评测；Go SSE 采集 sidecar；Spotless/Checkstyle/ArchUnit |
-| Spring Cloud + MyBatis + 单体拆微服务 | Gateway/Nacos/Feign/Sentinel；4 单元 → 7 服务边界；MyBatis-Plus；拆分 ADR |
-| MySQL + 分表 + 索引 + Druid | 14 张表；`user_id` 16 片；联合/覆盖索引；3 条 SQL 优化；慢 SQL 日报 |
-| Redis/Caffeine/锁/三防 | 解法图本地缓存、会话 Redis、Redisson 锁、布隆、逻辑过期 |
-| Docker/Nginx/Serverless | 多阶段镜像；SSE 关闭缓冲；OCR/PDF 导出跑 FC |
-| Prometheus/Grafana/ARMS/JVM | 对话全链路 trace；三张大盘；5 条 SLO；OOM 复盘 |
-| SEO/GEO | 公开“题目卡点库”100 页；TDK；JSON-LD；llms.txt；AI 引用监测 |
-| Spring AI/LangChain4j/RAG/MCP/多 Agent | 四角色状态机；五类知识卡；6 个 MCP 工具 |
-| Prompt/PGvector/ETL/查询增强 | JSON Schema；pgvector HNSW；文档 ETL；BM25+dense+RRF+rerank |
+| Java/Python/Go + Hutool/Lombok + 规范 | **Python 主栈**（FastAPI/Pydantic）；Java/Go 不进 MVP；Hutool/Lombok 不适用；`ruff` + `mypy` + `import-linter` 守规范 |
+| Spring Cloud + MyBatis + 单体拆微服务 | MVP **不引** Spring Cloud/MyBatis；Python 模块化单体 → 按触发条件再拆；拆分决策写 ADR |
+| MySQL + 分表 + 索引 + Druid | MVP 用 **PostgreSQL 16 + pgvector**；保留联合/覆盖索引、慢查询、月分区；MySQL/Druid 作为 Phase 2 企业适配器备选，不冒充已实现 |
+| Redis/Caffeine/锁/三防 | Redis 7：会话/幂等/限流/SSE 重放；本地缓存用 `cachetools`（Caffeine 等价物）；锁用 Redis 原子命令，布隆/空值缓存防穿透 |
+| Docker/Nginx/Serverless | 3 容器 Compose；Nginx 关 SSE 缓冲；OCR/PDF 导出可选 FC |
+| Prometheus/Grafana/ARMS/JVM | OpenTelemetry + Prometheus/Grafana；**不做 JVM 大盘**；做 Python/Node runtime 与对话全链路 trace |
+| SEO/GEO | Next.js ISR + JSON-LD + `llms.txt`；公开“题目卡点库”100 页；TDK 与 AI 引用监测 |
+| Spring AI/LangChain4j/RAG/MCP/多 Agent | MVP 不用 Spring AI/LangChain4j；Python 轻量 LLM gateway + RAG；MCP Server/多 Agent 作为 Phase 2/实验，控制流仍在状态机 |
+| Prompt/PGvector/ETL/查询增强 | Pydantic/JSON Schema 受控输出；pgvector HNSW + pg_trgm + RRF；文档 ETL；查询改写 |
 | Cursor/Claude Code/Copilot/MCP/Skills | 自建 MCP Server；`diagnostic-review`、`hint-policy` 两个 Skill |
-| Vibe Coding/SDD/Harness/Spec-Kit | spec 先行；golden 对话；canary；回滚演练 |
+| Vibe Coding/SDD/Harness/Spec-Kit | spec 先行；ADR；golden 回放；canary；回滚演练 |
 
 完整映射见 [第 8 章](docs/design/chapters/08-skill映射.md)。
 
@@ -150,17 +156,31 @@
 
 当前没有可运行的业务代码，只有**目录、契约、设计**。下一步按这个顺序：
 
-1. 读 [`specs/dialogue-state.md`](specs/dialogue-state.md) 与三个 JSON Schema；
-2. 在 `apps/api` 建 Maven 模块，先实现 `session` + `problem` + `diagnosis` 文本闭环；
+1. 读 [`specs/dialogue-state.md`](specs/dialogue-state.md)、三个 JSON Schema 与 [ADR-0001](docs/adr/0001-language-and-code-architecture.md)；
+2. 在 `apps/api` 建 Python 包，先实现 `dialogue` + `problem` + `diagnosis` 文本闭环；
 3. 在 `apps/web` 做 `/diagnose/[sessionId]` 一页；
 4. 用 3 道题跑通，再接模型；
 5. 把 10 条 golden 写进 `eval/golden/`，再谈 100 条。
+
+### 目标命令
+
+```bash
+# API
+cd apps/api && uv sync && uv run fastapi dev src/synapse/api/main.py
+
+# Web
+cd apps/web && pnpm install && pnpm dev
+
+# Worker
+uv run --project apps/api arq synapse.workers.settings.WorkerSettings
+```
 
 ### 构建设计文档
 
 ```bash
 python -m pip install -r tools/requirements.txt
 python tools/diagrams.py
+python tools/merge_markdown.py
 python tools/generate_docx.py
 pwsh tools/update_toc_and_export.ps1   # Windows + Word
 python scripts/check_repo.py
@@ -171,6 +191,8 @@ CI 只跑 `python scripts/check_repo.py`，不依赖 Word/网络。
 ## 诚实说明
 
 - 这是**项目设计方案**，不是已上线产品；56 页里的完成率、成本、一致率均为目标或估算。
+- **v0.3 已按 ADR-0001 统一第 7/8 章与 DOCX/PDF**；第 11 章保留旧 Java 设计过程，仅作为“无共享记忆子 Agent + 冲突裁决”的方法记录，不是当前架构。
+- 选 Python/TS 的代价是 skill.txt 的 Java/Spring/MySQL/Caffeine 四项在 MVP 主链路没有落点；这是有意的产品取舍，不是遗漏。
 - MVP 只覆盖高中数学“函数与导数”的五类题型；任意题/全学科是 Phase 2。
 - 当前没有真实用户数据、没有 100 条标注、没有疗效证据；第 9.8 节列了缺口。
 - 旧版“12 分钟测评 + 学习 OS + 增长”方案已归档：[docs/archive/v0-broad-os](docs/archive/v0-broad-os/README.md)。它把重点做偏了，不作为主方案。
@@ -180,4 +202,4 @@ CI 只跑 `python scripts/check_repo.py`，不依赖 Word/网络。
 
 ---
 
-*文档版本 v0.2 · 2026-10-28 · 贡献前请读 [CONTRIBUTING.md](CONTRIBUTING.md)*
+*文档版本 v0.3 · 2026-10-28 · 技术选型见 [ADR-0001](docs/adr/0001-language-and-code-architecture.md) · 贡献前请读 [CONTRIBUTING.md](CONTRIBUTING.md)*

@@ -5,7 +5,8 @@
 | 文件 | 用途 |
 |---|---|
 | `diagrams.py` | 用 Pillow 生成 3 张设计图（2400×1400 / 2600×1600） |
-| `generate_docx.py` | 合并章节 → 生成带封面、目录域、页眉页脚的 DOCX |
+| `merge_markdown.py` | 把 `docs/design/chapters/*.md` 合并成 `release/` 的 Markdown |
+| `generate_docx.py` | 读取合并后的 Markdown，生成带封面、目录域、页眉页脚的 DOCX |
 | `update_toc_and_export.ps1` | Windows + Word：更新目录页码、套 TOC 样式、导出 PDF |
 | `requirements.txt` | `python-docx`、`Pillow` |
 
@@ -14,13 +15,15 @@
 ```bash
 python -m pip install -r tools/requirements.txt
 python tools/diagrams.py
+python tools/merge_markdown.py
 python tools/generate_docx.py
 pwsh tools/update_toc_and_export.ps1
 ```
 
 ## 说明
 
-- `generate_docx.py` 读取 `docs/design/release/SynapseMind-单题诊断引导-设计方案.md`，图片按该文件所在目录解析（`../assets/...`）。
+- **章节是唯一源**：`merge_markdown.py` 按文件名顺序合并 `docs/design/chapters/00-*.md` … `12-*.md`；不要直接改 `release/` 的 Markdown。
+- `generate_docx.py` 读取合并后的 Markdown，图片按该文件所在目录解析（`../assets/...`）。
 - DOCX 的目录是 Word 域；首次打开需更新域，或直接跑 PowerShell 脚本。
 - PDF 导出依赖 Word COM；Linux/CI 只能生成 DOCX 草稿，不能导出同版式 PDF。
 - 脚本会覆盖 `release/` 下同名产物；不要手改生成物。

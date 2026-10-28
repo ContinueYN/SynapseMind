@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0 — 2026-10-28
+
+**技术选型重做：从 Java/Spring 主栈改为 TypeScript Web + Python 后端。**
+
+- 新增 [ADR-0001](docs/adr/0001-language-and-code-architecture.md)：5 个无共享记忆子 Agent 独立评审、评分、冲突裁决、迁移与改选条件；
+- 选定 Next.js + TypeScript（Web/SEO/SSE 外壳）+ Python 3.12 + FastAPI（状态机/诊断/AI/评测）+ PostgreSQL/pgvector + Redis；
+- 明确不用 Java/Spring/MySQL、4 部署单元/7 服务边界、K8s、多 Agent 框架；
+- `apps/api` 从 Java 改为 Python 脚手架；`apps/ai-worker` 重命名为 `apps/worker`；
+- 更新 apps/services/packages/infra/eval 的 README 与目标命令；
+- 记录代价：skill.txt 的 Java/Spring/MySQL/Caffeine 在 MVP 主链路失去落点，保留为 Phase 2 企业适配器/作品集分支；
+- 第 7/8 章与 DOCX/PDF 已按 ADR 重生成（v0.3，56 页、49 表、3 图）；第 11 章保留旧 Java 设计过程作为方法记录。
+
 ## 0.2.0 — 2026-10-28
 
 **重做为“单题诊断引导”。**

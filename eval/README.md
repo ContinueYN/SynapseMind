@@ -38,7 +38,7 @@ reports/
 ## 运行
 
 ```bash
-python -m apps.ai_worker.eval.run --set golden --model configs/mvp.yaml
+uv run --project apps/api python -m synapse.workers.eval --set golden --model configs/mvp.yaml
 ```
 
 > 当前只有格式说明，尚无数据与脚本。先标 10 条跑通，再扩到 100 条。

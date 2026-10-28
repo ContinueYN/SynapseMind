@@ -1,6 +1,8 @@
 # apps/web
 
-Next.js + TypeScript。只做“一次诊断”的界面，不做课程商城、社区、家长端大屏。
+Next.js 15 App Router + TypeScript。只做“一次诊断”的界面，不做课程商城、社区、家长端大屏。
+
+选型依据见 [ADR-0001](../../docs/adr/0001-language-and-code-architecture.md)。Web 只负责 RSC/ISR、SSE 外壳与交互；状态机、诊断、AI 编排都在 `apps/api`，不在 Next.js 的 Route Handler 里。
 
 ## 路由
 

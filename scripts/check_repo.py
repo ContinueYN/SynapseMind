@@ -20,6 +20,8 @@ REQUIRED = [
     "CHANGELOG.md",
     ".gitignore",
     "docs/README.md",
+    "docs/adr/README.md",
+    "docs/adr/0001-language-and-code-architecture.md",
     "docs/design/README.md",
     "docs/design/chapters/00-一页纸.md",
     "docs/design/chapters/08-skill映射.md",
@@ -34,6 +36,7 @@ REQUIRED = [
     "specs/solution-graph.schema.json",
     "specs/diagnosis.schema.json",
     "tools/generate_docx.py",
+    "tools/merge_markdown.py",
     "tools/diagrams.py",
 ]
 
@@ -58,6 +61,8 @@ def walk_markdown() -> list[Path]:
         ROOT / "README.md",
         ROOT / "CONTRIBUTING.md",
         ROOT / "CHANGELOG.md",
+        ROOT / "docs" / "README.md",
+        ROOT / "docs" / "adr",
         ROOT / "docs" / "design",
         ROOT / "docs" / "reference",
         ROOT / "specs",

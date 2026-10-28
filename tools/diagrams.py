@@ -231,8 +231,8 @@ img.save(os.path.join(OUT, "02-diagnosis-engine.png"))
 W3, H3 = 2600, 1600
 img = Image.new("RGB", (W3, H3), BG)
 d = ImageDraw.Draw(img)
-d.text((90, 55), "技术架构：4 个部署单元，7 个服务边界", font=F(50, True), fill=INK)
-d.text((90, 122), "3 个人 8 周先跑 4 个进程；拆分有触发条件，不为了微服务而微服务", font=F(26), fill=TEAL)
+d.text((90, 55), "技术架构：2 种语言，3 个容器", font=F(50, True), fill=INK)
+d.text((90, 122), "Next.js 守住 Web/SEO/SSE 外壳；Python/FastAPI 守住状态机/诊断/AI/评测", font=F(26), fill=TEAL)
 
 # client
 cx, cy, cw, ch = 90, 200, 2420, 110
@@ -244,15 +244,15 @@ d.text((cx+cw-360, cy+22), "JWT · 限流 · 灰度", font=F(20), fill=MUTED)
 # nginx/gateway
 ny = 360
 box(d, [90, ny, 2420, ny+90], fill=TEAL_L, outline=TEAL, width=3, radius=14)
-d.text((120, ny+22), "Nginx（SSE 关闭缓冲）  →  Gateway（鉴权 / 限流 / 路由）", font=F(28, True), fill=TEAL)
+d.text((120, ny+22), "Nginx（SSE 关闭缓冲）  →  web / api / worker", font=F(28, True), fill=TEAL)
 
 # units
 uy = 520
 uh = 460
 units = [
-    ("core", "session · problem\ndiagnosis · evidence", "会话状态 / 解法图\n对齐 / 假设 / 卡点卡", TEAL_L, TEAL),
-    ("ai", "parser · coach\nverifier · orchestrator", "OCR / 追问生成\nSymPy 校验 / 模型路由", AMBER_L, AMBER),
-    ("content", "knowledge · admin", "概念卡 / 提示卡\n迁移题 / 标注后台", BLUE_L, BLUE),
+    ("web", "Next.js 15 + TypeScript", "RSC/ISR · SEO\nSSE 外壳", TEAL_L, TEAL),
+    ("api", "FastAPI + Pydantic", "状态机 · 诊断\nLLM 网关 · guard", AMBER_L, AMBER),
+    ("worker", "Python + Arq", "OCR 后处理 · ETL\ngolden 评测 · 红队", BLUE_L, BLUE),
 ]
 uw = 730
 gap = 40
@@ -269,10 +269,10 @@ dy = 1140
 box(d, [90, dy, 2420, dy+230], fill=WHITE, outline=BORDER, width=3, radius=18)
 d.text((120, dy+20), "数据层", font=F(26, True), fill=TEAL)
 stores = [
-    ("MySQL 8", "14 张核心表\nuser_id 16 片"),
-    ("Redis 7", "会话 / 提示卡\n幂等 / 分布式锁"),
-    ("PostgreSQL 16", "pgvector\n五类知识卡"),
+    ("PostgreSQL 16", "pgvector：14 张表 + 五类卡\nHNSW / JSONB"),
+    ("Redis 7", "会话 / 幂等 / 限流\nSSE 重放"),
     ("对象存储", "题目原图\n7 天删除"),
+    ("没有 MySQL", "业务 + 向量\n一个主库"),
 ]
 sw = 540
 for i, (name, desc) in enumerate(stores):
@@ -285,7 +285,7 @@ for i, (name, desc) in enumerate(stores):
 oy = 1010
 box(d, [90, oy, 2420, oy+90], fill=WHITE, outline=CORAL, width=3, radius=16)
 d.text((118, oy+26), "可观测性", font=F(24, True), fill=CORAL)
-obs = ["Prometheus", "Grafana 三张大盘", "ARMS / OTel Trace", "JVM / GC / 慢 SQL", "首问 >12s 告警"]
+obs = ["OTel Trace", "Prometheus", "Grafana 三张大盘", "LLM 成本 / 首问 P95", "无 JVM 大盘"]
 ox = 300
 for t in obs:
     tw = d.textlength(t, font=F(19))
@@ -297,7 +297,7 @@ arrow(d, (1300, 310), (1300, 355), color=TEAL, width=5, head=12)
 arrow(d, (1300, 450), (1300, 515), color=TEAL, width=5, head=12)
 arrow(d, (1300, oy+96), (1300, dy-8), color=TEAL, width=4, head=10)
 
-d.text((90, H3-55), "SynapseMind 突触智学 · 4 单元 / 7 服务边界", font=F(20), fill=MUTED)
+d.text((90, H3-55), "SynapseMind 突触智学 · ADR-0001 · TypeScript + Python", font=F(20), fill=MUTED)
 img.save(os.path.join(OUT, "03-architecture.png"))
 
 print("saved")

@@ -11,7 +11,9 @@ design/
 
 ## 版本
 
-当前 **v0.2 · 单题诊断引导**。
+当前 **v0.2 · 单题诊断引导**；技术选型 v0.3 已由 [ADR-0001](../adr/0001-language-and-code-architecture.md) 更新为 **Next.js + TypeScript + Python/FastAPI + PostgreSQL/pgvector**。
+
+> 第 7/8 章与 DOCX/PDF 已按 ADR-0001 重写（v0.3）；第 11 章保留旧 Java 设计过程，仅作方法记录。
 
 - 入口：学生提交一道不会/做错的题 + 自己的答案/过程，或只说“完全不会”。
 - 过程：解法图 → 步骤对齐 → 2–6 轮追问 → 卡点卡 → 3 分钟微干预 → 迁移验证。
@@ -30,6 +32,7 @@ design/
 ```bash
 python -m pip install -r tools/requirements.txt
 python tools/diagrams.py
+python tools/merge_markdown.py
 python tools/generate_docx.py
 pwsh tools/update_toc_and_export.ps1   # Windows + Word
 ```
