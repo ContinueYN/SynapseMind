@@ -45,8 +45,28 @@ body {
 }
 
 ::selection {
-  background: rgba(94, 234, 212, 0.28);
+  background: rgba(94, 234, 212, 0.35);
   color: #fff;
+}
+
+/* Keep the app’s text copyable, including gradient headlines whose fill is
+   transparent. Without this override the highlight can be invisible even
+   though the browser has a selection. */
+.app-root {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.gradient-text__content::selection {
+  background: var(--accent);
+  color: #04111c;
+  -webkit-text-fill-color: #04111c;
+}
+
+.option-button,
+.text-button {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 button,
