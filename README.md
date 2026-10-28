@@ -278,7 +278,11 @@ CI 跑三组：`check_repo.py`（链接/契约）、API（ruff/mypy/import-linte
 - MVP 只覆盖高中数学“函数与导数”的五类题型；任意题/全学科是 Phase 2。
 - 当前没有真实用户数据、没有 100 条标注、没有疗效证据；第 9.8 节列了缺口。
 - 旧版“12 分钟测评 + 学习 OS + 增长”方案已移到本地 `_local/archive/v0-broad-os/`，不上传；Git 历史里仍可追溯，但不占用仓库首页。
-- License 尚未确定；公开前由维护者选择并添加 `LICENSE`。
+- 当前代码是 M1 walking skeleton；正式题集、用户数据和效果证据仍未就绪，边界见“当前边界”。
+
+## License
+
+[MIT](LICENSE) © 2026 SynapseMind contributors。可商用、修改、分发，保留版权与许可声明即可。
 
 **这个项目最难的不是模型，是 30 道题 × 每道 7–10 个节点的双人标注，以及让一个学生在第 3 轮还愿意回答。**
 
