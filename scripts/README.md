@@ -8,7 +8,8 @@
 | `dev.py` | 一键启动 API + Web；首次建 venv/装依赖；`--check` 只检查，`--smoke` 启动后自动停 |
 | `dev.ps1` | Windows 包装：`.\scripts\dev.ps1` |
 | `contracts.py` | 导出 OpenAPI 并生成 `apps/web/src/lib/api/generated.ts` |
-| `export_openapi.py` | 只导出 OpenAPI；默认写到本地忽略的 `docs/design/release/openapi.json` |
+| `export_openapi.py` | 只导出 OpenAPI；默认写到本地忽略的 `.tmp/openapi.json` |
+| `export_public.py` | 生成不含设计/评测材料的公开仓库目录 |
 | `new_chapter.py` | **待加**：新建章节并自动编号 |
 | `serve_docs.sh` | **待加**：本地预览 Markdown |
 
@@ -54,6 +55,6 @@ cd apps/web
 npm run generate:api
 ```
 
-生成物默认在 `docs/design/release/`（忽略）；`apps/web/src/lib/api/generated.ts` 入库，供 fresh clone 直接 typecheck/build。不要把它粘回 `specs/`；`specs/` 只放人写的契约源。
+生成物默认在 `.tmp/`（忽略）；`apps/web/src/lib/api/generated.ts` 入库，供 fresh clone 直接 typecheck/build。不要把它粘回 `specs/`；`specs/` 只放人写的契约源。
 
 不检查 Word/PDF 的版式；版式用 `tools/update_toc_and_export.ps1` 后人工抽查。

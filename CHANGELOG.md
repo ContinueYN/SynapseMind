@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.0 — 2026-10-28
+
+**Web 视觉重构 + 公开仓库导出。**
+
+- Web 改为深色诊断工作台：Aurora 背景、渐变标题、Spotlight 卡片、StarBorder 主按钮；保留三个路由与“一次一问”的交互硬规则；
+- 交题页、追问页、卡点卡页完成响应式与 reduced-motion 适配；不引入 Tailwind 或新运行时依赖；
+- React Bits 组件按第三方许可单独声明，见 `THIRD_PARTY_NOTICES.md`；
+- 新增 `scripts/export_public.py`，把可公开的代码与文档导出为独立目录，避免主仓库历史泄露设计/评测材料；
+- OpenAPI 生成物从 `docs/design/release/` 移到忽略目录 `.tmp/`，公开仓库也能生成契约；
+- `scripts/check_repo.py` 支持 `.public-repo` 标记，公开仓库只检查公开文件集。
+
 ## 0.4.0 — 2026-10-28
 
 **M1 walking skeleton：单题文本闭环可本地运行。**

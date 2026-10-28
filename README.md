@@ -280,9 +280,22 @@ CI 跑三组：`check_repo.py`（链接/契约）、API（ruff/mypy/import-linte
 - 旧版“12 分钟测评 + 学习 OS + 增长”方案已移到本地 `_local/archive/v0-broad-os/`，不上传；Git 历史里仍可追溯，但不占用仓库首页。
 - 当前代码是 M1 walking skeleton；正式题集、用户数据和效果证据仍未就绪，边界见“当前边界”。
 
+## 公开仓库
+
+本仓库包含产品设计、评测与工具脚本等不公开材料；**不要直接把当前 `main` 推到公开 GitHub**（`.gitignore` 不会移除历史提交里的文件）。生成独立的公开树：
+
+```powershell
+python scripts/export_public.py
+# 默认输出 ../SynapseMind-public，已初始化 Git 后可直接加 remote
+```
+
+公开树只包含 `apps/`、`infra/`、`specs/`、`scripts/`、ADR、根级许可证/说明与公开 CI；设计、参考、评测、工具和历史记录不进入公开树。细节见脚本头部说明。
+
 ## License
 
 [MIT](LICENSE) © 2026 SynapseMind contributors。可商用、修改、分发，保留版权与许可声明即可。
+
+Web 端包含来自 React Bits 的 Aurora / GradientText / SpotlightCard / StarBorder 组件，这些组件适用 **MIT + Commons Clause**，不属于本项目 MIT 授权范围；完整声明与限制见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 **这个项目最难的不是模型，是 30 道题 × 每道 7–10 个节点的双人标注，以及让一个学生在第 3 轮还愿意回答。**
 

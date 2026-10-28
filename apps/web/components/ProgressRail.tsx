@@ -16,9 +16,10 @@ export function ProgressRail({
     <section className="progress-rail" aria-label="诊断进度">
       <div className="progress-copy">
         <span>
+          <span className="progress-kicker">SESSION</span>
           第 {Math.min(turn + 1, maxTurns)} / {maxTurns} 轮
         </span>
-        <span className="muted">当前假设：{topHypothesis}</span>
+        <span className="muted">当前假设 · {topHypothesis}</span>
       </div>
       <div
         className="progress-track"
@@ -30,7 +31,10 @@ export function ProgressRail({
       >
         <span style={{ width: `${Math.max(4, percent)}%` }} />
       </div>
-      <span className="progress-value">{percent}%</span>
+      <span className="progress-value">
+        {percent}
+        <small>%</small>
+      </span>
     </section>
   );
 }

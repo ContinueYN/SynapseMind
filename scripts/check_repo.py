@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Repository consistency checks for the SynapseMind design repo.
+"""Repository consistency checks for the SynapseMind repo.
 
 No third-party dependencies. Run from anywhere:
     python scripts/check_repo.py
+
+A `.public-repo` marker switches the check to the curated public file set.
 """
 
 from __future__ import annotations
@@ -13,8 +15,31 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+PUBLIC = (ROOT / ".public-repo").is_file()
 
-REQUIRED = [
+PUBLIC_REQUIRED = [
+    "README.md",
+    "CONTRIBUTING.md",
+    "CHANGELOG.md",
+    ".gitignore",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "docs/adr/README.md",
+    "docs/adr/0001-language-and-code-architecture.md",
+    "apps/README.md",
+    "apps/api/README.md",
+    "apps/web/README.md",
+    "apps/worker/README.md",
+    "infra/README.md",
+    "scripts/README.md",
+    "specs/README.md",
+    "specs/dialogue-state.md",
+    "specs/problem-input.schema.json",
+    "specs/solution-graph.schema.json",
+    "specs/diagnosis.schema.json",
+]
+
+REQUIRED = PUBLIC_REQUIRED if PUBLIC else [
     "README.md",
     "STRUCTURE.md",
     "CONTRIBUTING.md",
@@ -57,6 +82,7 @@ SKIP_DIRS = {
     "__pycache__",
     ".venv",
     "docs/design/release",
+    "scripts/templates",
     "_local",
 }
 
@@ -85,6 +111,17 @@ def walk_markdown() -> list[Path]:
         ROOT / "scripts",
         ROOT / "tools",
     ]
+    if PUBLIC:
+        roots = [
+            ROOT / "README.md",
+            ROOT / "CONTRIBUTING.md",
+            ROOT / "CHANGELOG.md",
+            ROOT / "docs" / "adr",
+            ROOT / "specs",
+            ROOT / "apps",
+            ROOT / "infra",
+            ROOT / "scripts",
+        ]
     files: list[Path] = []
     for root in roots:
         if root.is_file():

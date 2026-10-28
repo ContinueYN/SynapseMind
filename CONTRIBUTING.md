@@ -65,4 +65,4 @@ python scripts/check_repo.py
 
 ## License
 
-License 尚未确定；在公开仓库前由维护者选择并添加 `LICENSE`。未添加前，默认保留所有权利。
+原创代码使用 [MIT](LICENSE)。Web 端 React Bits 组件适用 **MIT + Commons Clause**，见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)；提交第三方代码前先确认许可兼容。

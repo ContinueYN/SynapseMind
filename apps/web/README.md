@@ -59,7 +59,7 @@ npm run dev        # http://localhost:3000
 npm run typecheck
 npm run lint
 npm run build
-npm run generate:api   # 需要先生成 docs/design/release/openapi.json
+npm run generate:api   # 需要先生成 .tmp/openapi.json
 ```
 
 一键启动（含 API）：在仓库根目录 `python scripts/dev.py`。

@@ -16,7 +16,7 @@
 - `apps/web` 只通过 `/api/v1/*` 访问后端，不直连数据库/向量库。
 - `apps/worker` 不处理在线追问；在线编排在 `apps/api`。
 - 跨应用契约的源放 [`../specs/`](../specs/)；手写 TS 类型放 `apps/web/src/lib/api/`，不单独建空 `packages/`。
-- 生成物（OpenAPI、截图、DOCX/PDF）不进 `specs/`；本地放 `docs/design/release/`，已被 `.gitignore` 忽略。
+- 生成物（OpenAPI、截图、DOCX/PDF）不进 `specs/`；本地放 `.tmp/`，已被 `.gitignore` 忽略。
 
 ## 本地启动
 

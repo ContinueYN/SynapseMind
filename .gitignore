@@ -17,6 +17,7 @@ venv/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.import_linter_cache/
 .tox/
 .nox/
 .eggs/
@@ -73,3 +74,13 @@ data/local/
 # Local-only archive / generated doc artifacts
 _local/
 docs/design/release/
+
+# Private product/evaluation material. The public GitHub tree is produced by
+# scripts/export_public.py; .gitignore alone does not remove files already in
+# Git history or in the index.
+docs/design/
+docs/reference/
+eval/
+tools/
+Project_try-public/
+SynapseMind-public/

@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import GradientText from "@/components/reactbits/GradientText";
+import SpotlightCard from "@/components/reactbits/SpotlightCard";
 import type { DiagnosisCard } from "@/src/lib/api/types";
 
 interface DiagnosisCardViewProps {
@@ -25,10 +27,27 @@ export function DiagnosisCardView({
   const [disagreed, setDisagreed] = useState(false);
 
   return (
-    <article className="diagnosis-card">
+    <SpotlightCard
+      aria-label="卡点卡"
+      className="diagnosis-card"
+      intensity={0.18}
+      role="article"
+      spotlightColor="rgba(94, 234, 212, 0.55)"
+      spotlightSize={520}
+      theme="dark"
+    >
       <header className="diagnosis-head">
         <p className="eyebrow">卡点卡 · {card.layer}</p>
-        <h1>{card.label}</h1>
+        <h1>
+          <GradientText
+            animationSpeed={11}
+            colors={["#f8fafc", "#a5b4fc", "#5eead4"]}
+            direction="horizontal"
+            variant="linear"
+          >
+            {card.label}
+          </GradientText>
+        </h1>
         <p className="diagnosis-line">{card.one_line}</p>
         <div className="badge-row">
           <span className={`confidence-badge ${card.confidence_label}`}>
@@ -38,8 +57,11 @@ export function DiagnosisCardView({
         </div>
       </header>
 
-      <section className="card-section">
-        <h2>证据</h2>
+      <section className="card-section" aria-labelledby="evidence-title">
+        <div className="section-label">
+          <h2 id="evidence-title">证据</h2>
+          <span>{card.evidence.length} 条</span>
+        </div>
         <ul>
           {card.evidence.map((item) => (
             <li key={item}>{item}</li>
@@ -47,8 +69,11 @@ export function DiagnosisCardView({
         </ul>
       </section>
 
-      <section className="card-section">
-        <h2>已排除</h2>
+      <section className="card-section" aria-labelledby="excluded-title">
+        <div className="section-label">
+          <h2 id="excluded-title">已排除</h2>
+          <span>not this</span>
+        </div>
         <ul>
           {(card.excluded ?? []).map((item) => (
             <li key={item}>{item}</li>
@@ -68,7 +93,7 @@ export function DiagnosisCardView({
         <div className="next-actions">
           {showCardLink ? (
             <Link className="primary-link" href={`/card/${sessionId}`}>
-              打开完整卡点卡
+              打开完整卡点卡 <span aria-hidden="true">↗</span>
             </Link>
           ) : null}
           <button
@@ -80,6 +105,6 @@ export function DiagnosisCardView({
           </button>
         </div>
       </section>
-    </article>
+    </SpotlightCard>
   );
 }

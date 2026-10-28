@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "generate:api": "openapi-typescript ../../docs/design/release/openapi.json -o src/lib/api/generated.ts"
+    "generate:api": "openapi-typescript ../../.tmp/openapi.json -o src/lib/api/generated.ts"
   },
   "dependencies": {
     "next": "^15.5.28",

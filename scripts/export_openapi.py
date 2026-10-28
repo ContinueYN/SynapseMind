@@ -1,7 +1,7 @@
 """Export the OpenAPI document for client review.
 
-Generated JSON is a build artifact; it belongs in ``docs/design/release/``
-(ignored), not in ``specs/``.
+Generated JSON is a build artifact; it belongs in the ignored ``.tmp/``
+directory, not in ``specs/``.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ def main() -> int:
     parser.add_argument(
         "--out",
         type=Path,
-        default=ROOT / "docs" / "design" / "release" / "openapi.json",
+        default=ROOT / ".tmp" / "openapi.json",
     )
     args = parser.parse_args()
     args.out.parent.mkdir(parents=True, exist_ok=True)
