@@ -2,25 +2,58 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import { Dendrite, type DendriteStop } from "@/components/Dendrite";
 import { DiagnosisCardView } from "@/components/DiagnosisCardView";
-import { GlassCard } from "@/components/GlassCard";
-import { LiquidVessel } from "@/components/LiquidVessel";
+import { ProblemBrief } from "@/components/ProblemBrief";
+import { Surface } from "@/components/Surface";
 import { ProbeCard } from "@/components/ProbeCard";
-import { ProgressRail } from "@/components/ProgressRail";
-import { Transcript } from "@/components/Transcript";
-import { exitSession, getSession, submitTurn } from "@/src/lib/api/client";
+import { Thread } from "@/components/Thread";
+import { ApiError, exitSession, getSession, submitTurn } from "@/src/lib/api/client";
 import type { SessionResponse } from "@/src/lib/api/types";
+import { adoptSession } from "@/src/lib/session-handoff";
+
+const PHASE: Record<string, string> = {
+  INGEST: "收题",
+  PARSE: "拆题",
+  NEED_INPUT: "等你补一句",
+  ALIGN: "对齐",
+  PROBE: "追问",
+  DIAGNOSE: "定位",
+  INTERVENE: "定位",
+  VERIFY: "定位",
+  STOP: "停下",
+  CLOSED: "已结束",
+};
+
+function shorten(text: string, limit = 11) {
+  const clean = text.replace(/\s+/g, " ").trim();
+  return clean.length > limit ? `${clean.slice(0, limit)}…` : clean;
+}
 
 export default function DiagnosePage() {
   const params = useParams<{ sessionId: string }>();
   const sessionId = params.sessionId;
+
   const [session, setSession] = useState<SessionResponse | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState<{ answer: string; unknown: boolean } | null>(
+    null,
+  );
+  /* 指针停在哪一轮问答上，左轨对应的节点跟着亮 */
+  const [hotTurn, setHotTurn] = useState<number | null>(null);
+
+  const probeRef = useRef<HTMLDivElement>(null);
+  const lastTurn = useRef<number | null>(null);
 
   useEffect(() => {
+    const handed = adoptSession(sessionId);
+    if (handed) {
+      setSession(handed);
+      return;
+    }
     let cancelled = false;
     getSession(sessionId)
       .then((value) => {
@@ -36,15 +69,39 @@ export default function DiagnosePage() {
     };
   }, [sessionId]);
 
-  async function send(answer: string, optionId: string) {
+  /* 换了一问之后，只有在它被挤出视口时才滚一下——不做整页跳转 */
+  useEffect(() => {
+    if (!session) return;
+    if (lastTurn.current === null) {
+      lastTurn.current = session.turn;
+      return;
+    }
+    if (session.turn === lastTurn.current) return;
+    lastTurn.current = session.turn;
+    probeRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [session]);
+
+  async function send(optionId: string, answerText: string) {
+    if (busy) return;
+    setPending({ answer: answerText, unknown: optionId === "unknown" });
     setBusy(true);
     setError(null);
     try {
-      setSession(await submitTurn(sessionId, { answer, option_id: optionId }));
+      setSession(
+        await submitTurn(sessionId, {
+          answer: answerText,
+          option_id: optionId || undefined,
+        }),
+      );
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "提交失败，请重试。");
+      if (caught instanceof ApiError && caught.status === 422) {
+        setError("这一问要从选项里选一个；也可以点「我还是不懂」，换成更低的台阶。");
+      } else {
+        setError(caught instanceof Error ? caught.message : "提交失败，请重试。");
+      }
     } finally {
       setBusy(false);
+      setPending(null);
     }
   }
 
@@ -65,15 +122,15 @@ export default function DiagnosePage() {
       <section className="sm-state">
         <p className="sm-kicker">会话没打开</p>
         <h1 className="sm-h1">{error}</h1>
-        <p className="sm-p">诊断服务可能在 8000 端口没起来。</p>
-        <div className="sm-card-acts">
-          <Link className="sm-act" href="/">
+        <p className="sm-p">诊断服务可能在 8000 端口没起来；也可以先回到交题页。</p>
+        <p style={{ marginTop: 26 }}>
+          <Link className="sm-cta" href="/">
             回到交题页
             <span aria-hidden="true" className="sm-ar">
               →
             </span>
           </Link>
-        </div>
+        </p>
       </section>
     );
   }
@@ -83,79 +140,131 @@ export default function DiagnosePage() {
       <section className="sm-state">
         <p className="sm-kicker">正在恢复会话</p>
         <h1 className="sm-h1">先看一下你刚才写到哪。</h1>
+        <p className="sm-p" style={{ marginTop: 24 }}>
+          <span className="sm-tl-shim" />
+        </p>
       </section>
     );
   }
 
   const located = Boolean(session.diagnosis);
+  const confidence = Math.round((session.progress?.confidence ?? 0) * 100);
+  const history = session.history ?? [];
+
+  const stops: DendriteStop[] = history.map((item) => ({
+    id: `t${item.turn}`,
+    label: `第 ${item.turn} 问`,
+    detail: item.is_unknown ? "不知道，退一级" : shorten(item.answer),
+    state: "done",
+    hint: item.action === "hint",
+    hot: hotTurn === item.turn,
+  }));
+
+  if (session.diagnosis) {
+    stops.push({
+      id: "stuck",
+      label: "卡点",
+      detail: session.diagnosis.card.label,
+      state: "stuck",
+    });
+  } else if (session.prompt) {
+    stops.push({
+      id: "now",
+      label: `第 ${session.turn + 1} 问`,
+      detail: "正在问",
+      state: "active",
+      hint: session.prompt.action === "hint",
+    });
+  }
 
   return (
     <div>
-      <div className="sm-screenbar">
-        <span>{located ? "屏 03" : "屏 02"}</span>
-        <b>{located ? "定位 · 处置" : "拆题 · 追问"}</b>
-        <i>{session.problem_title}</i>
-      </div>
-
-      <div className="sm-work">
-        <aside className="sm-work-side">
-          <LiquidVessel maxTurns={session.max_turns} turn={session.turn} />
+      <div className="sm-session">
+        <aside className="sm-rail">
           <div>
             <p className="sm-lab">诊断进度</p>
-            <p className="sm-turn">
+            <p className="sm-rail-turn">
               {session.turn}
               <small>/ {session.max_turns} 轮</small>
             </p>
-            <div style={{ marginTop: 14 }}>
-              <ProgressRail state={session.state} />
+            <p className="sm-rail-phase">{PHASE[session.state] ?? session.state}</p>
+          </div>
+
+          <Dendrite step={46} stops={stops} />
+
+          <div className="sm-signal">
+            <div className="sm-signal-top">
+              <span className="sm-signal-lab">系统把握</span>
+              <span className="sm-signal-v">{confidence}%</span>
             </div>
+            <div
+              aria-label={`系统把握 ${confidence}%`}
+              aria-valuemax={100}
+              aria-valuemin={0}
+              aria-valuenow={confidence}
+              className="sm-bar"
+              role="progressbar"
+            >
+              <i style={{ width: `${Math.max(4, confidence)}%` }} />
+            </div>
+            <p className="sm-signal-note">
+              {located ? "已收敛到一处，证据见右侧。" : "不到 80% 不下结论。"}
+            </p>
           </div>
         </aside>
 
-        <div className="sm-work-main">
-          <Transcript items={session.history ?? []} />
+        <section className="sm-stage">
+          <div className="sm-stage-head">
+            <p className="sm-stage-title">{session.problem_title}</p>
+            <span className="sm-stage-tag">{located ? "屏 03 · 定位" : "屏 02 · 追问"}</span>
+          </div>
 
-          {session.diagnosis ? (
-            <DiagnosisCardView card={session.diagnosis.card} sessionId={sessionId} />
-          ) : session.prompt ? (
-            <GlassCard>
+          <ProblemBrief text={session.problem_text} />
+
+          <Thread hotTurn={hotTurn} items={history} onHoverTurn={setHotTurn} pending={pending} />
+
+          <div ref={probeRef}>
+            {session.diagnosis ? (
+              <DiagnosisCardView card={session.diagnosis.card} sessionId={sessionId} />
+            ) : session.prompt ? (
               <ProbeCard
                 busy={busy}
                 onExit={leave}
                 onSelect={send}
-                onUnknown={() => send("不会", "unknown")}
+                onUnknown={() => send("unknown", "不会")}
                 probe={session.prompt}
+                turn={session.turn + 1}
               />
-            </GlassCard>
-          ) : (
-            <GlassCard>
-              <p className="sm-kicker">本轮结束</p>
-              <h2 className="sm-h2">{session.notice ?? "先停在这里。"}</h2>
-              <p className="sm-p">
-                没有足够证据时，系统不硬判卡点。回交题页补一步更具体的过程，会让定位更准。
-              </p>
-              <div className="sm-card-acts">
-                <Link className="sm-act" href="/">
-                  重新交一道题
-                  <span aria-hidden="true" className="sm-ar">
-                    →
-                  </span>
-                </Link>
-              </div>
-            </GlassCard>
-          )}
+            ) : (
+              <Surface>
+                <p className="sm-kicker">本轮结束</p>
+                <h2 className="sm-h2">{session.notice ?? "先停在这里。"}</h2>
+                <p className="sm-p">
+                  没有足够证据时，系统不硬判卡点。回交题页补一步更具体的过程，会让定位更准。
+                </p>
+                <p style={{ marginTop: 24 }}>
+                  <Link className="sm-cta" href="/">
+                    重新交一道题
+                    <span aria-hidden="true" className="sm-ar">
+                      →
+                    </span>
+                  </Link>
+                </p>
+              </Surface>
+            )}
+          </div>
 
-          {error && session ? (
-            <p className="sm-alert" role="alert" style={{ marginTop: 16 }}>
+          {error ? (
+            <p className="sm-alert" role="alert" style={{ marginTop: 18 }}>
               {error}
             </p>
           ) : null}
-        </div>
-      </div>
 
-      <p className="sm-fine">
-        这一轮的原则：一次只问一个可回答的问题；不重复问；前 3 轮不给最终答案。
-      </p>
+          <p className="sm-fine">
+            这一轮的原则：一次只问一个可回答的问题；不重复问；前 3 轮不给最终答案。
+          </p>
+        </section>
+      </div>
     </div>
   );
 }

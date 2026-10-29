@@ -44,7 +44,11 @@ def create_session(
         view = service.start(command)
     except (ProblemNotSupported, UnsupportedMode) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return session_out(view, service.problem_title(view.session.problem_id))
+    return session_out(
+        view,
+        service.problem_title(view.session.problem_id),
+        service.problem_text(view.session.problem_id),
+    )
 
 
 @router.get("/sessions/{session_id}", response_model=SessionOut)
@@ -56,7 +60,11 @@ def get_session(
         view = service.get(session_id)
     except SessionNotFound as exc:
         raise HTTPException(status_code=404, detail="session not found") from exc
-    return session_out(view, service.problem_title(view.session.problem_id))
+    return session_out(
+        view,
+        service.problem_title(view.session.problem_id),
+        service.problem_text(view.session.problem_id),
+    )
 
 
 @router.post("/sessions/{session_id}/turns", response_model=SessionOut)
@@ -76,7 +84,11 @@ def submit_turn(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except IllegalTransition as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return session_out(view, service.problem_title(view.session.problem_id))
+    return session_out(
+        view,
+        service.problem_title(view.session.problem_id),
+        service.problem_text(view.session.problem_id),
+    )
 
 
 @router.post("/sessions/{session_id}/exit", response_model=SessionOut)
@@ -88,4 +100,8 @@ def exit_session(
         view = service.exit(session_id)
     except SessionNotFound as exc:
         raise HTTPException(status_code=404, detail="session not found") from exc
-    return session_out(view, service.problem_title(view.session.problem_id))
+    return session_out(
+        view,
+        service.problem_title(view.session.problem_id),
+        service.problem_text(view.session.problem_id),
+    )

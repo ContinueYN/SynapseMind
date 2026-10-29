@@ -1,72 +1,107 @@
-/* 视觉 token —— 琉璃：冰蓝渐变白 / 透明液态 / 一层光学
- * 字号字距是按光学尺寸分别定的，别全站一个值。
+/* 琉璃 · 浅蓝 · 液态白
+ *
+ * 一池白里透蓝的光：底色几乎白，蓝只在低处与角落里渗出来；
+ * 玻璃靠"边缘 + 落影 + 一层在玻璃里慢慢走的光"读出来，不靠压暗背景。
+ * 规范真源：docs/design/chapters/14-视觉系统.md
  */
 
 :root {
-  /* 冰蓝一族：只有明度差别，没有第二种颜色 */
-  --ice-000: #ffffff;
-  --ice-050: #f7fbfe;
-  --ice-100: #eaf4fc;
-  --ice-200: #d3eaf8;
-  --ice-300: #a9d2ea;
-  --blue-500: #5c9dc6;
-  --blue-600: #4e93be;
-  --blue-700: #2f6e93;
+  color-scheme: light;
 
-  /* 墨：冷调深色，不用纯黑 */
-  --ink: #0f2a37;
-  --ink-2: #44646f;
-  --ink-3: #89a5b2;
+  /* 底色：白 → 浅蓝（只到 #DDEBFB，绝不更深） */
+  --paper: #f7fbff;
+  --paper-2: #eaf3fe;
+  --paper-3: #ffffff;
+  --sheet: rgba(255, 255, 255, 0.62);
 
-  /* 玻璃 */
-  --glass-fill: linear-gradient(
-    158deg,
-    rgba(255, 255, 255, 0.56) 0%,
-    rgba(255, 255, 255, 0.28) 52%,
-    rgba(255, 255, 255, 0.44) 100%
+  /* 墨：冷调深蓝灰，不用纯黑 */
+  --ink: #0e1a29;
+  --ink-2: #33475d;
+  --ink-3: #4c6178;
+  --ink-4: #8fa3ba;
+
+  /* 琉璃色：一种蓝，浅深三档 + 三个透明度 */
+  --azure: #4a8ce0;
+  --azure-deep: #3574c6;
+  --azure-ink: #1f4f88;
+  --azure-soft: rgba(74, 140, 224, 0.14);
+  --azure-line: rgba(74, 140, 224, 0.36);
+  --azure-glow: rgba(120, 176, 240, 0.5);
+  --azure-lite: #a8cdf5;
+
+  /* 线：白玻璃上的线是"冷灰蓝"，不是墨黑 */
+  --line: rgba(16, 30, 48, 0.07);
+  --line-2: rgba(16, 30, 48, 0.12);
+  --line-3: rgba(16, 30, 48, 0.22);
+
+  --warn: #a8632a;
+
+  /* 玻璃：一块淡蓝的板子浮在白页上——白高光只有在蓝板上才看得见 */
+  --glass: linear-gradient(
+    146deg,
+    rgba(255, 255, 255, 0.72) 0%,
+    rgba(212, 233, 255, 0.6) 44%,
+    rgba(162, 200, 246, 0.74) 100%
   );
-  --glass-shadow: 0 28px 68px -32px rgba(34, 86, 120, 0.48),
-    0 6px 18px -10px rgba(34, 86, 120, 0.2);
+  --glass-edge: rgba(255, 255, 255, 0.98);
+  --glass-edge-cool: rgba(154, 190, 235, 0.55);
+  --glass-hi: inset 0 1px 0 rgba(255, 255, 255, 1);
+  --glass-refract: inset 0 -1px 0 rgba(126, 172, 226, 0.45);
+  --blur: 24px;
+  --lift:
+    0 30px 60px -34px rgba(46, 92, 158, 0.38),
+    0 16px 34px -28px rgba(74, 140, 224, 0.45),
+    0 1px 2px rgba(31, 63, 107, 0.08);
 
-  /* 线 */
-  --line-hair: rgba(120, 170, 200, 0.18);
-  --line-soft: rgba(120, 170, 200, 0.3);
-  --line-strong: rgba(78, 147, 190, 0.45);
+  /* 圆角只有四档 */
+  --r-1: 10px;
+  --r-2: 14px;
+  --r-3: 22px;
+  --r-pill: 999px;
 
-  /* 字体：全部系统栈，不引外部字体 */
+  /* 间距 */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 14px;
+  --s4: 20px;
+  --s5: 28px;
+  --s6: 40px;
+  --s7: 56px;
+  --s8: 80px;
+  --s9: 112px;
+
+  /* 动效：状态变化 140–280ms；"光"可以慢（420ms 与 30s） */
+  --t-fast: 140ms;
+  --t-base: 200ms;
+  --t-slow: 280ms;
+  --t-liquid: 560ms;
+  --t-tilt: 420ms;
+  --ease-out: cubic-bezier(0.22, 0.72, 0.28, 1);
+  --ease-draw: cubic-bezier(0.22, 0.61, 0.36, 1);
+
+  --measure: 1160px;
+  --measure-read: 33em;
+
   --sans: -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
     "Microsoft YaHei", system-ui, sans-serif;
 
-  /* 圆角：只有三档 */
-  --r-lg: 26px;
-  --r-md: 18px;
-  --r-sm: 14px;
-  --r-pill: 99px;
+  /* 字阶 */
+  --fs-display: clamp(38px, 4.8vw, 68px);
+  --fs-h1: clamp(27px, 3.1vw, 40px);
+  --fs-h2: clamp(19px, 2vw, 25px);
+  --fs-q: clamp(19px, 1.9vw, 23px);
+  --fs-lead: 17.5px;
+  --fs-body: 15.5px;
+  --fs-p: 14.5px;
+  --fs-small: 13px;
+  --fs-meta: 12px;
+  --fs-tag: 11px;
 
-  /* 运动 */
-  --ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-pop: cubic-bezier(0.3, 1.35, 0.4, 1);
-
-  --measure: 1080px;
-
-  /* 旧变量名保留为别名：纸上系统已被琉璃替换，但别让残留样式一次性改爆 */
-  --bg: var(--ice-050);
-  --paper: var(--ice-050);
+  /* 兼容旧名 */
+  --bg: var(--paper);
+  --surface: var(--sheet);
   --text: var(--ink);
-  --text-soft: var(--ink-2);
-  --ink-soft: var(--ink-2);
-  --muted: var(--ink-3);
-  --dim: var(--ink-3);
-  --accent: var(--blue-700);
-  --accent-strong: var(--blue-700);
-  --accent-faint: rgba(78, 147, 190, 0.1);
-  --surface: rgba(255, 255, 255, 0.5);
-  --surface-strong: rgba(255, 255, 255, 0.72);
-  --line: var(--line-hair);
-  --hair: var(--line-hair);
-  --rule: var(--line-soft);
-  --warn: #a8412f;
-  --danger: #a8412f;
-  --shadow: none;
-  --font-sans: var(--sans);
+  --accent: var(--azure);
+  --radius: var(--r-3);
+  --shadow: var(--lift);
 }

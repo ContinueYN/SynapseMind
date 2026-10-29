@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { DiagnosisCardView } from "@/components/DiagnosisCardView";
+import { ProblemBrief } from "@/components/ProblemBrief";
 import { getSession } from "@/src/lib/api/client";
 import type { SessionResponse } from "@/src/lib/api/types";
 
@@ -27,14 +28,14 @@ export default function CardPage() {
       <section className="sm-state">
         <p className="sm-kicker">卡点卡没打开</p>
         <h1 className="sm-h1">{error}</h1>
-        <div className="sm-card-acts">
-          <Link className="sm-act" href="/">
+        <p style={{ marginTop: 26 }}>
+          <Link className="sm-cta" href="/">
             回到交题页
             <span aria-hidden="true" className="sm-ar">
               →
             </span>
           </Link>
-        </div>
+        </p>
       </section>
     );
   }
@@ -44,6 +45,9 @@ export default function CardPage() {
       <section className="sm-state">
         <p className="sm-kicker">正在读取</p>
         <h1 className="sm-h1">把证据整理成一张卡。</h1>
+        <p className="sm-p" style={{ marginTop: 24 }}>
+          <span className="sm-tl-shim" />
+        </p>
       </section>
     );
   }
@@ -56,39 +60,44 @@ export default function CardPage() {
         <p className="sm-p">
           {session.notice ?? "追问还没收敛；先回到对话继续，或补一步过程。"}
         </p>
-        <div className="sm-card-acts">
-          <Link className="sm-act" href={`/diagnose/${sessionId}`}>
+        <p style={{ marginTop: 26 }}>
+          <Link className="sm-cta" href={`/diagnose/${sessionId}`}>
             回到对话
             <span aria-hidden="true" className="sm-ar">
               →
             </span>
           </Link>
-        </div>
+        </p>
       </section>
     );
   }
 
   return (
-    <div>
-      <div className="sm-screenbar">
-        <span>屏 03</span>
-        <b>卡点卡</b>
-        <i>{session.problem_title}</i>
+    <div className="sm-dossier">
+      <div className="sm-dossier-bar">
+        <div>
+          <p className="sm-kicker" style={{ marginBottom: 2 }}>
+            卡点卡
+          </p>
+          <p className="sm-stage-title">{session.problem_title}</p>
+        </div>
+        <div className="sm-dossier-tools">
+          <Link className="sm-link sm-link-quiet" href={`/diagnose/${sessionId}`}>
+            ← 回到对话
+          </Link>
+          <button className="sm-link" onClick={() => window.print()} type="button">
+            打印 / 存为 PDF
+          </button>
+        </div>
       </div>
 
-      <div style={{ marginTop: 18 }}>
-        <Link className="sm-bail" href={`/diagnose/${sessionId}`}>
-          ← 回到对话
-        </Link>
-      </div>
+      <ProblemBrief defaultOpen={false} text={session.problem_text} />
 
-      <div className="sm-band">
-        <DiagnosisCardView
-          card={session.diagnosis.card}
-          sessionId={sessionId}
-          showCardLink={false}
-        />
-      </div>
+      <DiagnosisCardView
+        card={session.diagnosis.card}
+        sessionId={sessionId}
+        showCardLink={false}
+      />
     </div>
   );
 }
