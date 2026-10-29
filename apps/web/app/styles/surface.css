@@ -22,7 +22,6 @@
 
 html {
   -webkit-text-size-adjust: 100%;
-  scroll-behavior: smooth;
   /* 界面不是文档：整页禁止选中 */
   -webkit-user-select: none;
   user-select: none;
@@ -559,46 +558,85 @@ svg {
   padding: 0 36px;
 }
 
-.sm-top {
-  position: sticky;
-  top: 0;
-  z-index: 30;
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.84) 0%,
-    rgba(240, 248, 255, 0.64) 100%
-  );
-  border-bottom: 1px solid rgba(255, 255, 255, 0.92);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 1),
-    inset 0 -1px 0 rgba(63, 134, 224, 0.14),
-    0 18px 34px -30px rgba(30, 72, 132, 0.7);
-  -webkit-backdrop-filter: blur(22px) saturate(180%);
-  backdrop-filter: blur(22px) saturate(180%);
+/* ───────────────────────── 顶部：一颗球 ─────────────────────────
+ * 原来是一条横贯全宽的玻璃条，再加一条 2px 的阅读进度线——两条都在占地，
+ * 视线被拉走，页面还矮了一截。现在只有一颗 54px 的球挂在顶部正中：
+ * 球面是网站图案，球外一圈就是阅读进度，指针放上去才展开成一条。
+ */
+
+.sm-orb-hang {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  z-index: 60;
+  display: flex;
+  justify-content: center;
+  transform: translateX(-50%);
+  pointer-events: none;
 }
 
-.sm-top-in {
+.sm-orb {
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  height: 64px;
-  gap: 20px;
+  gap: 0;
+  width: 54px;
+  height: 54px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.98);
+  border-radius: var(--r-pill);
+  background-color: var(--glass-tint);
+  background-image: var(--glass-tile);
+  box-shadow:
+    var(--lift-chip),
+    var(--glass-rim),
+    var(--glass-rim-lo);
+  color: var(--ink);
+  text-decoration: none;
+  pointer-events: auto;
+  transition:
+    width 420ms var(--ease-glide),
+    gap 420ms var(--ease-glide),
+    padding-right 420ms var(--ease-glide),
+    box-shadow 420ms var(--ease-glide);
 }
 
-.sm-brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 11px;
-  color: var(--ink);
-  font-size: 14.5px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  text-decoration: none;
+/* 展开：指针进来或键盘聚焦。变的是宽度，球不变——环永远围着图案那一颗 */
+.sm-orb-hang:hover .sm-orb,
+.sm-orb:focus-visible {
+  width: 216px;
+  gap: 12px;
+  padding-right: 20px;
+  box-shadow:
+    var(--lift-plane),
+    var(--glass-rim),
+    var(--glass-rim-lo),
+    0 18px 34px -26px rgba(30, 72, 132, 0.9);
+}
+
+.sm-orb:focus-visible {
+  outline: 2px solid var(--azure-line);
+  outline-offset: 3px;
+}
+
+.sm-orb-face {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 28%, #ffffff 0%, #eaf3fe 48%, #d6e7fc 100%);
+  box-shadow:
+    inset 0 1px 0 #ffffff,
+    inset 0 -7px 12px -9px rgba(46, 92, 158, 0.55);
 }
 
 .sm-mark {
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   color: var(--azure);
   flex: none;
 }
@@ -608,94 +646,81 @@ svg {
   opacity: 0.45;
 }
 
-.sm-brand-sub {
-  color: var(--ink-3);
-  font-size: 10.5px;
-  font-weight: 400;
-  letter-spacing: 0.2em;
-  padding-left: 13px;
-  margin-left: 3px;
-  border-left: 1px solid var(--line-2);
+.sm-orb-face .sm-mark {
+  width: 22px;
+  height: 22px;
 }
 
-.sm-top-meta {
-  display: inline-flex;
-  align-items: center;
-  gap: 18px;
+/* 环 = 进度。pathLength="100"，所以 dashoffset 直接就是"还剩百分之几" */
+.sm-orb-ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 54px;
+  height: 54px;
+  pointer-events: none;
 }
 
-.sm-mode {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--ink-3);
-  font-size: 10.5px;
-  letter-spacing: 0.18em;
+.sm-orb-ring svg {
+  display: block;
+  width: 54px;
+  height: 54px;
+  transform: rotate(-90deg);
 }
 
-.sm-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 32% 30%, #ffffff, #78b0f0 60%, #4a8ce0);
-  box-shadow: 0 0 10px var(--azure-glow);
-  flex: none;
-  animation: sm-live 4.6s var(--ease-out) infinite;
+.sm-orb-track {
+  fill: none;
+  stroke: rgba(63, 134, 224, 0.16);
+  stroke-width: 2;
 }
 
-@keyframes sm-live {
-  0%,
-  100% {
-    opacity: 0.55;
-    box-shadow: 0 0 6px var(--azure-glow);
-  }
-  50% {
-    opacity: 1;
-    box-shadow: 0 0 12px var(--azure-glow);
-  }
+.sm-orb-fill {
+  fill: none;
+  stroke: var(--azure);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 100;
+  /* 乘 1px 让 calc 落成一个真实长度，dashoffset 的过渡才动得起来 */
+  stroke-dashoffset: calc((100 - var(--read-n, 0)) * 1px);
+  filter: drop-shadow(0 0 3px var(--azure-glow));
+  transition: stroke-dashoffset 140ms linear;
 }
 
-/* 一键回首页 */
-.sm-home-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 7px 15px;
-  border: 1px solid rgba(255, 255, 255, 0.95);
-  border-radius: var(--r-pill);
-  background: linear-gradient(160deg, rgba(255, 255, 255, 0.9), rgba(233, 243, 254, 0.6));
-  box-shadow:
-    var(--glass-hi),
-    0 10px 20px -18px rgba(46, 92, 158, 0.8);
-  color: var(--ink-2);
-  font-size: 12px;
-  letter-spacing: 0.03em;
-  text-decoration: none;
+.sm-orb-words {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  opacity: 0;
+  white-space: nowrap;
+  transform: translateX(-6px);
   transition:
-    color var(--t-fast) linear,
-    border-color var(--t-fast) linear,
-    box-shadow var(--t-base) var(--ease-out);
+    opacity 180ms linear 70ms,
+    transform 340ms var(--ease-glide) 40ms;
 }
 
-.sm-home-link:hover {
-  border-color: rgba(154, 190, 235, 0.95);
-  box-shadow:
-    var(--glass-hi),
-    0 12px 24px -18px rgba(46, 92, 158, 0.9);
-  color: var(--azure-ink);
+.sm-orb-hang:hover .sm-orb-words,
+.sm-orb:focus-visible .sm-orb-words {
+  opacity: 1;
+  transform: none;
 }
 
-.sm-home-ar {
-  transition: transform var(--t-fast) var(--ease-out);
+.sm-orb-words b {
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
-.sm-home-link:hover .sm-home-ar {
-  transform: translateX(-2px);
+.sm-orb-words em {
+  color: var(--ink-3);
+  font-size: 10.5px;
+  font-style: normal;
+  letter-spacing: 0.16em;
 }
-
 .sm-main {
   flex: 1;
-  padding: var(--s7) 0 var(--s8);
+  /* 顶部那颗球浮在内容上，正文多留一截，免得字压到球下面 */
+  padding: calc(var(--s7) + 48px) 0 var(--s8);
 }
 
 .sm-foot {
@@ -709,144 +734,19 @@ svg {
   letter-spacing: 0.05em;
 }
 
-.sm-rule {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  z-index: 40;
-  pointer-events: none;
-}
-
-.sm-rule i {
-  position: relative;
-  display: block;
-  height: 2px;
-  width: var(--read, 0%);
-  background: linear-gradient(90deg, rgba(168, 205, 245, 0), #a8cdf5 16%, #4a8ce0);
-  transition: width 90ms linear;
-}
-
-/* 进度头部那颗水珠：滚动时它是先动的，后面那根线才跟上 */
-.sm-rule i::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  right: 0;
-  width: 11px;
-  height: 11px;
-  margin-top: -5.5px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 38% 34%, #ffffff 0%, #8fc0f4 48%, rgba(74, 140, 224, 0) 78%);
-  transform: translateX(50%);
-  animation: sm-rule-bead 3.8s var(--ease-out) infinite;
-  pointer-events: none;
-}
-
-@keyframes sm-rule-bead {
-  0%,
-  100% {
-    transform: translateX(50%) scale(0.86);
-  }
-  50% {
-    transform: translateX(50%) scale(1.16);
-  }
-}
-
-/* ───────────────────────── 换页：一道光掠过去，页面自己浮上来 ─────────────────────────
- * 上一版是"一层玻璃盖住整屏再淌走"——那是加载动画，不是换页：视线被挡住、页面在底下
- * 一边淡入一边被揭开，两件事叠在一起就不自然。
- * 这一版什么都不盖：两道斜光从左侧掠到右侧（一宽一窄、一前一后），新页面同时从下方
- * 26px 处带一点失焦浮上来。光是引导，内容是连续出现的。
+/* ───────────────────────── 换页 ─────────────────────────
+ * 不在页面这一层做任何"过场"：不盖、不扫、不整体位移。
+ * 换页的变化交给页面内部组件各自入位（见文末「组件入场」），
+ * 这里只留 160ms 的一点淡入，把两次渲染之间那一帧接上。
  */
 
 .sm-page {
-  animation: sm-page-in 620ms var(--ease-liquid) both;
+  animation: sm-page-in 160ms linear both;
 }
 
-/* 不从 0 透明度开始：从 0 开始会有 150ms 的"空屏"，那一段最像卡住。
- * 让内容一开始就看得见，只是浮上来、对一次焦——变化由掠光交代，不由淡出交代。 */
 @keyframes sm-page-in {
   from {
-    opacity: 0.72;
-    translate: 0 22px;
-    scale: 0.996;
-    filter: blur(8px);
-  }
-  55% {
-    filter: blur(0);
-  }
-}
-
-.sm-transit {
-  position: fixed;
-  inset: 0;
-  z-index: 90;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.sm-transit::before,
-.sm-transit::after {
-  content: "";
-  position: absolute;
-  top: -40%;
-  height: 180%;
-  opacity: 0;
-  will-change: transform, opacity;
-}
-
-/* 宽的一道：像一大片水从玻璃前划过，边缘是糊的，不挡字 */
-.sm-transit::before {
-  left: -40%;
-  width: 38%;
-  background: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0) 0%,
-    rgba(255, 255, 255, 0.5) 26%,
-    rgba(163, 201, 245, 0.48) 52%,
-    rgba(120, 168, 226, 0.28) 72%,
-    rgba(255, 255, 255, 0) 100%
-  );
-  filter: blur(46px);
-}
-
-.sm-transit[data-run="true"]::before {
-  animation: sm-sweep 680ms cubic-bezier(0.34, 0.06, 0.3, 1) 20ms both;
-}
-
-/* 窄的一道：前缘的高光，晚 70ms、略快——两条一起看才有纵深 */
-.sm-transit::after {
-  left: -16%;
-  width: 10%;
-  background: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0) 0%,
-    rgba(255, 255, 255, 0.9) 46%,
-    rgba(255, 255, 255, 0) 100%
-  );
-  filter: blur(13px);
-}
-
-.sm-transit[data-run="true"]::after {
-  animation: sm-sweep 720ms cubic-bezier(0.34, 0.06, 0.3, 1) 90ms both;
-}
-
-@keyframes sm-sweep {
-  0% {
-    transform: translate3d(0, 0, 0) rotate(-13deg);
-    opacity: 0;
-  }
-  16% {
-    opacity: 1;
-  }
-  74% {
-    opacity: 0.85;
-  }
-  100% {
-    transform: translate3d(150vw, 0, 0) rotate(-13deg);
-    opacity: 0;
+    opacity: 0.94;
   }
 }
 
@@ -3281,7 +3181,8 @@ svg {
   }
 
   .sm-main {
-    padding: var(--s6) 0 var(--s7);
+    /* 球缩到 48，正文顶部仍要多留：40 + 20px = 球底 60 之下 */
+    padding: calc(var(--s6) + 36px) 0 var(--s7);
   }
 
   .sm-brief {
@@ -3294,8 +3195,16 @@ svg {
     box-shadow: none;
   }
 
-  .sm-brand-sub {
-    display: none;
+  .sm-orb,
+  .sm-orb-face,
+  .sm-orb-ring,
+  .sm-orb-ring svg {
+    width: 48px;
+    height: 48px;
+  }
+
+  .sm-orb-hang {
+    top: 12px;
   }
 
   .sm-sheet-in,
@@ -3349,13 +3258,7 @@ svg {
     padding: 0 18px;
   }
 
-  .sm-top-in {
-    height: 58px;
-  }
-
-  .sm-mode {
-    display: none;
-  }
+  /* 触屏没有悬停：球只负责回首页，展开留给指针与键盘 */
 
   .sm-hero {
     padding-top: 0;
@@ -3603,9 +3506,8 @@ svg {
   }
 }
 @media print {
-  .sm-top,
+  .sm-orb-hang,
   .sm-foot,
-  .sm-rule,
   .sm-bg {
     display: none;
   }
@@ -3647,10 +3549,6 @@ svg {
     display: none;
   }
 
-  .sm-transit {
-    display: none;
-  }
-
   .sm-cardmock {
     rotate: none;
   }
@@ -3672,6 +3570,9 @@ svg {
   }
 
   .sm-page,
+  .sm-hero > *,
+  .sm-session > *,
+  .sm-dossier > *,
   .sm-probe,
   .sm-opt,
   .sm-tl,
@@ -3681,6 +3582,12 @@ svg {
   .sm-bg-veil,
   .sm-bg-floor {
     animation: none;
+  }
+
+  /* 减少动效时球也不展开：悬停直接给结果，别做 420ms 的宽度动画 */
+  .sm-orb,
+  .sm-orb-words {
+    transition: none;
   }
 
   /* 减少动效：入场不做位移与失焦，直接就位 */
@@ -3697,10 +3604,6 @@ svg {
   }
 
   /* 减少动效：不做换页的那层水，直接就位 */
-  .sm-transit {
-    display: none;
-  }
-
   /* 减少动效：砖不翘、纸不歪 */
   [data-tilt] {
     transform: none;
@@ -3731,4 +3634,42 @@ svg {
     padding-top: 10px;
     border-top: 1px solid var(--line);
   }
+}
+
+/* ───────────────────────── 组件入场 ─────────────────────────
+ * 换页动的不是"页面"，是页面里的东西：
+ * 首页先上左边的字标板、90ms 后右边的交题板；
+ * 追问页先上左栏（题目与进度）、90ms 后主栏（对话与探针）；
+ * 卡点页先上工具条，再上题面，最后上卡。
+ * 18px 位移 + 一点失焦，600ms 到位——比整屏过场更像内容自己长出来。
+ */
+
+@keyframes sm-rise-in {
+  from {
+    opacity: 0;
+    translate: 0 18px;
+    filter: blur(5px);
+  }
+  70% {
+    filter: blur(0);
+  }
+}
+
+.sm-hero > .sm-hero-lead,
+.sm-session > .sm-rail,
+.sm-dossier > :first-child {
+  animation: sm-rise-in 600ms var(--ease-liquid) both;
+}
+
+.sm-hero > .sm-hero-side,
+.sm-session > .sm-stage {
+  animation: sm-rise-in 640ms var(--ease-liquid) 90ms both;
+}
+
+.sm-dossier > :nth-child(2) {
+  animation: sm-rise-in 620ms var(--ease-liquid) 80ms both;
+}
+
+.sm-dossier > :nth-child(3) {
+  animation: sm-rise-in 660ms var(--ease-liquid) 150ms both;
 }

@@ -12,7 +12,16 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="zh-CN" data-scroll-behavior="smooth">
+    <html lang="zh-CN">
+      <head>
+        {/* 必须在浏览器恢复滚动之前就关掉它：放在 React 的 effect 里可能已经晚了，
+            那一下"先停在页底、再滑到页顶"就是恢复滚动 + 平滑滚动叠加出来的 */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: 'try{history.scrollRestoration="manual"}catch(e){}',
+          }}
+        />
+      </head>
       <body>
         <AppShell>{children}</AppShell>
       </body>
