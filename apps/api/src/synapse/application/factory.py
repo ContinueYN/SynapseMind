@@ -56,7 +56,10 @@ class SessionFactory:
 
         problem = self._problems.find_for(command.problem_text)
         if problem is None:
-            raise ProblemNotSupported("M1 only ships the function-derivative seed")
+            raise ProblemNotSupported(
+                "could not identify this problem; only the sample problem "
+                "(function and derivative) is annotated"
+            )
         if command.subject is not None and command.subject != problem.subject:
             # A declared subject we cannot serve is an explicit boundary, not a
             # silently ignored field (M2.5 S1 widened the enum; S6 adds physics).

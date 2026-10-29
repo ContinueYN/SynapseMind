@@ -108,3 +108,14 @@ class SubjectRegistry:
             if ref is not None:
                 return plugin, ref
         return None
+
+
+class ProblemIdentifier(Protocol):
+    """Map submitted text to an annotated problem id, or ``None``.
+
+    Kept separate from the plugin: a plugin can only serve problems *it* owns,
+    while identification is one decision over the whole catalog (S4 swaps the
+    text matcher for a generated one here).
+    """
+
+    def identify(self, text: str) -> str | None: ...

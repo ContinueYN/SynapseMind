@@ -119,5 +119,4 @@ SAMPLE_PROBLEM = Problem(
             ("n5", "n6"),
         ),
     ),
-    keywords=("ln", "导数", "恒成立", "参数"),
 )

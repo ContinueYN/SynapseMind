@@ -1,8 +1,8 @@
 """Math plugin: wraps the hand-written seed graph as the first STRONG subject.
 
-S2 scope: behaviour must not change. Identification still uses the same
-keywords as M1, the graph is the same object, and evidence weights are the
-same domain constant — only the seam is new.
+S3 scope: identification is no longer keyword matching. A submission is only
+served when it actually contains the annotated problem; everything else is
+refused so the wrong graph is never used to explain a student's work.
 """
 
 from __future__ import annotations
@@ -11,12 +11,14 @@ from collections.abc import Mapping
 
 from synapse.application.subject import (
     EvidenceModel,
+    ProblemIdentifier,
     ProblemRef,
     StudentStep,
     Verdict,
     VerifiabilityLevel,
 )
 from synapse.domain.diagnosis.hypotheses import EVIDENCE
+from synapse.domain.problem.identification import TextProblemIdentifier
 from synapse.domain.problem.models import Probe, Problem, SolutionGraph, SolutionNode
 
 SUBJECT = "math"
@@ -26,22 +28,21 @@ class MathPlugin:
     subject = SUBJECT
     level = VerifiabilityLevel.STRONG
 
-    def __init__(self, catalog: Mapping[str, Problem]) -> None:
+    def __init__(
+        self,
+        catalog: Mapping[str, Problem],
+        *,
+        identifier: ProblemIdentifier | None = None,
+    ) -> None:
         self._catalog = dict(catalog)
+        self._identifier = identifier or TextProblemIdentifier(self._catalog)
 
     def identify(self, text: str) -> ProblemRef | None:
-        """Keyword identification, identical to the M1 rule.
-
-        S3 replaces this with a proper identifier; the port already hides the
-        mechanism, so the swap will not touch the repository.
-        """
-        haystack = text.strip().lower()
-        if not haystack:
+        problem_id = self._identifier.identify(text)
+        problem = self._catalog.get(problem_id) if problem_id is not None else None
+        if problem is None or problem.subject != self.subject:
             return None
-        for problem in self._catalog.values():
-            if any(keyword.lower() in haystack for keyword in problem.keywords):
-                return ProblemRef(problem_id=problem.id, subject=self.subject)
-        return None
+        return ProblemRef(problem_id=problem.id, subject=self.subject)
 
     def build_graph(self, problem: Problem) -> SolutionGraph:
         # The seed graph is hand-written; S4 will generate it and validate

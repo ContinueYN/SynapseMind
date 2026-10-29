@@ -39,6 +39,24 @@ def test_identify_rejects_what_it_cannot_serve() -> None:
     assert PLUGIN.identify("   ") is None
     assert PLUGIN.identify("阅读下面的文字，完成后面的题目。") is None
     assert PLUGIN.identify("斜面上一质量为 m 的物块，求加速度。") is None
+    # Same topic, different problem: the seed graph must not be reused for it.
+    assert PLUGIN.identify("已知函数 f(x)=ln x - a x，求 f(x) 的单调区间。") is None
+
+
+def test_a_different_math_problem_is_refused_end_to_end(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/api/v1/sessions",
+        json={
+            "problem": {"text": "已知函数 f(x)=ln x - a x，求 f(x) 的单调区间。"},
+            "attempt": {"answer": "a≥1/e"},
+            "mode": "learning",
+        },
+    )
+
+    assert response.status_code == 422
+    assert "could not identify" in response.json()["detail"]
 
 
 def test_graph_probes_and_evidence_come_from_the_seed() -> None:

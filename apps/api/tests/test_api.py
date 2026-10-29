@@ -114,4 +114,4 @@ def test_unsupported_problem_is_not_silently_remapped(client: TestClient) -> Non
         },
     )
     assert response.status_code == 422
-    assert "seed" in response.json()["detail"]
+    assert "could not identify" in response.json()["detail"]

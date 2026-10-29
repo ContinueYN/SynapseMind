@@ -16,7 +16,7 @@
 |---|---|
 | LLM 追问 | **有**：`infrastructure/llm/`（DeepSeek，默认 `off`）；T5「LLM 辅助对齐」未做且默认不做 |
 | `shadow` 真实对照 | **已跑（2026-10-29，真实 key）**：10/10 不变，24/24 JSON 合法，p95 1.10s，0 重试 0 降级；细节见 `eval/reports/m2-exit-v0.1-shadow.md` 与 ADR-0002 §5.1 |
-| 学科插件 / 解法图生成 | **骨架有**：`SubjectPlugin` 端口 + `MathPlugin` 包装种子图（M2.5 S1/S2）；图仍手写，**生成属 S4**，第二学科属 S6 |
+| 学科插件 / 解法图生成 | **骨架有**：`SubjectPlugin` 端口 + `MathPlugin` 包装种子图（M2.5 S1–S3）；识别已改为严格匹配（不同题一律 422）。图仍手写，**生成属 S4**，第二学科属 S6 |
 | RAG / 向量检索 | 无 |
 | PostgreSQL / Redis / Alembic | 无；`InMemorySessionRepository` |
 | OCR | 无；`image_url` 仅在 DTO 预留 |
@@ -51,11 +51,10 @@
    - 实测口径：JSON 合法 24/24、p95 1.10s、0 降级（ADR-0002 §5.1）；
    - `on:10` 灰度前仍需确认的是**首问整体** P95（现在是单次改写延迟，不含检索/状态推进）；
    - 请求 `deepseek-chat` 实际服务 id 是 `deepseek-flash`，冻结基线看审计里的 `model` 字段。
-2. **M2.5**：第 13 章 S1–S7。S1/S2 已完成（枚举扩到 `math`/`physics` + 三学段；`SubjectPlugin` + `MathPlugin`，行为不变，语义仍是「只服务一道种子题」）。下一步：
-   - **S3** 把识别彻底移到插件（`find_for` 里已无关键字逻辑，剩下的是给 `physics` 补 handler）；
-   - **S4** 建图生成 + schema 校验 + 修复重试（20 道未见题 ≥80%）；
-   - **S5** 证据表由插件提供，补上 `p_union` 缺权重与「平均 2.4 轮饱和」两处标定问题。
-   - 关键门槛仍是 S6（接第二个学科且状态机零改动）。
+2. **M2.5**：第 13 章 S1–S7。S1/S2/S3 已完成（枚举扩到 `math`/`physics` + 三学段；`SubjectPlugin` + `MathPlugin`；识别从关键字换成「归一化包含」严格匹配，不同题返回 422）。下一步：
+   - **S4** 建图生成 + schema 校验 + 修复重试（20 道未见题 ≥80%）——这是真正的门槛，之前的三步只是把插槽挖好；
+   - **S5** 证据表由插件提供，补上 `p_union` 缺权重与「平均 2.4 轮饱和」两处标定问题；
+   - **S6** 接第二个学科（状态机零改动）。
 3. **待收口的既有问题**：前端无自动化测试（只有手工 smoke）；`docs/design/plan/` 未入库；评测集有 10 条、`eval/golden/README` 的 100 条配额未达（需 M2.5 扩题）。
 
 ---

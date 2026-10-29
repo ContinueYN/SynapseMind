@@ -61,7 +61,6 @@ class Problem:
     graph: SolutionGraph
     subject: str = "math"
     grade: str = "high_school"
-    keywords: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
