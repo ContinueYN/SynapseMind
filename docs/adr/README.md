@@ -25,6 +25,7 @@
 | 编号 | 标题 | 状态 |
 |---|---|---|
 | [0001](0001-language-and-code-architecture.md) | 语言与代码架构选择 | accepted |
+| [0002](0002-llm-provider-and-golden-scale.md) | 模型供应商与金标准规模 | accepted |
 
 ## 原则
 

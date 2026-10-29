@@ -8,6 +8,17 @@ from fastapi.testclient import TestClient
 from synapse.api.main import create_app
 
 
+@pytest.fixture(autouse=True)
+def _rule_mode_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """CI must never depend on a model key or on the developer's shell."""
+    for name in (
+        "SYNAPSE_LLM_MODE",
+        "SYNAPSE_LLM_API_KEY",
+        "DEEPSEEK_API_KEY",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+
 @pytest.fixture()
 def client() -> TestClient:
     return TestClient(create_app())

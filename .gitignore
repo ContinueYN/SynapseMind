@@ -61,6 +61,7 @@ blob-report/
 # Runtime artifacts
 .tmp/
 .run/
+var/
 logs/
 *.log
 *.pid

@@ -8,11 +8,14 @@
 
 **M1 walking skeleton 可本地运行**：交题 → 解法图对齐 → 2 轮探针 → L2 卡点卡。规则版实现，内存仓储。
 
+**M2（窄口径）已落地**：`infrastructure/llm` + `LLMProbeComposer` + 校验/重试/降级 + `shadow` 双跑 + 10 条 golden 回放与退出判定报告。默认 `SYNAPSE_LLM_MODE=off`，部署形态与 M1 相同（内存仓储、无队列）。
+
 **未实现**（不要以为已经有）：
 
 | 能力 | 状态 |
 |---|---|
-| LLM 追问 | 无；`ProbeComposer` 只有模板实现 |
+| LLM 追问 | **有**：`infrastructure/llm/`（DeepSeek，默认 `off`）；T5「LLM 辅助对齐」未做且默认不做 |
+| `shadow` 真实对照 | 代码可用；**未跑真实模型**（本机无 key），CI 用 stub 客户端验证管线 |
 | 学科插件 / 解法图生成 | 无；图写死在 `seed.py` |
 | RAG / 向量检索 | 无 |
 | PostgreSQL / Redis / Alembic | 无；`InMemorySessionRepository` |
@@ -21,7 +24,7 @@
 | worker 实际任务 | 无；`apps/worker` 只有说明 |
 | 24h 迁移验证 / 教师复核 | 无 |
 
-**已知硬边界**：只支持一道种子题（函数与导数），换题返回 **422** —— 这是显式设计，不是 bug。
+**已知硬边界**：只支持一道种子题（函数与导数），换题返回 **422** —— 这是显式设计，不是 bug。证据表 `EVIDENCE` 只覆盖三个探针，实测只有 `H_L2` 能越过 `0.80 + 0.25`；`L1`/`L4` 案例按「低置信不硬判」收束（见 `eval/reports/m2-exit-v0.1.md`）。
 
 ---
 
@@ -32,6 +35,7 @@
 3. [`docs/design/chapters/12-M2交付计划.md`](docs/design/chapters/12-M2交付计划.md) — 下一步做什么、怎么验收。
 4. [`docs/design/chapters/13-学科插件与可扩展架构.md`](docs/design/chapters/13-学科插件与可扩展架构.md) — 全学科怎么走。
 5. [`docs/adr/0001-language-and-code-architecture.md`](docs/adr/0001-language-and-code-architecture.md) — 技术选型与改选条件。
+6. [`docs/adr/0002-llm-provider-and-golden-scale.md`](docs/adr/0002-llm-provider-and-golden-scale.md) — 模型供应商与 golden 规模（已定：DeepSeek `deepseek-chat` / 10 条）。
 
 **本地详尽版**（未入库，仅本机存在）：
 
@@ -43,9 +47,12 @@
 
 ## 三、下一步（按优先级）
 
-1. **M2**：按第 12 章 T1–T4 + T6–T7 推进。开工前必须先定两件事——**模型供应商**、**金标准规模（10/100/200）**，否则工期待定。
+1. **M2 收尾**（T1–T4 + T6–T7 已完成，见 §一）：
+   - 用真实 key 跑一次 shadow 回放（命令见 §四），产出真实差异报告（本机未跑过）；
+   - `on:10` 灰度前先确认首问 P95 与 JSON 合法率（审计日志 `var/audit/llm.jsonl`）。
 2. **M2.5**：第 13 章 S1–S7。关键门槛是 S6（接第二个学科且状态机零改动）。
-3. **待收口的既有问题**：前端无自动化测试（只有手工 smoke）；`docs/design/plan/` 未入库；评测集为空（`eval/golden/` 只有 README）。
+   - 顺带解决两件被 M2 暴露的标定问题：证据表只覆盖 3 个探针；平均 2.4 轮即饱和。
+3. **待收口的既有问题**：前端无自动化测试（只有手工 smoke）；`docs/design/plan/` 未入库；评测集有 10 条、`eval/golden/README` 的 100 条配额未达（需 M2.5 扩题）。
 
 ---
 
@@ -72,6 +79,12 @@ npm run build
 # 契约重新生成（DTO → OpenAPI → TS 类型）
 python scripts/contracts/generate.py
 
+# M2 退出判定（10 条 golden 回放，产出 eval/reports/m2-exit-v0.1.md）
+cd apps/api
+.\.venv\Scripts\python.exe ..\..\scripts\eval\m2_exit.py
+# 真实模型双跑（需 DEEPSEEK_API_KEY；结果不变，只多一份差异报告）
+$env:SYNAPSE_LLM_MODE = "shadow"; .\.venv\Scripts\python.exe ..\..\scripts\eval\m2_exit.py
+
 # 仓库一致性（CI 第一个 job）
 python scripts/checks/check_repo.py
 
@@ -94,6 +107,8 @@ python tools/merge_markdown.py
 | `release/` 产物需手动重建 | 改了章节不重建，DOCX/PDF 就是旧的（曾差一天） |
 | Git 远端走 HTTPS + GCM | SSH 22/443 均不通；`git push` 无需交互 |
 | `seed.py` 只有一道题 | 换题 422 是刻意边界，扩题属 M2.5 |
+| `lint-imports.exe` 静默 exit 1 | venv 里没有 editable 安装的 `synapse`，先 `$env:PYTHONPATH="src"`（或 `pip install -e .`）再跑；契约通过时应打印「Contracts: 1 kept」 |
+| `eval/` 整体在 `.gitignore` | golden 数据必须 `git add -f eval/golden/golden-v0.1.jsonl`，否则新克隆/CI 没有 case（`eval/golden/README.md` 被跟踪是历史遗留）；`eval/reports/` 是产物，不入库 |
 
 ---
 
@@ -120,7 +135,8 @@ docs/design/release/         构建产物（未入库，需重建）
 specs/                       机器可验证契约（JSON Schema + 状态机）
 apps/api/                    后端：domain / application / infrastructure / api 分层
 apps/web/                    前端：Next.js 15
-eval/                        评测集（当前仅 README 占位）
+eval/golden/                 M2 金标准 10 条（入库，需 `git add -f`）
+eval/reports/                退出判定报告（产物，不入库）
 ```
 
 ---
