@@ -15,7 +15,7 @@
 | 能力 | 状态 |
 |---|---|
 | LLM 追问 | **有**：`infrastructure/llm/`（DeepSeek，默认 `off`）；T5「LLM 辅助对齐」未做且默认不做 |
-| `shadow` 真实对照 | 代码可用；**未跑真实模型**（本机无 key），CI 用 stub 客户端验证管线 |
+| `shadow` 真实对照 | **已跑（2026-10-29，真实 key）**：10/10 不变，24/24 JSON 合法，p95 1.10s，0 重试 0 降级；细节见 `eval/reports/m2-exit-v0.1-shadow.md` 与 ADR-0002 §5.1 |
 | 学科插件 / 解法图生成 | **骨架有**：`SubjectPlugin` 端口 + `MathPlugin` 包装种子图（M2.5 S1/S2）；图仍手写，**生成属 S4**，第二学科属 S6 |
 | RAG / 向量检索 | 无 |
 | PostgreSQL / Redis / Alembic | 无；`InMemorySessionRepository` |
@@ -47,9 +47,10 @@
 
 ## 三、下一步（按优先级）
 
-1. **M2 收尾**（T1–T4 + T6–T7 已完成，见 §一）：
-   - 用真实 key 跑一次 shadow 回放（命令见 §四），产出真实差异报告（本机未跑过）；
-   - `on:10` 灰度前先确认首问 P95 与 JSON 合法率（审计日志 `var/audit/llm.jsonl`）。
+1. **M2 收尾**（T1–T4 + T6–T7 已完成，真实 shadow 已跑）：
+   - 实测口径：JSON 合法 24/24、p95 1.10s、0 降级（ADR-0002 §5.1）；
+   - `on:10` 灰度前仍需确认的是**首问整体** P95（现在是单次改写延迟，不含检索/状态推进）；
+   - 请求 `deepseek-chat` 实际服务 id 是 `deepseek-flash`，冻结基线看审计里的 `model` 字段。
 2. **M2.5**：第 13 章 S1–S7。S1/S2 已完成（枚举扩到 `math`/`physics` + 三学段；`SubjectPlugin` + `MathPlugin`，行为不变，语义仍是「只服务一道种子题」）。下一步：
    - **S3** 把识别彻底移到插件（`find_for` 里已无关键字逻辑，剩下的是给 `physics` 补 handler）；
    - **S4** 建图生成 + schema 校验 + 修复重试（20 道未见题 ≥80%）；
