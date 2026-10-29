@@ -22,7 +22,7 @@ pwsh tools/update_toc_and_export.ps1
 
 ## 说明
 
-- **章节是唯一源**：`merge_markdown.py` 按文件名顺序合并 `docs/design/chapters/00-*.md` … `12-*.md`；不要直接改 `release/` 的 Markdown。
+- **章节是唯一源**：`merge_markdown.py` 按文件名顺序合并 `docs/design/chapters/*.md`（当前 00–15，不写死编号——加了新章节也不用改这句）；不要直接改 `release/` 的 Markdown。
 - `generate_docx.py` 读取合并后的 Markdown，图片按该文件所在目录解析（`../assets/...`）。
 - DOCX 的目录是 Word 域；首次打开需更新域，或直接跑 PowerShell 脚本。
 - PDF 导出依赖 Word COM；Linux/CI 只能生成 DOCX 草稿，不能导出同版式 PDF。
