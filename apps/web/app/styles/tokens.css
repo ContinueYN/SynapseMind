@@ -1,65 +1,109 @@
-/* 琉璃 · 浅蓝 · 液态白
+/* 琉璃 · 浅蓝 · 液态白 —— v5「层次」
  *
- * 一池白里透蓝的光：底色几乎白，蓝只在低处与角落里渗出来；
- * 玻璃靠"边缘 + 落影 + 一层在玻璃里慢慢走的光"读出来，不靠压暗背景。
+ * 一条从白到浅蓝的光带，蓝只在中下部与角落浓一点；
+ * 内容不再直接压在底上：每段文字都坐在一块淡蓝玻璃板上，
+ * 板上还有嵌进去的玻璃砖，砖上是玻璃键。
+ *
+ * 层次 = 四层材质（ground / plane / tile / chip）+ 三层抬升阴影。
  * 规范真源：docs/design/chapters/14-视觉系统.md
  */
 
 :root {
   color-scheme: light;
 
-  /* 底色：白 → 浅蓝（只到 #DDEBFB，绝不更深） */
+  /* ── 底：白 → 浅蓝。最深处 #CFE2FA，绝不更深 ── */
   --paper: #f7fbff;
-  --paper-2: #eaf3fe;
+  --paper-2: #e9f3fe;
   --paper-3: #ffffff;
-  --sheet: rgba(255, 255, 255, 0.62);
+  --veil: #cfe2fa;
 
-  /* 墨：冷调深蓝灰，不用纯黑 */
-  --ink: #0e1a29;
-  --ink-2: #33475d;
-  --ink-3: #4c6178;
-  --ink-4: #8fa3ba;
+  /* ── 墨：冷调深蓝灰，不用纯黑 ── */
+  --ink: #0c1725;
+  --ink-2: #2f4359;
+  --ink-3: #4a5f77;
+  --ink-4: #8ba0b8;
 
-  /* 琉璃色：一种蓝，浅深三档 + 三个透明度 */
-  --azure: #4a8ce0;
-  --azure-deep: #3574c6;
-  --azure-ink: #1f4f88;
-  --azure-soft: rgba(74, 140, 224, 0.14);
-  --azure-line: rgba(74, 140, 224, 0.36);
-  --azure-glow: rgba(120, 176, 240, 0.5);
-  --azure-lite: #a8cdf5;
+  /* ── 琉璃色：一种蓝，浅深三档 + 三个透明度 ── */
+  --azure: #3f86e0;
+  --azure-deep: #2a67bd;
+  --azure-ink: #1a4a80;
+  --azure-lite: #b7d7f8;
+  --azure-soft: rgba(63, 134, 224, 0.15);
+  --azure-line: rgba(63, 134, 224, 0.38);
+  --azure-glow: rgba(112, 170, 240, 0.55);
 
-  /* 线：白玻璃上的线是"冷灰蓝"，不是墨黑 */
+  /* ── 线：白玻璃上的线是"冷灰蓝"，不是墨黑 ── */
   --line: rgba(16, 30, 48, 0.07);
   --line-2: rgba(16, 30, 48, 0.12);
   --line-3: rgba(16, 30, 48, 0.22);
 
   --warn: #a8632a;
 
-  /* 玻璃：一块淡蓝的板子浮在白页上——白高光只有在蓝板上才看得见 */
-  --glass: linear-gradient(
-    146deg,
-    rgba(255, 255, 255, 0.72) 0%,
-    rgba(212, 233, 255, 0.6) 44%,
-    rgba(162, 200, 246, 0.74) 100%
+  /* ── 玻璃：三层配方 ──
+   * 关键：板子的**身体**是浅蓝（否则白玻璃压在白底上等于没有玻璃），
+   * 白只留作高光——上缘一条白边、表面一团跟手的白光、左上角一小片镜面。
+   * 透明度留够（0.68–0.78），底下的光与光斑能透上来，才叫"透明"。 */
+  --glass-plane: linear-gradient(
+    150deg,
+    rgba(255, 255, 255, 0.66) 0%,
+    rgba(213, 234, 255, 0.74) 16%,
+    rgba(188, 218, 251, 0.72) 60%,
+    rgba(161, 201, 246, 0.7) 100%
   );
-  --glass-edge: rgba(255, 255, 255, 0.98);
-  --glass-edge-cool: rgba(154, 190, 235, 0.55);
-  --glass-hi: inset 0 1px 0 rgba(255, 255, 255, 1);
-  --glass-refract: inset 0 -1px 0 rgba(126, 172, 226, 0.45);
-  --blur: 24px;
-  --lift:
-    0 30px 60px -34px rgba(46, 92, 158, 0.38),
-    0 16px 34px -28px rgba(74, 140, 224, 0.45),
-    0 1px 2px rgba(31, 63, 107, 0.08);
+  --glass-sheet: linear-gradient(
+    150deg,
+    rgba(255, 255, 255, 0.8) 0%,
+    rgba(219, 238, 255, 0.76) 30%,
+    rgba(180, 213, 249, 0.74) 100%
+  );
+  --glass-tile: linear-gradient(
+    158deg,
+    rgba(255, 255, 255, 0.9) 0%,
+    rgba(226, 242, 255, 0.74) 100%
+  );
+  --glass-chip: linear-gradient(
+    158deg,
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(228, 243, 255, 0.8) 100%
+  );
+  --glass-tint: rgba(150, 192, 240, 0.12);
+  --glass-old: var(--glass-sheet);
 
-  /* 圆角只有四档 */
+  --glass-edge: rgba(255, 255, 255, 0.99);
+  --glass-edge-cool: rgba(140, 181, 232, 0.6);
+  --glass-rim: inset 0 1px 0 rgba(255, 255, 255, 1);
+  --glass-rim-lo: inset 0 -1px 0 rgba(108, 158, 222, 0.46);
+  /* 内壁：上缘一圈光、下缘一圈蓝，玻璃才有厚度 */
+  --glass-wall: inset 0 16px 26px -22px rgba(255, 255, 255, 0.95),
+    inset 0 -26px 36px -30px rgba(63, 134, 224, 0.42),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.42);
+
+  /* ── 三层抬升：shadow 是蓝的，不是灰的 ── */
+  --lift-tile: 0 1px 1px rgba(20, 48, 86, 0.05),
+    0 10px 18px -12px rgba(30, 72, 132, 0.34);
+  --lift-chip: 0 1px 1px rgba(20, 48, 86, 0.04),
+    0 7px 14px -9px rgba(30, 72, 132, 0.3);
+  --lift-plane: 0 1px 1px rgba(20, 48, 86, 0.04),
+    0 10px 24px -14px rgba(30, 72, 132, 0.2),
+    0 34px 70px -40px rgba(30, 72, 132, 0.34);
+  --lift-sheet: 0 1px 1px rgba(20, 48, 86, 0.05),
+    0 12px 26px -14px rgba(30, 72, 132, 0.26),
+    0 44px 90px -46px rgba(30, 72, 132, 0.46),
+    0 70px 140px -80px rgba(30, 72, 132, 0.3);
+  --lift: var(--lift-sheet);
+
+  --blur-plane: 16px;
+  --blur-sheet: 26px;
+  --blur: var(--blur-sheet);
+
+  /* ── 圆角五档：文字块本身仍然不要圆角，圆角只给玻璃 ── */
   --r-1: 10px;
   --r-2: 14px;
   --r-3: 22px;
+  --r-4: 30px;
   --r-pill: 999px;
 
-  /* 间距 */
+  /* ── 间距 ── */
   --s1: 4px;
   --s2: 8px;
   --s3: 14px;
@@ -68,24 +112,29 @@
   --s6: 40px;
   --s7: 56px;
   --s8: 80px;
-  --s9: 112px;
+  --s9: 104px;
+  --s10: 136px;
 
-  /* 动效：状态变化 140–280ms；"光"可以慢（420ms 与 30s） */
-  --t-fast: 140ms;
-  --t-base: 200ms;
-  --t-slow: 280ms;
-  --t-liquid: 560ms;
-  --t-tilt: 420ms;
+  /* ── 动效：跟手要缓，交代变化也要缓；没有硬切 ── */
+  --t-fast: 160ms;
+  --t-base: 240ms;
+  --t-slow: 360ms;
+  --t-liquid: 620ms;
+  --t-rise: 780ms;
+  --t-page: 620ms;
+  --ease-glide: cubic-bezier(0.2, 0.78, 0.24, 1);
+  --ease-liquid: cubic-bezier(0.3, 0.9, 0.28, 1.04);
   --ease-out: cubic-bezier(0.22, 0.72, 0.28, 1);
   --ease-draw: cubic-bezier(0.22, 0.61, 0.36, 1);
 
   --measure: 1160px;
+  --measure-plane: 1120px;
   --measure-read: 33em;
 
   --sans: -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
     "Microsoft YaHei", system-ui, sans-serif;
 
-  /* 字阶 */
+  /* ── 字阶 ── */
   --fs-display: clamp(38px, 4.8vw, 68px);
   --fs-h1: clamp(27px, 3.1vw, 40px);
   --fs-h2: clamp(19px, 2vw, 25px);
@@ -97,11 +146,16 @@
   --fs-meta: 12px;
   --fs-tag: 11px;
 
-  /* 兼容旧名 */
+  /* ── 兼容旧名（v4 的变量仍然有效） ── */
   --bg: var(--paper);
-  --surface: var(--sheet);
+  --surface: rgba(255, 255, 255, 0.62);
+  --sheet: rgba(255, 255, 255, 0.62);
+  --glass: var(--glass-sheet);
+  --glass-hi: inset 0 1px 0 rgba(255, 255, 255, 1);
+  --glass-refract: inset 0 -1px 0 rgba(108, 158, 222, 0.46);
+  --t-tilt: 420ms;
   --text: var(--ink);
   --accent: var(--azure);
-  --radius: var(--r-3);
-  --shadow: var(--lift);
+  --radius: var(--r-4);
+  --shadow: var(--lift-sheet);
 }

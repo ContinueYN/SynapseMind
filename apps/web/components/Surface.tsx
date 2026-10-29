@@ -18,6 +18,12 @@ interface SurfaceProps {
   padded?: boolean;
 }
 
+/**
+ * 一块玻璃：抬高一层的那块面（交题板 / 追问卡 / 卡点卡）。
+ *
+ * 玻璃本体、冷光、柔光、颗粒、倾斜都在 CSS 里；这里只把指针位置写进变量。
+ * 板里的光与掠过的镜面放在 `.sm-glass-clip` 里，保证只在圆角内跑。
+ */
 export function Surface({ children, className = "", id, padded = true }: SurfaceProps) {
   const { ref, onPointerMove, onPointerLeave } = useGlass<HTMLDivElement>();
 
@@ -29,7 +35,9 @@ export function Surface({ children, className = "", id, padded = true }: Surface
       onPointerMove={onPointerMove}
       ref={ref}
     >
-      <span aria-hidden="true" className="sm-sheen" />
+      <span aria-hidden="true" className="sm-glass-clip">
+        <span className="sm-sheen" />
+      </span>
       <div className={`sm-sheet-in${padded ? "" : " sm-sheet-in-flush"}`.trim()}>
         {children}
       </div>

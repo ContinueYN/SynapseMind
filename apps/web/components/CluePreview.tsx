@@ -43,7 +43,7 @@ export function CluePreview({
     <div className="sm-clue">
       <Dendrite step={56} stops={stops} />
       <p className="sm-clue-cap">
-        现在手上有 <b>{filled}</b> 条线索。线索越具体，第一问越准。
+        已写 <b>{filled}</b> 条。写得越具体，第一问问得越准。
       </p>
     </div>
   );
