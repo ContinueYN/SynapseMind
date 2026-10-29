@@ -107,6 +107,10 @@ class Problem:
     graph: SolutionGraph
     subject: str = "math"
     grade: str = "high_school"
+    # ``False`` for a graph the model generated for a submitted stem (M2.5 S5
+    # ②): it has no reviewed reference solution, no hand-tuned aligner and no
+    # curated card text, so everything downstream must stay hedged.
+    annotated: bool = True
 
 
 @dataclass(frozen=True, slots=True)

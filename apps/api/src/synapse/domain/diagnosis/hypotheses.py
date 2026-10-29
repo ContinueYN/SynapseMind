@@ -79,6 +79,37 @@ EVIDENCE: dict[str, dict[str, dict[HypothesisId, float]]] = {
 }
 
 
+# Which layer a *missing step* points at, by node type (M2.5 S5 ②). A student
+# whose process never reaches a CONDITION node most plausibly has a condition-
+# translation problem (L2); one who never reaches a COMPUTE node has an
+# execution problem (L4). These are layer priors, not per-problem rules, so a
+# generated graph with unfamiliar node ids still gets a sensible start.
+NODE_TYPE_LAYER: dict[str, str] = {
+    "READ": "L1",
+    "CONCEPT": "L1",
+    "CONDITION": "L2",
+    "STRATEGY": "L2",
+    "TRANSFORM": "L2",
+    "COMPUTE": "L4",
+    "CHECK": "L2",
+}
+
+# Prior profiles by focus layer. The seed's hand-written map below is a more
+# specific version of the same idea; these are used when a graph has no
+# hand-written profile (generated graphs).
+FOCUS_PRIORS: dict[str, dict[HypothesisId, float]] = {
+    "L1": {"H_L2": 0.30, "H_L1": 0.45, "H_L4": 0.25},
+    "L2": {"H_L2": 0.55, "H_L1": 0.25, "H_L4": 0.20},
+    "L4": {"H_L2": 0.35, "H_L1": 0.20, "H_L4": 0.45},
+}
+
+
+def layer_for_node_type(node_type: str) -> str | None:
+    """Layer to focus on when the first missing node has this type."""
+
+    return NODE_TYPE_LAYER.get(node_type)
+
+
 @dataclass
 class HypothesisState:
     hypothesis: Hypothesis
@@ -102,9 +133,21 @@ class HypothesisSet:
         alignment: AlignmentResult,
         *,
         evidence: EvidenceWeights | None = None,
+        focus: str | None = None,
     ) -> HypothesisSet:
+        """Seed the priors from where the process first diverges.
+
+        ``focus`` is a layer ("L1"/"L2"/"L4") derived from the *type* of the
+        missing node; it is what a generated graph uses, because node ids there
+        carry no hand-tuned meaning. Without it the mapping falls back to the
+        seed's node ids — kept as-is so the annotated catalog behaves exactly
+        as it did before S5 ② (and the golden baseline stays comparable).
+        """
+
         priors = dict(DEFAULT_PRIORS)
-        if alignment.first_divergence == "n3":
+        if focus in FOCUS_PRIORS:
+            priors = dict(FOCUS_PRIORS[focus])
+        elif alignment.first_divergence == "n3":
             priors = {"H_L2": 0.60, "H_L1": 0.25, "H_L4": 0.15}
         elif alignment.first_divergence == "n2":
             priors = {"H_L2": 0.35, "H_L1": 0.45, "H_L4": 0.20}

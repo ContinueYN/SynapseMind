@@ -13,14 +13,21 @@ from synapse.application.ports import (
     ProblemRepository,
 )
 from synapse.application.subject import SubjectRegistry
-from synapse.domain.diagnosis.hypotheses import EvidenceWeights, HypothesisSet
+from synapse.domain.diagnosis.hypotheses import (
+    EvidenceWeights,
+    HypothesisSet,
+    layer_for_node_type,
+)
 from synapse.domain.dialogue.events import DialogueEvent
 from synapse.domain.dialogue.session import DialogueSession
 from synapse.domain.dialogue.states import DialogueState
 from synapse.domain.evidence.models import Evidence
 from synapse.domain.problem.alignment import StepAligner
-from synapse.domain.problem.models import SolutionGraph, StudentAttempt
+from synapse.domain.problem.models import AlignmentResult, Problem, SolutionGraph, StudentAttempt
 
+# How the seed's hand-written steps support each hypothesis. A generated graph
+# has no such table: its node ids carry no reviewed meaning, so it contributes
+# only the type-derived prior (M2.5 S5 ②) and the probes do the rest.
 _ALIGNMENT_SUPPORT = {
     "n1": ("H_L1",),
     "n2": ("H_L1",),
@@ -91,6 +98,7 @@ class SessionFactory:
             self_report=command.self_report,
         )
         alignment = self._aligner.align(problem, attempt)
+        focus = self._focus_for(problem, alignment)
         session = DialogueSession(
             session_id=self._ids.new_session_id(),
             problem_id=problem.id,
@@ -99,6 +107,7 @@ class SessionFactory:
             hypotheses=HypothesisSet.from_alignment(
                 alignment,
                 evidence=self._evidence_for(problem.subject, problem.graph),
+                focus=focus,
             ),
             max_turns=6,
             created_at=self._clock.now(),
@@ -109,7 +118,9 @@ class SessionFactory:
         session.advance(DialogueEvent.PARSED)
         session.advance(DialogueEvent.ALIGNED)
 
-        supports = _ALIGNMENT_SUPPORT.get(alignment.first_divergence, ())
+        supports = (
+            () if not problem.annotated else _ALIGNMENT_SUPPORT.get(alignment.first_divergence, ())
+        )
         for index, claim in enumerate(alignment.evidence):
             session.evidence.add(
                 Evidence(
@@ -120,3 +131,18 @@ class SessionFactory:
                 )
             )
         return session
+
+    @staticmethod
+    def _focus_for(problem: Problem, alignment: AlignmentResult) -> str | None:
+        """Layer prior from the *type* of the first missing node (S5 ②).
+
+        Only for generated problems: the annotated catalog keeps its
+        hand-written node-id profile, which the golden baseline depends on.
+        """
+
+        if problem.annotated or alignment.first_divergence == "none":
+            return None
+        for node in problem.graph.nodes:
+            if node.id == alignment.first_divergence:
+                return layer_for_node_type(node.type)
+        return None
