@@ -5,7 +5,7 @@
 1. `tokens.css` — 冰蓝色板、字体栈、圆角/间距、旧变量名别名；
 2. `glass.css` — 琉璃系统本体：五层光学、骨架、字阶、8 个组件、状态、无障碍与断点。
 
-规范真源是 [`docs/design/chapters/13-视觉系统.md`](../../../docs/design/chapters/13-视觉系统.md)；本目录只做实现，不新增方向。
+规范真源是 [`docs/design/chapters/14-视觉系统.md`](../../../../docs/design/chapters/14-视觉系统.md)；本目录只做实现，不新增方向。
 
 规则：
 
