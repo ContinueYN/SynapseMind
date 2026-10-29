@@ -73,6 +73,7 @@ def build_container(
         aligner=RuleBasedAligner(),
         ids=UuidSessionIdGenerator(),
         clock=SystemClock(),
+        subjects=problems.plugins,
     )
     planner = HypothesisTargetedPlanner()
     composer = LeakSafeProbeComposer(

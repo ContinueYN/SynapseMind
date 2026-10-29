@@ -12,13 +12,14 @@ from synapse.application.ports import (
     IdGenerator,
     ProblemRepository,
 )
-from synapse.domain.diagnosis.hypotheses import HypothesisSet
+from synapse.application.subject import SubjectRegistry
+from synapse.domain.diagnosis.hypotheses import EvidenceWeights, HypothesisSet
 from synapse.domain.dialogue.events import DialogueEvent
 from synapse.domain.dialogue.session import DialogueSession
 from synapse.domain.dialogue.states import DialogueState
 from synapse.domain.evidence.models import Evidence
 from synapse.domain.problem.alignment import StepAligner
-from synapse.domain.problem.models import StudentAttempt
+from synapse.domain.problem.models import SolutionGraph, StudentAttempt
 
 _ALIGNMENT_SUPPORT = {
     "n1": ("H_L1",),
@@ -44,11 +45,28 @@ class SessionFactory:
         aligner: StepAligner,
         ids: IdGenerator,
         clock: Clock,
+        *,
+        subjects: SubjectRegistry | None = None,
     ) -> None:
         self._problems = problems
         self._aligner = aligner
         self._ids = ids
         self._clock = clock
+        self._subjects = subjects
+
+    def _evidence_for(self, subject: str, graph: SolutionGraph) -> EvidenceWeights | None:
+        """Ask the subject plugin for its evidence model; ``None`` = M1 default.
+
+        An empty mapping is different from ``None``: it means the plugin says
+        "no probe in this graph carries evidence", so a generated graph cannot
+        silently reuse the seed problem's weights.
+        """
+        if self._subjects is None:
+            return None
+        plugin = self._subjects.for_subject(subject)
+        if plugin is None:
+            return None
+        return plugin.evidence_model(graph).weights
 
     def create(self, command: StartSessionCommand) -> DialogueSession:
         if command.mode != "learning":
@@ -78,7 +96,10 @@ class SessionFactory:
             problem_id=problem.id,
             state=DialogueState.INGEST,
             alignment=alignment,
-            hypotheses=HypothesisSet.from_alignment(alignment),
+            hypotheses=HypothesisSet.from_alignment(
+                alignment,
+                evidence=self._evidence_for(problem.subject, problem.graph),
+            ),
             max_turns=6,
             created_at=self._clock.now(),
             mode=command.mode,

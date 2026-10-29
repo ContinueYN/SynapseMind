@@ -10,14 +10,20 @@ import copy
 from fastapi.testclient import TestClient
 
 from synapse.api.deps import build_container
+from synapse.application.commands import StartSessionCommand
+from synapse.application.factory import SessionFactory
 from synapse.application.subject import (
+    EvidenceModel,
     StudentStep,
     SubjectRegistry,
     VerifiabilityLevel,
 )
+from synapse.domain.diagnosis.hypotheses import HYPOTHESES
+from synapse.domain.problem.alignment import RuleBasedAligner
 from synapse.infrastructure.in_memory import InMemoryProblemRepository
 from synapse.infrastructure.seed import SAMPLE_PROBLEM
 from synapse.infrastructure.subjects.math import MathPlugin
+from synapse.infrastructure.system import SystemClock, UuidSessionIdGenerator
 
 CATALOG = {SAMPLE_PROBLEM.id: SAMPLE_PROBLEM}
 PLUGIN = MathPlugin(CATALOG)
@@ -72,11 +78,23 @@ def test_graph_probes_and_evidence_come_from_the_seed() -> None:
         "p_a0_derivative",
         "p_boundary_check",
         "p_max_value",
+        "p_union",
     }
-    # p_union has no weights in the M1 constant; the limitation is visible here
-    # instead of being silently invented.
-    assert "p_union" not in model.probe_ids
     assert model.for_probe("p_a0_derivative")["A"]["H_L2"] == 0.30
+    assert model.for_probe("p_union")["B"]["H_L2"] > 0
+
+
+def test_every_seed_probe_option_has_evidence() -> None:
+    """No probe may waste a turn: every option maps to at least one hypothesis."""
+    model = PLUGIN.evidence_model(SAMPLE_PROBLEM.graph)
+
+    for probe in SAMPLE_PROBLEM.graph.probes():
+        table = model.for_probe(probe.id)
+        for index in range(len(probe.options)):
+            option = chr(ord("A") + index)
+            assert option in table, f"{probe.id} option {option} has no weights"
+            assert set(table[option]) <= set(HYPOTHESES), probe.id
+            assert table[option], f"{probe.id} option {option} is empty"
 
 
 def test_verify_admits_it_has_no_verifier_yet() -> None:
@@ -100,6 +118,36 @@ def test_repository_delegates_identification_to_the_plugin() -> None:
     assert repo.find_for(SAMPLE_PROBLEM.text) == SAMPLE_PROBLEM
     assert repo.find_for("一道物理题：光滑斜面") is None
     assert repo.plugins.for_subject("math") is not None
+
+
+class _FlipEvidencePlugin:
+    """A plugin whose evidence model deliberately disagrees with M1."""
+
+    subject = "math"
+    level = VerifiabilityLevel.STRONG
+
+    def evidence_model(self, graph: object) -> EvidenceModel:
+        del graph
+        return EvidenceModel(weights={"p_a0_derivative": {"A": {"H_L1": 1.2}}})
+
+
+def test_factory_uses_the_plugins_evidence_model() -> None:
+    command = StartSessionCommand(
+        problem_text=SAMPLE_PROBLEM.text,
+        answer="a≥1/e",
+        work="定义域 x>0。f'(x)=1/x-a，a>0 时最大值为 -ln a-1。",
+    )
+    factory = SessionFactory(
+        problems=InMemoryProblemRepository(),
+        aligner=RuleBasedAligner(),
+        ids=UuidSessionIdGenerator(),
+        clock=SystemClock(),
+        subjects=SubjectRegistry((_FlipEvidencePlugin(),)),  # type: ignore[arg-type]
+    )
+
+    session = factory.create(command)
+
+    assert session.hypotheses.evidence == {"p_a0_derivative": {"A": {"H_L1": 1.2}}}
 
 
 def test_container_exposes_the_registry() -> None:

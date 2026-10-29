@@ -26,7 +26,7 @@
 | worker 实际任务 | 无；`apps/worker` 只有说明 |
 | 24h 迁移验证 / 教师复核 | 无 |
 
-**已知硬边界**：HTTP 入口只支持一道种子题（函数与导数），换题返回 **422** —— 这是显式设计，不是 bug；建图器已能处理任意题干，但接进入口要等 S5 的证据模型。证据表 `EVIDENCE` 只覆盖三个探针，实测只有 `H_L2` 能越过 `0.80 + 0.25`；`L1`/`L4` 案例按「低置信不硬判」收束（见 `eval/reports/m2-exit-v0.1.md`）。
+**已知硬边界**：HTTP 入口只支持一道种子题（函数与导数），换题返回 **422** —— 这是显式设计，不是 bug；建图器已能处理任意题干，但接进入口要等生成图的证据模型（S5 剩余）。证据表 `EVIDENCE` 覆盖四个探针，实测只有 `H_L2` 能越过 `0.80 + 0.25`；`L1`/`L4` 案例按「低置信不硬判」收束（见 `eval/reports/m2-exit-v0.1.md`）。
 
 ---
 
@@ -56,7 +56,8 @@
 2. **M2.5**：第 13 章 S1–S7。S1/S2/S3 已完成（枚举扩到 `math`/`physics` + 三学段；`SubjectPlugin` + `MathPlugin`；识别从关键字换成「归一化包含」严格匹配，不同题返回 422）。
    - **S4 已完成（2026-10-29）**：`application/graph.py`（端口）+ `domain/problem/graph_structure.py`（结构规则/机械修复）+ `infrastructure/llm/graph.py`（生成 + spec 校验 + 一次重试 + 进程内缓存 + 指纹审计）。20 道未见题结构 20/20、人工抽查 19/20（95%）；0 重试 0 修复；p50 3.65s / p95 4.54s。报告：`eval/reports/m2.5-s4-graph-build.md`、`eval/reports/m2.5-s4-graph-review.md`。
    - **S4 暴露的两件事**：① 抽查唯一失败是 P_DERIV_003 漏 `a=0` 边界——**prompt 守不住数学边界**，S5 的验证器/反例必须补；② `temperature=0` 仍不可重复（同题两次 7/8 节点、指纹不同），缓存只保进程内，回归比对记录指纹。
-   - **S5（下一步）**：`evidence_model()` 由图生成证据权重，替换硬编码 `EVIDENCE`；把生成的图接进 ALIGN/PROBE（现在只被评测脚本使用）；补 `p_union` 缺权重与「平均 2.4 轮饱和」；SymPy 验证器给出可证伪反例。
+   - **S5 第一阶段已完成（2026-10-29）**：证据表改为会话级数据——`HypothesisSet.from_alignment(..., evidence=...)`，`SessionFactory` 调 `SubjectPlugin.evidence_model()`；`EVIDENCE` 只作无插件时的默认。补齐 `p_union` 四个选项的权重（原来答了也不更新后验），契约测试保证种子题每个探针每个选项都有权重。10 条 golden 仍 10/10、平均 2.40 轮。
+   - **S5 剩余（下一步）**：① 生成图的证据权重——需要模型为每个选项生成 log-odds 并校验（`evidence_model()` 目前对生成图返回空表，不能装成有证据）；② SymPy 验证器与反例，兜住 S4 暴露的边界错误；③ 把生成的图接进 ALIGN/PROBE（入口仍 422）。这三项互相依赖，建议新会话从 ① 的设计开始。
    - **S6**：接第二个学科（物理），状态机零改动。
 3. **待收口的既有问题**：前端无自动化测试（只有手工 smoke）；`docs/design/plan/` 未入库；评测集有 10 条、`eval/golden/README` 的 100 条配额未达（需 M2.5 扩题）。
 

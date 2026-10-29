@@ -128,7 +128,7 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 | `identify()` | 归一化后「包含」已标注题；不同题一律拒绝，不再用关键字 | 生成式识别（未排期）；S6 给 `physics` 补 handler |
 | `build_graph()` | `Problem` 返回手写种子图；`ProblemDraft` 走 `LLMGraphGenerator`：生成 → 机械修复 → 结构规则 → `solution-graph.schema.json` → 失败重试一次 | S5 把生成的图接进 ALIGN/PROBE；未接主链路前只用于评测 |
 | `probes_for()` | 返回节点自带探针 | 接口不变 |
-| `evidence_model()` | 过滤 `EVIDENCE`（只有 3 个探针有权重） | S5 按图生成，补 `p_union` 等缺口 |
+| `evidence_model()` | 由插件提供；种子题 4 个探针 × 每个选项都有权重，`EVIDENCE` 只是无插件时的默认 | S5 剩余：生成图由模型生成权重并校验；补 `p_union` 之外的标定 |
 | `verify()` | 恒返回 `unknown` | S5 接 SymPy；STRONG 档才允许 `diagnose` |
 
 `subject` 是显式声明：文本识别出的学科与声明不一致时返回 **422**，而不是静默按文本路由。注册表目前只有一个插件，S6 接物理时只加一个实现。
