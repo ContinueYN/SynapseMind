@@ -41,7 +41,7 @@ apps/api/src/synapse/
 │  ├─ guards.py               # 唯一读取答案的适配器：构造泄漏防护
 │  ├─ system.py               # UTC 时钟 / S_ 会话 ID
 │  ├─ subjects/               # 学科插件实现（M2.5）
-│  │  └─ math.py              # MathPlugin：关键字识别 + 种子图 + EVIDENCE
+│  │  └─ math.py              # MathPlugin：严格识别 + 种子图/EVIDENCE + 生成图证据
 │  └─ llm/                    # 唯一允许 import 模型客户端的包
 │     ├─ settings.py          # off/shadow/on:10 开关、模型、超时、canary 分桶
 │     ├─ client.py            # OpenAI 兼容客户端（默认 DeepSeek）
@@ -115,6 +115,8 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 
 本地把变量写进**仓库根目录的 `.env`** 即可：`scripts/dev/run.py` 用 `uvicorn --env-file` 传入，`scripts/eval/m2_exit.py` 显式 `load_dotenv()`。库代码与测试**不会**隐式读这个文件，所以本机的 key 不会改变测试结果。
 
+生成图的 prompt 版本由 `SYNAPSE_GRAPH_PROMPT_VERSION` 控制（默认 `graph-v2`）；缓存键包含它，改 prompt 必须同时升版本，否则旧缓存会掩盖变化。
+
 失败链：JSON 不合法 → 重试 1 次 → 仍失败回退规则；超时与传输失败不重试（保 8s 首问预算），直接回退。每次调用、每次降级、每条 shadow 差异都写 `AuditEntry`：`session_id`、`turn`、`model`、`latency_ms`、`prompt_tokens`、`completion_tokens`、`retried`、`fallback_reason`、`schema_ok`。
 
 答案隔离：发给模型的只有题面 `stem` 与探针本身；`node.text` / `common_errors` 不发送。出口仍是 `LeakSafeProbeComposer`（最外层），命中即改写。
@@ -126,9 +128,9 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 | 方法 | 现在（S2–S4） | 后续 |
 |---|---|---|
 | `identify()` | 归一化后「包含」已标注题；不同题一律拒绝，不再用关键字 | 生成式识别（未排期）；S6 给 `physics` 补 handler |
-| `build_graph()` | `Problem` 返回手写种子图；`ProblemDraft` 走 `LLMGraphGenerator`：生成 → 机械修复 → 结构规则 → `solution-graph.schema.json` → 失败重试一次 | S5 把生成的图接进 ALIGN/PROBE；未接主链路前只用于评测 |
+| `build_graph()` | `Problem` 返回手写种子图；`ProblemDraft` 走 `LLMGraphGenerator`：生成 → 机械修复 → 结构规则 → `solution-graph.schema.json` → 失败重试一次。生成图必须带逐选项证据权重（prompt `graph-v2`） | S5 剩余：把生成的图接进 ALIGN/PROBE；未接主链路前只用于评测 |
 | `probes_for()` | 返回节点自带探针 | 接口不变 |
-| `evidence_model()` | 由插件提供；种子题 4 个探针 × 每个选项都有权重，`EVIDENCE` 只是无插件时的默认 | S5 剩余：生成图由模型生成权重并校验；补 `p_union` 之外的标定 |
+| `evidence_model()` | 生成图读图内 `probe.evidence`；只有已标注种子图回退手写 `EVIDENCE`，未知图返回空表（不借用种子权重） | 生成图的权重方向仍需人工/验证器抽查 |
 | `verify()` | 恒返回 `unknown` | S5 接 SymPy；STRONG 档才允许 `diagnose` |
 
 `subject` 是显式声明：文本识别出的学科与声明不一致时返回 **422**，而不是静默按文本路由。注册表目前只有一个插件，S6 接物理时只加一个实现。

@@ -138,6 +138,7 @@ Nginx（SSE 关闭缓冲、限流、超时）
 | 状态机 | 显式转移表，不用图引擎——可单测、可回放、可静态审查 |
 | LLM 接入 | 只落在 `infrastructure/llm`；受控结构化输出 + 重试 + 降级 |
 | 解法图来源 | 学科插件提供；可手写也可生成，生成物必须过同一份 `solution-graph.schema.json`，否则显式失败、不生成卡点卡 |
+| 诊断证据 | 种子题用人工标定的 log-odds 表；生成图由模型为每个选项给出权重，结构规则强制覆盖与正负对比，未知图不借用别题的权重 |
 | 异步任务 | 只跑离线活；**LLM 主链路绝不进队列**——进队列就破首问预算 |
 | 迁移 | Alembic 向前兼容，不做自动 down migration |
 | 可观测 | OpenTelemetry 全链路 trace + Prometheus/Grafana；首问 P95 与 JSON 合法率进大盘 |

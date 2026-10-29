@@ -25,8 +25,8 @@ def test_golden_set_shape() -> None:
     assert len(set(ids)) == len(ids)
 
     quotas = Counter(case.category for case in CASES)
-    assert quotas["wrong_answer"] == 4
-    assert quotas["right_answer_missing_case"] == 2
+    assert quotas["wrong_answer"] == 3
+    assert quotas["right_answer_missing_case"] == 3
     assert quotas["no_idea"] == 2
     assert quotas["negative"] == 2
 

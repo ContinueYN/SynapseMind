@@ -82,6 +82,7 @@ def test_graph_probes_and_evidence_come_from_the_seed() -> None:
     }
     assert model.for_probe("p_a0_derivative")["A"]["H_L2"] == 0.30
     assert model.for_probe("p_union")["B"]["H_L2"] > 0
+    assert model.for_probe("p_union")["C"]["H_L2"] < 0
 
 
 def test_every_seed_probe_option_has_evidence() -> None:

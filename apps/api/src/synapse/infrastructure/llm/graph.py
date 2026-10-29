@@ -58,7 +58,7 @@ from synapse.domain.problem.models import (
 )
 from synapse.infrastructure.llm.settings import LLMSettings
 
-GRAPH_MAX_TOKENS = 3200
+GRAPH_MAX_TOKENS = 4096
 GRAPH_CACHE_SIZE = 128
 PROBLEM_ID_PATTERN = re.compile(r"^P_[A-Z0-9_]+$")
 
@@ -71,7 +71,7 @@ GRAPH_SYSTEM_PROMPT = """你是高中数学解法图标注器。输入一道高�
 解法图描述解这道题需要完成的认知步骤，不是完整演算稿。
 硬性要求：
 1. 只输出一个 JSON 对象，不要 markdown、代码块或解释，结构为：
-   {"nodes":[{"id":"n1","type":"READ","text":"...","demand":{"V":0.2},"probes":[{"id":"p1","question":"...","options":["...","..."],"targets":["H_L2","H_L1"]}]}],"edges":[["n1","n2"]]}
+   {"nodes":[{"id":"n1","type":"READ","text":"...","demand":{"V":0.2},"probes":[{"id":"p1","question":"...","options":["...","...","..."],"targets":["H_L2","H_L1"],"evidence":{"A":{"H_L2":-0.4,"H_L1":0.2},"B":{"H_L2":0.35,"H_L1":-0.1},"C":{"H_L1":0.3}}}]}],"edges":[["n1","n2"]]}
 2. nodes 为 3–10 个（硬上限 20）；id 从 n1 连续编号；
    text 不超过 60 字，写这一步做什么，不写最终答案。
 3. type 只能是 READ / CONCEPT / CONDITION / STRATEGY / TRANSFORM / COMPUTE / CHECK 之一。
@@ -82,7 +82,12 @@ GRAPH_SYSTEM_PROMPT = """你是高中数学解法图标注器。输入一道高�
 6. 关键节点挂 1–2 个探针，整张图至少 2 个探针；探针一次只问一个小问题，选项 2–4 个，不给答案。
 7. 每个探针的 targets 至少写 2 个假设 id，只能从 H_L1、H_L2、H_L4 中选：
    H_L1=概念不清（定义、定理条件）；H_L2=条件转译/参数分类；H_L4=执行/计算错误。
-8. 不要复述题目，不要输出答案。"""
+8. 不要复述题目，不要输出答案。
+9. 每个探针的每个选项都必须有 evidence；键 A/B/C 依次对应 options 的第 1/2/3 个。
+   evidence 的值是 log-odds 权重，范围 -1~1：正数表示选这个选项支持该假设，
+   负数表示反对；0 等于没写，不要用。
+10. evidence 里只能出现该探针 targets 中的假设；每个 target 至少要在一个选项上有非零权重；
+    同一探针要让至少两个假设拿到方向相反的权重，否则这个探针没有区分度，不要设。"""
 
 _ISSUE_HINTS = {
     "bad_json": "只输出一个合法 JSON 对象",
@@ -100,6 +105,15 @@ _ISSUE_HINTS = {
     "probe_targets_too_few": "每个探针至少指向 2 个假设",
     "probe_target_unknown": "探针 targets 只能取 H_L1 / H_L2 / H_L4",
     "no_probes": "解法图至少要有一个探针",
+    "probe_evidence_missing": "每个探针的每个选项都要有 evidence 权重",
+    "probe_evidence_option_missing": "选项 A/B/C 每一个都要有 evidence",
+    "probe_evidence_empty": "选项权重不能全为 0，否则答了也不更新后验",
+    "probe_evidence_target_unknown": "evidence 的假设键必须在该探针的 targets 里",
+    "probe_evidence_target_unused": "每个 target 至少在一个选项上有非零权重",
+    "probe_evidence_no_contrast": "同一探针的权重必须有正有负，否则无法区分假设",
+    "evidence_option_dropped": "evidence 的选项键只能是 A/B/C，并与 options 数量一致",
+    "evidence_value_dropped": "evidence 的权重必须是有限数字",
+    "evidence_clamped": "evidence 权重必须在 -1~1 之间",
 }
 
 _DEGENERATE_CODES = frozenset({"node_count", "no_edges", "isolated_node", "no_probes"})
@@ -118,6 +132,7 @@ class _ProbePayload(BaseModel):
     question: str
     options: list[str] = Field(default_factory=list)
     targets: list[str] = Field(default_factory=list)
+    evidence: dict[str, dict[str, float]] = Field(default_factory=dict)
     hint_level: int = 0
 
 
@@ -181,6 +196,9 @@ def to_payload(graph: SolutionGraph) -> dict[str, object]:
                         "question": probe.question,
                         "options": list(probe.options),
                         "targets": list(probe.targets),
+                        "evidence": {
+                            option: dict(weights) for option, weights in probe.evidence.items()
+                        },
                         "hint_level": probe.hint_level,
                     }
                     for probe in node.probes
@@ -367,7 +385,11 @@ def _build_graph(draft: ProblemDraft, text: str) -> GraphCheck:
         nodes=nodes,
         edges=tuple(edges),
     )
-    check = review(graph, allowed_targets=ALLOWED_PROBE_TARGETS)
+    check = review(
+        graph,
+        allowed_targets=ALLOWED_PROBE_TARGETS,
+        require_evidence=True,
+    )
     if not check.ok:
         raise _Rejected(_classify(check.issues), check.issues)
 
@@ -391,6 +413,7 @@ def _node(item: _NodePayload) -> SolutionNode:
                 options=tuple(probe.options),
                 targets=tuple(probe.targets),
                 hint_level=probe.hint_level,
+                evidence={option: dict(weights) for option, weights in probe.evidence.items()},
             )
             for probe in item.probes
         ),

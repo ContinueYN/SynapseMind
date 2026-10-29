@@ -11,7 +11,7 @@ import pytest
 from synapse.application.graph import GraphBuildFailed
 from synapse.application.llm import LLMRequest, LLMResponse, LLMTimeout
 from synapse.domain.problem.graph_structure import fingerprint
-from synapse.domain.problem.models import ProblemDraft
+from synapse.domain.problem.models import ProblemDraft, SolutionGraph
 from synapse.infrastructure.llm.audit import InMemoryCallAuditor
 from synapse.infrastructure.llm.graph import (
     GRAPH_MAX_TOKENS,
@@ -53,6 +53,11 @@ _VALID: dict[str, Any] = {
                     "question": "a=0 这个边界需要单独检查吗？",
                     "options": ["需要", "不需要", "不确定"],
                     "targets": ["H_L2", "H_L1"],
+                    "evidence": {
+                        "A": {"H_L2": -0.40, "H_L1": 0.20},
+                        "B": {"H_L2": 0.45, "H_L1": -0.10},
+                        "C": {"H_L1": 0.30},
+                    },
                 }
             ],
         },
@@ -67,6 +72,11 @@ _VALID: dict[str, Any] = {
                     "question": "导数的零点对应最大值还是最小值？",
                     "options": ["最大值", "最小值", "不确定"],
                     "targets": ["H_L4", "H_L2"],
+                    "evidence": {
+                        "A": {"H_L4": -0.35, "H_L2": 0.20},
+                        "B": {"H_L4": 0.40, "H_L2": -0.15},
+                        "C": {"H_L2": 0.25},
+                    },
                 }
             ],
         },
@@ -149,7 +159,7 @@ def test_valid_graph_is_built_and_audited() -> None:
     assert entry.schema_ok is True
     assert entry.retried is False
     assert entry.model == "fake-1"
-    assert entry.prompt_version == "graph-v1"
+    assert entry.prompt_version == "graph-v2"
     assert entry.graph_fingerprint == result.fingerprint
 
 
@@ -296,6 +306,69 @@ def test_invalid_draft_id_is_rejected() -> None:
     assert client.calls == []
 
 
+def test_evidence_is_serialised_for_each_option() -> None:
+    result = _generator(FakeClient(VALID)).generate(DRAFT)
+
+    payload = to_payload(result.graph)
+    probe = payload["nodes"][2]["probes"][0]
+    assert probe["evidence"] == {
+        "A": {"H_L2": -0.40, "H_L1": 0.20},
+        "B": {"H_L2": 0.45, "H_L1": -0.10},
+        "C": {"H_L1": 0.30},
+    }
+
+
+def test_missing_evidence_is_retried_with_feedback() -> None:
+    payload = copy.deepcopy(_VALID)
+    del payload["nodes"][2]["probes"][0]["evidence"]
+    client = FakeClient(json.dumps(payload, ensure_ascii=False), VALID)
+
+    result = _generator(client).generate(DRAFT)
+
+    assert result.attempts == 2
+    assert "probe_evidence_missing" in client.calls[1].user
+
+
+def test_an_option_without_weights_is_rejected() -> None:
+    payload = copy.deepcopy(_VALID)
+    del payload["nodes"][2]["probes"][0]["evidence"]["B"]
+    bad = json.dumps(payload, ensure_ascii=False)
+
+    with pytest.raises(GraphBuildFailed) as info:
+        _generator(FakeClient(bad, bad)).generate(DRAFT)
+
+    assert info.value.reason == "schema_invalid"
+    assert "probe_evidence_option_missing: p1" in info.value.detail
+
+
+def test_evidence_for_an_undeclared_target_is_rejected() -> None:
+    payload = copy.deepcopy(_VALID)
+    payload["nodes"][2]["probes"][0]["evidence"]["A"]["H_L4"] = 0.30
+    bad = json.dumps(payload, ensure_ascii=False)
+
+    with pytest.raises(GraphBuildFailed) as info:
+        _generator(FakeClient(bad, bad)).generate(DRAFT)
+
+    assert info.value.reason == "schema_invalid"
+    assert "probe_evidence_target_unknown: p1" in info.value.detail
+
+
+def test_a_target_without_any_weight_is_rejected() -> None:
+    payload = copy.deepcopy(_VALID)
+    payload["nodes"][2]["probes"][0]["evidence"] = {
+        "A": {"H_L2": -0.40},
+        "B": {"H_L2": 0.45},
+        "C": {"H_L2": 0.20},
+    }
+    bad = json.dumps(payload, ensure_ascii=False)
+
+    with pytest.raises(GraphBuildFailed) as info:
+        _generator(FakeClient(bad, bad)).generate(DRAFT)
+
+    assert info.value.reason == "schema_invalid"
+    assert "probe_evidence_target_unused: p1" in info.value.detail
+
+
 def test_seed_graph_conforms_to_the_published_spec() -> None:
     # The hand-written graph and generated ones share one contract; if this
     # fails, the spec or the serialiser drifted, not the model.
@@ -306,6 +379,32 @@ def test_payload_never_carries_the_answer_key() -> None:
     payload = to_payload(SAMPLE_PROBLEM.graph)
     serialised = json.dumps(payload, ensure_ascii=False)
     assert "correct_option" not in serialised
+
+
+def test_plugin_uses_the_generated_evidence_not_the_seed_table() -> None:
+    generator = _generator(FakeClient(VALID))
+    plugin = MathPlugin({SAMPLE_PROBLEM.id: SAMPLE_PROBLEM}, generator=generator)
+
+    graph = plugin.build_graph(DRAFT)
+    model = plugin.evidence_model(graph)
+
+    assert set(model.probe_ids) == {"p1", "p2"}
+    assert model.for_probe("p1")["A"] == {"H_L2": -0.40, "H_L1": 0.20}
+    assert model.for_probe("p2")["B"] == {"H_L4": 0.40, "H_L2": -0.15}
+
+
+def test_a_generated_graph_without_evidence_gets_no_seed_weights() -> None:
+    graph = SAMPLE_PROBLEM.graph
+    stripped = SolutionGraph(
+        problem_id="P_DERIV_999",
+        version=graph.version,
+        stem=graph.stem,
+        nodes=graph.nodes,
+        edges=graph.edges,
+    )
+    plugin = MathPlugin({SAMPLE_PROBLEM.id: SAMPLE_PROBLEM})
+
+    assert plugin.evidence_model(stripped).weights == {}
 
 
 def test_plugin_builds_a_draft_through_the_generator() -> None:

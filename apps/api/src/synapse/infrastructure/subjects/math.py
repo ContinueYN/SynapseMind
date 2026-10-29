@@ -7,6 +7,11 @@ refused so the wrong graph is never used to explain a student's work.
 S4 scope: ``build_graph`` also accepts a draft with no annotated graph and
 delegates to the LLM generator. The generator is optional so tests and the
 ``off`` baseline keep the M1 behaviour of wrapping the seed graph.
+
+S5 scope: a generated graph carries its own per-option log-odds weights, so
+``evidence_model`` reads them from the graph. The hand-written ``EVIDENCE``
+table is only used for the annotated catalog graph; an unknown graph gets an
+empty model rather than inheriting the seed problem's weights.
 """
 
 from __future__ import annotations
@@ -75,14 +80,33 @@ class MathPlugin:
         return node.probes
 
     def evidence_model(self, graph: SolutionGraph) -> EvidenceModel:
-        probe_ids = {probe.id for probe in graph.probes()}
-        return EvidenceModel(
-            weights={
-                probe_id: dict(options)
-                for probe_id, options in EVIDENCE.items()
-                if probe_id in probe_ids
-            }
-        )
+        """Generated graphs carry their own weights (M2.5 S5).
+
+        Three cases, in order:
+
+        1. every probe has per-option weights -> use them;
+        2. the annotated catalog graph (the seed) -> use the hand-written table;
+        3. anything else -> empty. A generated graph must never inherit the
+           seed problem's weights just because its probe ids look familiar.
+        """
+        probes = graph.probes()
+        if probes and all(probe.evidence for probe in probes):
+            return EvidenceModel(
+                weights={
+                    probe.id: {option: dict(weights) for option, weights in probe.evidence.items()}
+                    for probe in probes
+                }
+            )
+        if graph.problem_id in self._catalog:
+            probe_ids = {probe.id for probe in probes}
+            return EvidenceModel(
+                weights={
+                    probe_id: dict(options)
+                    for probe_id, options in EVIDENCE.items()
+                    if probe_id in probe_ids
+                }
+            )
+        return EvidenceModel(weights={})
 
     def verify(self, step: StudentStep) -> Verdict:
         # A STRONG subject without a verifier must say so, never pretend.

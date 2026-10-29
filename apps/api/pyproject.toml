@@ -23,6 +23,7 @@ dev = [
   "mypy>=1.11,<2",
   "import-linter>=2.0,<3",
   "types-jsonschema>=4.23",
+  "sympy>=1.13,<2",
 ]
 
 [tool.hatch.build.targets.wheel]

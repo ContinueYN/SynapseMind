@@ -7,7 +7,9 @@ from synapse.domain.dialogue.session import DialogueSession
 from synapse.domain.problem.models import Problem
 
 _ONE_LINE = {
-    "H_L2": ("你能走完 a>0 的最值，但没有检查 a≤0：题目要求对所有 x>0 成立，边界也在范围内。"),
+    "H_L2": (
+        "你能走完 a>0 的最值，但没有检查 a≤0：题目要求对所有 x>0 成立，a≤0 这一支必须单独排除。"
+    ),
     "H_L1": ("你把“对所有 x>0 成立”直接当成了求导，但还没有把它转成“最大值≤0”这个可计算的判定。"),
     "H_L4": ("思路方向是对的，但最值计算/等号处理有一处执行错误；先回代检查临界点。"),
 }

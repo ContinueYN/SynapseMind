@@ -15,6 +15,11 @@ class Probe:
     options: tuple[str, ...] = ()
     targets: tuple[str, ...] = ()
     hint_level: int = 0
+    # ``option letter -> hypothesis id -> log-odds`` (M2.5 S5). A generated
+    # graph carries its own evidence; the hand-written seed graph keeps using
+    # the table in ``EVIDENCE``. Empty means "this probe carries no evidence",
+    # never "fall back to another problem's weights".
+    evidence: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
     # Kept in the graph, never serialised into a learning-mode response.
     correct_option: str | None = None
 

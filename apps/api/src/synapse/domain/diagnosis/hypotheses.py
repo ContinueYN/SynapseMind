@@ -68,12 +68,13 @@ EVIDENCE: dict[str, dict[str, dict[HypothesisId, float]]] = {
         "C": {"H_L2": 0.00, "H_L1": 0.25, "H_L4": 0.00},
     },
     # The seed graph's fourth probe used to have no weights, so choosing an
-    # option on it added nothing and the turn was wasted. Correct union lowers
-    # the L2 hypothesis; both wrong combinations raise it.
+    # option on it added nothing and the turn was wasted. Keeping only the
+    # branch that passes the for-all check (C) lowers L2; union/intersection
+    # both raise it.
     "p_union": {
-        "A": {"H_L2": -0.40, "H_L1": -0.05, "H_L4": -0.05},
-        "B": {"H_L2": 0.45, "H_L1": 0.05, "H_L4": 0.05},
-        "C": {"H_L2": 0.50, "H_L1": 0.00, "H_L4": 0.05},
+        "A": {"H_L2": 0.50},
+        "B": {"H_L2": 0.45},
+        "C": {"H_L2": -0.40},
     },
 }
 

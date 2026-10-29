@@ -23,7 +23,7 @@ import hashlib
 import json
 import math
 from collections import deque
-from collections.abc import Collection, Iterable
+from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass, replace
 
 from synapse.domain.problem.models import Probe, SolutionGraph, SolutionNode
@@ -50,6 +50,9 @@ MIN_PROBE_OPTIONS = 2
 MAX_STEM = 4000
 MIN_PROBE_TARGETS = 2
 HINT_LEVELS = (0, 1, 2, 3)
+OPTION_LETTERS = "ABCD"
+EVIDENCE_MIN = -1.0
+EVIDENCE_MAX = 1.0
 
 FINGERPRINT_LENGTH = 16
 
@@ -72,12 +75,18 @@ def review(
     *,
     allowed_targets: Collection[str] | None = None,
     min_targets: int = MIN_PROBE_TARGETS,
+    require_evidence: bool = False,
 ) -> GraphCheck:
     """Repair what is mechanical and report what is not.
 
     ``allowed_targets`` is the hypothesis vocabulary a probe may target
     (``H_L1``/``H_L2``/``H_L4`` while the diagnosis layer is still the M1 one).
     ``None`` skips the membership check.
+
+    ``require_evidence`` is on for generated graphs: every option must carry a
+    weight for at least one of the probe's targets, or the turn would update
+    nothing. Hand-written seed graphs predate the field and stay valid without
+    it; they get their weights from ``EVIDENCE``.
     """
     codes: set[str] = set()
     issues: list[str] = []
@@ -149,6 +158,7 @@ def review(
                         issues.append(
                             f"probe_target_unknown: {probe.id or node.id} 指向 {target!r}"
                         )
+            issues.extend(_probe_evidence_issues(probe, require_evidence=require_evidence))
     if total_probes == 0:
         issues.append("no_probes: 解法图至少要有一个探针")
 
@@ -260,6 +270,8 @@ def _repair_probe(
     if len(probe.options) > MAX_OPTIONS:
         codes.add("probe_options_truncated")
 
+    evidence = _repair_evidence(probe.evidence, len(options), codes)
+
     targets = _dedupe(target.strip() for target in probe.targets)
     if len(targets) != len(probe.targets):
         codes.add("probe_targets_deduped")
@@ -276,7 +288,83 @@ def _repair_probe(
         options=options,
         targets=targets,
         hint_level=hint_level,
+        evidence=evidence,
     )
+
+
+def _repair_evidence(
+    evidence: Mapping[str, Mapping[str, float]],
+    option_count: int,
+    codes: set[str],
+) -> dict[str, dict[str, float]]:
+    """Normalise keys and clamp weights; never invent or re-target evidence."""
+    allowed = set(OPTION_LETTERS[:option_count])
+    cleaned: dict[str, dict[str, float]] = {}
+    for raw_option, raw_weights in evidence.items():
+        option = raw_option.strip().upper()
+        if option not in allowed:
+            codes.add("evidence_option_dropped")
+            continue
+        if option in cleaned:
+            codes.add("evidence_option_merged")
+        weights: dict[str, float] = {}
+        for raw_hypothesis, raw_weight in raw_weights.items():
+            hypothesis = raw_hypothesis.strip()
+            try:
+                weight = float(raw_weight)
+            except (TypeError, ValueError):
+                codes.add("evidence_value_dropped")
+                continue
+            if not math.isfinite(weight):
+                codes.add("evidence_value_dropped")
+                continue
+            clamped = min(max(weight, EVIDENCE_MIN), EVIDENCE_MAX)
+            if clamped != weight:
+                codes.add("evidence_clamped")
+            weights[hypothesis] = clamped
+        cleaned[option] = weights
+    return cleaned
+
+
+def _probe_evidence_issues(probe: Probe, *, require_evidence: bool) -> list[str]:
+    """Every option must move the posterior, and only towards declared targets."""
+    if not probe.evidence:
+        if require_evidence:
+            return [f"probe_evidence_missing: {probe.id} 没有为选项生成权重"]
+        return []
+
+    issues: list[str] = []
+    options = OPTION_LETTERS[: len(probe.options)]
+    for option in options:
+        weights = probe.evidence.get(option)
+        if weights is None:
+            issues.append(f"probe_evidence_option_missing: {probe.id} 的选项 {option} 没有权重")
+            continue
+        if not any(weight != 0.0 for weight in weights.values()):
+            issues.append(
+                f"probe_evidence_empty: {probe.id} 的选项 {option} 权重全为 0，答了也不更新后验"
+            )
+        for hypothesis in weights:
+            if hypothesis not in probe.targets:
+                issues.append(
+                    f"probe_evidence_target_unknown: {probe.id} 给不在 targets 里的 "
+                    f"{hypothesis!r} 配了权重"
+                )
+
+    for target in probe.targets:
+        if not any(
+            target in weights and weights[target] != 0.0 for weights in probe.evidence.values()
+        ):
+            issues.append(
+                f"probe_evidence_target_unused: {probe.id} 的目标 {target} 没有任何选项给出非零权重"
+            )
+
+    all_weights = [weight for weights in probe.evidence.values() for weight in weights.values()]
+    if all_weights and not (
+        any(weight > 0 for weight in all_weights) and any(weight < 0 for weight in all_weights)
+    ):
+        issues.append(f"probe_evidence_no_contrast: {probe.id} 的权重没有正负对比，无法区分假设")
+    return issues
 
 
 def _clean_edges(

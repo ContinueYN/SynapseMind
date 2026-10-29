@@ -20,8 +20,15 @@ def _probe(
     targets: tuple[str, ...] = ("H_L2", "H_L1"),
     question: str = "这一步先做什么？",
     options: tuple[str, ...] = ("A", "B"),
+    evidence: dict[str, dict[str, float]] | None = None,
 ) -> Probe:
-    return Probe(id=probe_id, question=question, options=options, targets=targets)
+    return Probe(
+        id=probe_id,
+        question=question,
+        options=options,
+        targets=targets,
+        evidence=evidence or {},
+    )
 
 
 def _node(
@@ -186,6 +193,197 @@ def test_probe_rules_require_two_known_targets() -> None:
 
     assert any("probe_targets_too_few" in issue for issue in check.issues)
     assert any("probe_target_unknown: p2" in issue for issue in check.issues)
+
+
+def test_require_evidence_flags_a_probe_without_weights() -> None:
+    check = review(_clean_graph(), allowed_targets=TARGETS, require_evidence=True)
+
+    assert not check.ok
+    assert "probe_evidence_missing: p1 没有为选项生成权重" in check.issues
+
+
+def test_complete_evidence_passes_review() -> None:
+    graph = _graph(
+        (
+            _node(
+                "n1",
+                probes=(
+                    _probe(
+                        "p1",
+                        evidence={
+                            "A": {"H_L2": -0.40, "H_L1": 0.20},
+                            "B": {"H_L2": 0.45, "H_L1": -0.10},
+                        },
+                    ),
+                ),
+            ),
+            _node("n2", node_type="COMPUTE"),
+            _node("n3", node_type="CHECK"),
+        ),
+        (("n1", "n2"), ("n2", "n3")),
+    )
+
+    check = review(graph, allowed_targets=TARGETS, require_evidence=True)
+
+    assert check.ok
+    assert check.graph.node("n1").probes[0].evidence["A"]["H_L2"] == -0.40
+
+
+def test_every_option_needs_weights() -> None:
+    graph = _graph(
+        (
+            _node(
+                "n1",
+                probes=(
+                    _probe(
+                        "p1",
+                        evidence={"A": {"H_L2": -0.40, "H_L1": 0.20}},
+                    ),
+                ),
+            ),
+            _node("n2", node_type="COMPUTE"),
+            _node("n3", node_type="CHECK"),
+        ),
+        (("n1", "n2"), ("n2", "n3")),
+    )
+
+    check = review(graph, allowed_targets=TARGETS, require_evidence=True)
+
+    assert any("probe_evidence_option_missing: p1" in issue for issue in check.issues)
+
+
+def test_an_empty_option_is_a_wasted_turn() -> None:
+    graph = _graph(
+        (
+            _node(
+                "n1",
+                probes=(
+                    _probe(
+                        "p1",
+                        evidence={
+                            "A": {"H_L2": -0.40, "H_L1": 0.20},
+                            "B": {"H_L2": 0.0, "H_L1": 0.0},
+                        },
+                    ),
+                ),
+            ),
+            _node("n2", node_type="COMPUTE"),
+            _node("n3", node_type="CHECK"),
+        ),
+        (("n1", "n2"), ("n2", "n3")),
+    )
+
+    check = review(graph, allowed_targets=TARGETS, require_evidence=True)
+
+    assert any("probe_evidence_empty: p1 的选项 B" in issue for issue in check.issues)
+
+
+def test_evidence_cannot_target_a_hypothesis_outside_the_probe() -> None:
+    graph = _graph(
+        (
+            _node(
+                "n1",
+                probes=(
+                    _probe(
+                        "p1",
+                        evidence={
+                            "A": {"H_L2": -0.40, "H_L4": 0.20},
+                            "B": {"H_L2": 0.45, "H_L1": -0.10},
+                        },
+                    ),
+                ),
+            ),
+            _node("n2", node_type="COMPUTE"),
+            _node("n3", node_type="CHECK"),
+        ),
+        (("n1", "n2"), ("n2", "n3")),
+    )
+
+    check = review(graph, allowed_targets=TARGETS, require_evidence=True)
+
+    assert any("probe_evidence_target_unknown: p1" in issue for issue in check.issues)
+
+
+def test_every_target_must_be_used_by_some_option() -> None:
+    graph = _graph(
+        (
+            _node(
+                "n1",
+                probes=(
+                    _probe(
+                        "p1",
+                        evidence={
+                            "A": {"H_L2": -0.40},
+                            "B": {"H_L2": 0.45},
+                        },
+                    ),
+                ),
+            ),
+            _node("n2", node_type="COMPUTE"),
+            _node("n3", node_type="CHECK"),
+        ),
+        (("n1", "n2"), ("n2", "n3")),
+    )
+
+    check = review(graph, allowed_targets=TARGETS, require_evidence=True)
+
+    assert any("probe_evidence_target_unused: p1 的目标 H_L1" in issue for issue in check.issues)
+
+
+def test_all_positive_weights_do_not_discriminate() -> None:
+    graph = _graph(
+        (
+            _node(
+                "n1",
+                probes=(
+                    _probe(
+                        "p1",
+                        evidence={
+                            "A": {"H_L2": 0.40, "H_L1": 0.20},
+                            "B": {"H_L2": 0.30, "H_L1": 0.10},
+                        },
+                    ),
+                ),
+            ),
+            _node("n2", node_type="COMPUTE"),
+            _node("n3", node_type="CHECK"),
+        ),
+        (("n1", "n2"), ("n2", "n3")),
+    )
+
+    check = review(graph, allowed_targets=TARGETS, require_evidence=True)
+
+    assert any("probe_evidence_no_contrast: p1" in issue for issue in check.issues)
+
+
+def test_evidence_weights_are_clamped_and_reported() -> None:
+    graph = _graph(
+        (
+            _node(
+                "n1",
+                probes=(
+                    _probe(
+                        "p1",
+                        evidence={
+                            "A": {"H_L2": -2.0, "H_L1": 0.20},
+                            "B": {"H_L2": 1.5, "H_L1": -0.10},
+                        },
+                    ),
+                ),
+            ),
+            _node("n2", node_type="COMPUTE"),
+            _node("n3", node_type="CHECK"),
+        ),
+        (("n1", "n2"), ("n2", "n3")),
+    )
+
+    check = review(graph, allowed_targets=TARGETS, require_evidence=True)
+
+    assert check.ok
+    evidence = check.graph.node("n1").probes[0].evidence
+    assert evidence["A"]["H_L2"] == -1.0
+    assert evidence["B"]["H_L2"] == 1.0
+    assert "evidence_clamped" in check.repairs
 
 
 def test_missing_probes_are_reported() -> None:

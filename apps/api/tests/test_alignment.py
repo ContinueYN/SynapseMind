@@ -31,11 +31,11 @@ def test_no_idea_starts_at_reading() -> None:
 
 def test_complete_attempt_has_no_gap() -> None:
     attempt = StudentAttempt(
-        answer="a∈(-∞,0]∪[1/e,∞)",
+        answer="a∈[1/e,+∞)",
         work=(
             "定义域 x>0。f'(x)=1/x-a，最大值为 f(1/a)。"
-            "a≤0 时函数无上界；a>0 时 -ln a-1≤0。"
-            "综上合并并集，得 a≥1/e 或 a≤0。"
+            "a≤0 时函数无上界，排除；a>0 时 -ln a-1≤0。"
+            "综上只保留 a≥1/e。"
         ),
     )
     result = RuleBasedAligner().align(SAMPLE_PROBLEM, attempt)

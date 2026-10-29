@@ -272,5 +272,5 @@ def test_missing_key_never_calls_a_model() -> None:
 
 def test_guard_replacement_is_the_only_leak_path() -> None:
     """A direct guard query: the forbidden tokens cover the sampled answer."""
-    guard = AnswerLeakGuard(forbidden=("a∈(-∞,0]∪[1/e,∞)", "1/e"))
+    guard = AnswerLeakGuard(forbidden=("a∈[1/e,+∞)", "1/e"))
     assert guard.find("所以 a≥1/e")

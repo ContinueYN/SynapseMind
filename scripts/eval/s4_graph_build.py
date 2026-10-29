@@ -21,6 +21,7 @@ import math
 import sys
 import time
 from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
@@ -30,7 +31,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "apps" / "api" / "src"))
 
 from synapse.application.graph import GraphBuildFailed, GraphBuildResult  # noqa: E402
-from synapse.domain.problem.models import ProblemDraft  # noqa: E402
+from synapse.domain.problem.models import ProblemDraft, SolutionGraph  # noqa: E402
 from synapse.infrastructure.llm.audit import InMemoryCallAuditor  # noqa: E402
 from synapse.infrastructure.llm.client import OpenAICompatibleClient  # noqa: E402
 from synapse.infrastructure.llm.graph import LLMGraphGenerator, to_payload  # noqa: E402
@@ -192,6 +193,18 @@ def _write_graph(directory: Path, case: Case, result: GraphBuildResult) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _evidence_coverage(graph: SolutionGraph) -> str:
+    probes = graph.probes()
+    weighted = sum(len(probe.evidence) for probe in probes)
+    options = sum(len(probe.options) for probe in probes)
+    return f"{weighted}/{options}"
+
+
+def _has_contrast(evidence: Mapping[str, Mapping[str, float]]) -> bool:
+    weights = [weight for option in evidence.values() for weight in option.values()]
+    return any(weight > 0 for weight in weights) and any(weight < 0 for weight in weights)
+
+
 def _percentile(values: list[int], ratio: float) -> int:
     if not values:
         return 0
@@ -217,6 +230,10 @@ def _render(
     node_counts = [len(row.result.graph.nodes) for row in rows if row.result]
     edge_counts = [len(row.result.graph.edges) for row in rows if row.result]
     probe_counts = [len(row.result.graph.probes()) for row in rows if row.result]
+    probes = [probe for row in rows if row.result for probe in row.result.graph.probes()]
+    weighted_options = sum(len(probe.evidence) for probe in probes)
+    covered_probes = sum(1 for probe in probes if len(probe.evidence) == len(probe.options))
+    contrast_probes = sum(1 for probe in probes if _has_contrast(probe.evidence))
 
     lines = [
         "# M2.5 S4 建图报告（20 道未见题）",
@@ -229,26 +246,30 @@ def _render(
         f"- 模型调用：{len(entries)} 次，重试 {retried} 次",
         f"- 延迟：p50 {_percentile(latencies, 0.50)} ms，p95 {_percentile(latencies, 0.95)} ms",
         f"- Token：prompt {prompt_tokens} / completion {completion_tokens}",
+        f"- 证据：{covered_probes}/{len(probes)} 个探针的每个选项都有权重"
+        f"（共 {weighted_options} 个选项权重）；"
+        f"{contrast_probes}/{len(probes)} 个探针的权重有正有负",
         "",
-        "> “成功”只代表**结构合法**：schema、无环、依赖连通、探针可区分两个假设。"
-        "图是否真的拆对了题，见同目录的人工抽查记录 `m2.5-s4-graph-review.md`；"
-        "抽查不通过的题按 S4 口径不计入成功率。",
+        "> “成功”只代表**结构合法 + 证据完整**：schema、无环、依赖连通、探针可区分两个假设、"
+        "每个选项都有非零权重。图是否真的拆对了题、权重方向是否合理，见同目录的人工抽查记录 "
+        "`m2.5-s4-graph-review.md`；抽查不通过的题按 S4 口径不计入成功率。",
         "",
-        "| 题号 | 主题 | 结果 | 尝试 | 节点 | 边 | 探针 | 自动修复 | 耗时(ms) | 指纹 |",
-        "|---|---|---|---|---|---|---|---|---|---|",
+        "| 题号 | 主题 | 结果 | 尝试 | 节点 | 边 | 探针 | 证据选项 | 自动修复 | 耗时(ms) | 指纹 |",
+        "|---|---|---|---|---|---|---|---|---|---|---|",
     ]
 
     for row in rows:
         if row.ok and row.result:
             lines.append(
                 "| {id} | {topic} | PASS | {attempts} | {nodes} | {edges} | {probes} | "
-                "{repairs} | {elapsed} | `{fingerprint}` |".format(
+                "{evidence} | {repairs} | {elapsed} | `{fingerprint}` |".format(
                     id=row.case.draft.id,
                     topic=row.case.topic or "-",
                     attempts=row.attempts,
                     nodes=len(row.result.graph.nodes),
                     edges=len(row.result.graph.edges),
                     probes=len(row.result.graph.probes()),
+                    evidence=_evidence_coverage(row.result.graph),
                     repairs="、".join(row.result.repairs) or "-",
                     elapsed=row.elapsed_ms,
                     fingerprint=row.result.fingerprint,
@@ -257,7 +278,7 @@ def _render(
         else:
             lines.append(
                 f"| {row.case.draft.id} | {row.case.topic or '-'} | FAIL（{row.reason}） | "
-                f"{row.attempts} | - | - | - | - | {row.elapsed_ms} | - |"
+                f"{row.attempts} | - | - | - | - | - | {row.elapsed_ms} | - |"
             )
 
     lines += ["", "## 规模与修复", ""]
@@ -290,8 +311,9 @@ def _render(
         "- 判定见 `apps/api/src/synapse/domain/problem/graph_structure.py` 与 "
         "`specs/solution-graph.schema.json`；修复只做机械动作（重编号、删悬空边、断环、截断），"
         "不改写步骤含义。",
-        "- 每个探针必须指向 `H_L1`/`H_L2`/`H_L4` 中至少两个：诊断层仍是 M1 的证据表，"
-        "S5 才会按图生成证据模型与新假设。",
+        "- 每个探针必须指向 `H_L1`/`H_L2`/`H_L4` 中至少两个，且每个选项都带 log-odds 权重："
+        "诊断层仍是 M1 的三个假设（S5 只把权重来源换成生成图，假设体系没有扩）。"
+        "权重方向是否合理需要人工抽查，结构规则只能保证“每个选项都会更新后验、只更新 targets 里的假设、同一探针有正有负”。",
         "- 生成结果按 `(题目 id, 文本, 模型, prompt 版本)` 缓存在进程内；同一进程重跑不重复计费。",
         "- 20 条题只用于验收，不按单题调 prompt；若某类题系统性失败，只改 prompt 的通用规则，"
         "并在报告里记录 prompt 版本变化。",
