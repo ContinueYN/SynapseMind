@@ -250,10 +250,10 @@ def _mutation_self_test(rows: list[Row], verifier: SymPyVerifier) -> tuple[list[
         for row in rows
         if row.ok and row.result is not None and row.result.graph.claim is not None
     ]
-    source = "生成图"
+    source = "生成图的 claim"
     if not targets:
         targets = [(SAMPLE_PROBLEM.id, SAMPLE_PROBLEM.graph)]
-        source = "种子图（本批次没有通过验证的生成图）"
+        source = "种子图的 claim（本批次没有通过验证的生成图）"
 
     mutations: list[Mutation] = []
     for case_id, graph in targets:
@@ -467,8 +467,8 @@ def _render(
     if mutations:
         caught = sum(1 for mutation in mutations if mutation.caught)
         lines.append(
-            f"对 {mutation_source} 的 claim 做两个**必然错误**的变形"
-            f"（答案写成全实轴、端点放宽 1），验证器拒绝 {caught}/{len(mutations)}。"
+            f"对{mutation_source}做两个**必然错误**的变形（答案写成全实轴、端点放宽 1），"
+            f"验证器拒绝 {caught}/{len(mutations)}。"
         )
         lines.append("")
         lines.append("| 题号 | 变形 | 是否拒绝 | 说明 |")
