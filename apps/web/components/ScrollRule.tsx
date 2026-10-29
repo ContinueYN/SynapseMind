@@ -32,6 +32,9 @@ export function ScrollRule() {
       const progress = max > 0 ? Math.min(1, Math.max(0, y / max)) : 0;
       root.style.setProperty("--read-n", (progress * 100).toFixed(2));
       root.style.setProperty("--scroll", `${Math.round(y)}`);
+      /* 读到底了：珠子收进环里、环换成深蓝，算一个安静的"读完了" */
+      if (progress > 0.995) root.dataset.read = "done";
+      else delete root.dataset.read;
     }
 
     function schedule() {
@@ -47,6 +50,7 @@ export function ScrollRule() {
       window.removeEventListener("scroll", schedule);
       window.removeEventListener("resize", schedule);
       root.style.removeProperty("--read-n");
+      delete root.dataset.read;
       root.style.removeProperty("--scroll");
     };
   }, []);

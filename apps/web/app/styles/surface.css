@@ -22,6 +22,10 @@
 
 html {
   -webkit-text-size-adjust: 100%;
+  /* 右侧那条滚动条藏掉：进度已经由球外那圈交代，再挂一根就是重复。
+     滚动本身、键盘、滚轮、触摸全部照常，只是不画那根条 */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   /* 界面不是文档：整页禁止选中 */
   -webkit-user-select: none;
   user-select: none;
@@ -595,11 +599,27 @@ svg {
   color: var(--ink);
   text-decoration: none;
   pointer-events: auto;
+  /* 没人碰它的时候轻轻呼吸：3% 不到，只在眼角动，盯着看才看得出来 */
+  animation: sm-orb-breathe 7.6s var(--ease-liquid) infinite;
   transition:
     width 420ms var(--ease-glide),
     gap 420ms var(--ease-glide),
     padding-right 420ms var(--ease-glide),
-    box-shadow 420ms var(--ease-glide);
+    box-shadow 420ms var(--ease-glide),
+    scale 300ms var(--ease-liquid);
+}
+
+/* 指针上来：不再呼吸，抬一点，影子里多一层柔光（像从纸面上浮起来） */
+.sm-orb-hang:hover .sm-orb,
+.sm-orb:focus-visible {
+  animation: none;
+  scale: 1.02;
+}
+
+/* 按下：整体缩到 96%，环同时加粗——手感靠这两下，不靠放大 */
+.sm-orb:active {
+  scale: 0.955;
+  transition: scale 140ms var(--ease-out);
 }
 
 /* 展开：指针进来或键盘聚焦。变的是宽度，球不变——环永远围着图案那一颗 */
@@ -628,7 +648,13 @@ svg {
   width: 54px;
   height: 54px;
   border-radius: 50%;
-  background: radial-gradient(circle at 34% 28%, #ffffff 0%, #eaf3fe 48%, #d6e7fc 100%);
+  /* 高光点跟着指针走：球面上那团白不再钉死在左上角，玻璃才有厚度 */
+  background: radial-gradient(
+    circle at calc(34% + var(--gx, 0) * 16%) calc(28% + var(--gy, 0) * 16%),
+    #ffffff 0%,
+    #eaf3fe 48%,
+    #d6e7fc 100%
+  );
   box-shadow:
     inset 0 1px 0 #ffffff,
     inset 0 -7px 12px -9px rgba(46, 92, 158, 0.55);
@@ -686,6 +712,31 @@ svg {
   transition: stroke-dashoffset 140ms linear;
 }
 
+/* 环头那颗珠：进度走到哪儿它就在哪儿，还自己呼吸一下。
+ * 弧线断口是圆的，但没有珠子就只是"一条进度"；有珠子才像液面推着一个点走 */
+.sm-orb-spark {
+  fill: var(--azure-ink);
+  transform-box: view-box;
+  transform-origin: 22px 22px;
+  transform: rotate(calc(var(--read-n, 0) * 3.6deg));
+  filter: drop-shadow(0 0 3px var(--azure-glow));
+}
+
+.sm-orb-spark circle {
+  opacity: 0.32;
+  animation: sm-orb-spark 3.4s var(--ease-out) infinite;
+}
+
+/* 读到底：珠子收进环里，环换成深一档的蓝，算一个安静的"读完了" */
+html[data-read="done"] .sm-orb-spark {
+  opacity: 0;
+}
+
+html[data-read="done"] .sm-orb-fill {
+  stroke: var(--azure-ink);
+  filter: drop-shadow(0 0 5px var(--azure-glow));
+}
+
 .sm-orb-words {
   display: grid;
   gap: 2px;
@@ -698,10 +749,32 @@ svg {
     transform 340ms var(--ease-glide) 40ms;
 }
 
+/* 展开时两行分别进来：名字先到、副标题晚 60ms，眼睛有个先后 */
+.sm-orb-words b,
+.sm-orb-words em {
+  opacity: 0;
+  translate: 0 5px;
+  transition:
+    opacity 220ms linear,
+    translate 320ms var(--ease-glide);
+}
+
+.sm-orb-words em {
+  transition-delay: 60ms;
+}
+
 .sm-orb-hang:hover .sm-orb-words,
 .sm-orb:focus-visible .sm-orb-words {
   opacity: 1;
   transform: none;
+}
+
+.sm-orb-hang:hover .sm-orb-words b,
+.sm-orb-hang:hover .sm-orb-words em,
+.sm-orb:focus-visible .sm-orb-words b,
+.sm-orb:focus-visible .sm-orb-words em {
+  opacity: 1;
+  translate: 0 0;
 }
 
 .sm-orb-words b {
@@ -716,6 +789,16 @@ svg {
   font-size: 10.5px;
   font-style: normal;
   letter-spacing: 0.16em;
+}
+
+/* 悬停时环本身也亮一点：进度是"读"，读的时候它在看着你 */
+.sm-orb-hang:hover .sm-orb-track,
+.sm-orb:focus-visible .sm-orb-track {
+  stroke: rgba(63, 134, 224, 0.3);
+}
+
+.sm-orb:active .sm-orb-fill {
+  stroke-width: 2.6;
 }
 .sm-main {
   flex: 1;
@@ -3556,6 +3639,33 @@ svg {
 
 /* ───────────────────────── 无障碍：减少动效 ───────────────────────── */
 
+/* 连滚动条占位的那条槽也不留 */
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+@keyframes sm-orb-breathe {
+  0%,
+  100% {
+    scale: 1;
+  }
+  50% {
+    scale: 1.018;
+  }
+}
+
+@keyframes sm-orb-spark {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
@@ -3586,7 +3696,13 @@ svg {
 
   /* 减少动效时球也不展开：悬停直接给结果，别做 420ms 的宽度动画 */
   .sm-orb,
-  .sm-orb-words {
+  .sm-orb-words,
+  .sm-orb-spark {
+    animation: none;
+    transition: none;
+  }
+
+  .sm-orb-fill {
     transition: none;
   }
 

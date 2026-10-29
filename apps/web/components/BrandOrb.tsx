@@ -56,6 +56,10 @@ export function BrandOrb() {
               pathLength={100}
               r="20"
             />
+            {/* 环头那颗珠：从 3 点钟出发，被 svg 的 -90° 转到 12 点，再按进度转 */}
+            <g className="sm-orb-spark">
+              <circle cx="42" cy="22" r="1.9" />
+            </g>
           </svg>
         </span>
 

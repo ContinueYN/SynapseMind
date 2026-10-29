@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { BrandOrb } from "@/components/BrandOrb";
 import { Ground } from "@/components/Ground";
 import { PointerField } from "@/components/PointerField";
+import { ScrollMemory } from "@/components/ScrollMemory";
 import { ScrollRule } from "@/components/ScrollRule";
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -11,6 +12,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <Ground />
       <PointerField />
       <ScrollRule />
+      <ScrollMemory />
       <BrandOrb />
 
       <main className="sm-main">
