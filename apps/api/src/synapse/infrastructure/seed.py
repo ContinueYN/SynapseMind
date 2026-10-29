@@ -12,12 +12,12 @@ from synapse.domain.problem.models import (
 SAMPLE_PROBLEM_ID = "P_FUNC_001"
 SAMPLE_SESSION_PREFIX = "S_"
 
-SAMPLE_ANSWER = "a∈(-∞,0]∪[1/e,∞)"
+SAMPLE_ANSWER = "a∈[1/e,+∞)"
 SAMPLE_SOLUTION = (
     "定义域 x>0。题目要求 f(x)=ln x - a x ≤0 对所有 x>0 成立，即最大值≤0。"
-    "分 a≤0 与 a>0：a≤0 时 f(x)→+∞，不满足；"
+    "分 a≤0 与 a>0：a≤0 时 f(x)→+∞，不满足，排除；"
     "a>0 时 f'(x)=1/x-a，最大值 f(1/a)=-ln a-1≤0，得 a≥1/e。"
-    "合并得 a∈(-∞,0]∪[1/e,∞)。"
+    "所以 a∈[1/e,+∞)。"
 )
 
 SAMPLE_PROBLEM = Problem(
@@ -96,16 +96,20 @@ SAMPLE_PROBLEM = Problem(
             SolutionNode(
                 id="n6",
                 type="CHECK",
-                text="合并 a≤0 与 a≥1/e，写并集。",
+                text="a≤0 已排除；只保留 a>0 得到的 a≥1/e，写区间。",
                 demand={"WM": 0.3, "M": 0.3},
                 common_errors=("只写 a≥1/e", "把并集写成交集"),
                 probes=(
                     Probe(
                         id="p_union",
-                        question="a≤0 与 a>0 时得到的正参数范围，最后应该怎么合并？",
-                        options=("取并集", "取交集", "只保留 a>0 那一支"),
+                        question="a≤0 与 a>0 两支分别讨论完后，写最终范围时应该怎么处理？",
+                        options=(
+                            "取并集",
+                            "取交集",
+                            "只保留通过恒成立检验的那一支",
+                        ),
                         targets=("H_L2",),
-                        correct_option="A",
+                        correct_option="C",
                     ),
                 ),
             ),
@@ -119,5 +123,4 @@ SAMPLE_PROBLEM = Problem(
             ("n5", "n6"),
         ),
     ),
-    keywords=("ln", "导数", "恒成立", "参数"),
 )

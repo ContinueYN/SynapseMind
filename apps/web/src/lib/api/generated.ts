@@ -249,15 +249,15 @@ export interface components {
             /**
              * Subject
              * @default math
-             * @constant
+             * @enum {string}
              */
-            subject: "math";
+            subject: "math" | "physics";
             /**
              * Grade
              * @default high_school
-             * @constant
+             * @enum {string}
              */
-            grade: "high_school";
+            grade: "primary_school" | "middle_school" | "high_school";
         };
         /** ProgressOut */
         ProgressOut: {

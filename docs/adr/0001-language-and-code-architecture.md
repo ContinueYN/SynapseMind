@@ -13,7 +13,7 @@ SynapseMind 不是“聊天机器人”，而是一个**确定性状态机 + 受
 - 在线：2–6 轮追问，SSE 流式，首问 P95 <8s；
 - 核心：步骤对齐、假设后验、卡点判定、答案不泄漏；
 - 离线：OCR 后处理、知识 ETL、100 条 golden 评测、50 条红队；
-- MVP：3 人 8 周，100 道题、30 道深标、40–60 beta。
+- MVP：100 道题、30 道深标、40–60 beta。
 
 原方案默认 **Java 21 + Spring Boot 3/Spring Cloud + Next.js + Python 离线**。本次要求是：
 **语言按工作负载选最合适的，不因难度或现有技能栈迁就。**
@@ -41,7 +41,7 @@ SynapseMind 不是“聊天机器人”，而是一个**确定性状态机 + 受
 | 分层选型 | **TS 只做 Web，Python 做后端内核**；否决 Java 核心 | 高 | golden 回放要 in-process 跑生产状态机；SymPy 在首 token 前，状态机放 TS 会变成两套表示 |
 | TypeScript 优先 | TS 主栈（Next.js + Fastify）+ Python 边车 | 0.75 | zod 单一真源、SSE/流式最短路径、一套 CI；符号计算/OCR 必须 Python |
 | Python 优先 | FastAPI + Next.js | 0.80 | CAS、Pydantic、评测闭环三者都在 Python；2 种语言、2 个进程 |
-| JVM 核心 | Java 21 + Spring Boot 3.5（MVC+Loom）+ Next + Python 三旁路 | 0.70 | 状态机/事务/审计最强；但 AI 生态弱、三语言对 3 人 8 周是透支 |
+| JVM 核心 | Java 21 + Spring Boot 3.5（MVC+Loom）+ Next + Python 三旁路 | 0.70 | 状态机/事务/审计最强；但 AI 生态弱、三语言对 MVP 是透支 |
 | 可靠性/运维 | Python 全栈 4.60 > TS 4.00 > JVM 3.63 = Go 3.63 | 0.75 | 契约权重最高；MVP 故障来自 LLM 不可控与跨进程契约，不是 JVM 吞吐 |
 
 **收敛**：3/5 明确选 Python 后端；TS 是唯一有实力的备选；JVM 只在“机构采购 + 强审计 + Java 团队”时成立。
@@ -61,7 +61,7 @@ SynapseMind 不是“聊天机器人”，而是一个**确定性状态机 + 受
 
 - **A 的问题**：状态机/JSON/SSE 在 TS，SymPy/OCR/评测在 Python；同一状态两套表示，契约漂移是静默的——诊断卡指错卡点但不报错。
 - **B 的问题**：Python 无编译期穷尽检查；一个漏 `await` 的同步调用会毒化整个事件循环。用显式转移表 + `state × event` 穷举测试 + 全链路 async + CPU 出进程对冲。
-- **C 的问题**：JVM 的可靠性优势在 MVP 兑现不了，因为故障来自 LLM 输出和跨进程契约；三语言两运行时对 3 人 8 周是结构性透支。
+- **C 的问题**：JVM 的可靠性优势在 MVP 兑现不了，因为故障来自 LLM 输出和跨进程契约；三语言两运行时对 MVP 是结构性透支。
 - **D 的问题**：Go 没有 sum type，产品心脏（状态机/判别联合）用最弱表达力写；AI/数学仍要 Python，多一种语言没有回报。
 
 ## 5. 决策
@@ -132,7 +132,7 @@ apps/api/src/synapse/
 - 2 种语言（TS + Python）、3 个容器；没有 JVM/Spring/MySQL 的额外运行时。
 - SymPy、Pydantic、RAG、评测同进程，减少跨进程 fail-open。
 - 状态机、诊断卡、SSE、评测共用一套类型/契约；改一个字段，CI 能发现前端/后端/评测不一致。
-- 3 人 8 周的范围更可控：先把文本闭环跑通，再补 OCR。
+- MVP 的范围更可控：先把文本闭环跑通，再补 OCR。
 
 ### 负面（必须承认）
 
@@ -171,7 +171,7 @@ apps/api/src/synapse/
 
 出现任一，回到本 ADR 改选：
 
-- 3 人中 ≥2 人无 Python 生产经验，且前端已占 1.5 人力 → 切 A（TS 全栈 + Python AI）。
+- 后端 Python 生产经验不足，且统一语言带来的收益大于 Python AI 生态的收益 → 切 A（TS 全栈 + Python AI）。
 - 出现机构采购级多租户 + 强审计 + 跨系统事务补偿 → 切 C（JVM 核心 + Python AI），不是“为了 Spring 而 Spring”。
 - SymPy 校验稳定 >800ms 且落在流式热路径 → 移到 worker 出卡前校验，语言不再被 SymPy 绑定。
 - 稳态 SSE >5k 且单实例内存成瓶颈 → 只让 Go 做网关层，AI 仍 Python。

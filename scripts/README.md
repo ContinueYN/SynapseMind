@@ -12,8 +12,23 @@ scripts/
 │  └─ export_openapi.py  # 只导出 OpenAPI
 ├─ checks/
 │  └─ check_repo.py      # 文件、链接、JSON、skill 映射检查
+├─ eval/
+│  ├─ m2_exit.py         # M2 退出判定（10 条 golden 回放）
+│  └─ s4_graph_build.py  # M2.5 S4 建图评测（20 道未见题）
 └─ release/
    └─ export_public.py   # 可选的公开树导出工具
+```
+
+## 评测
+
+```powershell
+cd apps/api
+# 规则基线；--live-shadow 需要仓库根 .env 里的 DEEPSEEK_API_KEY
+.\.venv\Scripts\python.exe ..\..\scripts\eval\m2_exit.py
+.\.venv\Scripts\python.exe ..\..\scripts\eval\m2_exit.py --live-shadow
+
+# 20 道未见题建图，需真实 key；报告写入 eval/reports/
+.\.venv\Scripts\python.exe ..\..\scripts\eval\s4_graph_build.py
 ```
 
 ## 检查

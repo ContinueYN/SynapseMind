@@ -8,6 +8,7 @@ an LLM can later propose hypotheses, but it cannot move the dialogue.
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -66,6 +67,15 @@ EVIDENCE: dict[str, dict[str, dict[HypothesisId, float]]] = {
         "B": {"H_L2": -0.10, "H_L1": 0.15, "H_L4": 0.55},
         "C": {"H_L2": 0.00, "H_L1": 0.25, "H_L4": 0.00},
     },
+    # The seed graph's fourth probe used to have no weights, so choosing an
+    # option on it added nothing and the turn was wasted. Keeping only the
+    # branch that passes the for-all check (C) lowers L2; union/intersection
+    # both raise it.
+    "p_union": {
+        "A": {"H_L2": 0.50},
+        "B": {"H_L2": 0.45},
+        "C": {"H_L2": -0.40},
+    },
 }
 
 
@@ -75,12 +85,24 @@ class HypothesisState:
     logit: float
 
 
+# ``probe_id -> option_id -> hypothesis_id -> log-odds weight``. The M1 table is
+# only the default: a subject plugin may supply its own model for its graph
+# (M2.5 S5), and the state machine still does the scoring.
+EvidenceWeights = Mapping[str, Mapping[str, Mapping[str, float]]]
+
+
 @dataclass
 class HypothesisSet:
     states: dict[HypothesisId, HypothesisState] = field(default_factory=dict)
+    evidence: EvidenceWeights = field(default_factory=lambda: EVIDENCE)
 
     @classmethod
-    def from_alignment(cls, alignment: AlignmentResult) -> HypothesisSet:
+    def from_alignment(
+        cls,
+        alignment: AlignmentResult,
+        *,
+        evidence: EvidenceWeights | None = None,
+    ) -> HypothesisSet:
         priors = dict(DEFAULT_PRIORS)
         if alignment.first_divergence == "n3":
             priors = {"H_L2": 0.60, "H_L1": 0.25, "H_L4": 0.15}
@@ -99,7 +121,10 @@ class HypothesisSet:
                 hypothesis=hypothesis,
                 logit=math.log(prior),
             )
-        return cls(states=states)
+        return cls(
+            states=states,
+            evidence=EVIDENCE if evidence is None else evidence,
+        )
 
     def _softmax(self) -> dict[HypothesisId, float]:
         if not self.states:
@@ -123,19 +148,18 @@ class HypothesisSet:
         return ranked[1] if len(ranked) > 1 else ("", 0.0)
 
     def observe(self, probe_id: str, option_id: str) -> None:
-        weights = EVIDENCE.get(probe_id, {}).get(option_id, {})
+        weights = self.evidence.get(probe_id, {}).get(option_id, {})
         for hyp_id, weight in weights.items():
             if hyp_id in self.states:
                 self.states[hyp_id].logit += weight
 
-    @staticmethod
-    def supported_by(probe_id: str, option_id: str) -> tuple[HypothesisId, ...]:
+    def supported_by(self, probe_id: str, option_id: str) -> tuple[HypothesisId, ...]:
         """Which hypotheses this answer is positive evidence for.
 
         Used by the evidence chain; scoring still happens in ``observe``.
         """
 
-        weights = EVIDENCE.get(probe_id, {}).get(option_id, {})
+        weights = self.evidence.get(probe_id, {}).get(option_id, {})
         return tuple(hyp_id for hyp_id, weight in weights.items() if weight > 0)
 
     def observe_unknown(self, probe_id: str) -> None:

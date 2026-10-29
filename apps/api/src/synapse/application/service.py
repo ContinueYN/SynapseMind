@@ -17,6 +17,7 @@ from synapse.application.ports import (
     ProblemRepository,
     SessionRepository,
 )
+from synapse.application.trace import tracing
 from synapse.domain.diagnosis.models import DiagnosisCard
 from synapse.domain.dialogue.events import DialogueEvent
 from synapse.domain.dialogue.session import DialogueSession, TurnRecord
@@ -222,12 +223,13 @@ class SessionService:
         hint_level: int = 0,
     ) -> ProbePrompt:
         _, confidence = session.hypotheses.top()
-        return self._composer.compose(
-            problem,
-            probe,
-            confidence=confidence,
-            hint_level=hint_level,
-        )
+        with tracing(session.session_id, session.turn + 1):
+            return self._composer.compose(
+                problem,
+                probe,
+                confidence=confidence,
+                hint_level=hint_level,
+            )
 
     @staticmethod
     def _record_probe_evidence(

@@ -1,6 +1,10 @@
 # Third-party notices
 
-This project includes source code copied from [React Bits](https://reactbits.dev/)
+> **2026-10-29:** the React Bits components were removed from the current tree by
+> the liquid-glass rebuild (`e8698d1`). This notice is kept for earlier revisions
+> that still contain them; the current tree ships no React Bits code.
+
+Earlier revisions included source code copied from [React Bits](https://reactbits.dev/)
 (`DavidHDev/react-bits`) and adapted for this application:
 
 - `apps/web/components/reactbits/Aurora.tsx` / `Aurora.css`

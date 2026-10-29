@@ -14,6 +14,8 @@ class StartSessionCommand:
     confidence: int | None = None
     self_report: str | None = None
     mode: str = "learning"
+    # Declared by the student; None means "let the identifier decide".
+    subject: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

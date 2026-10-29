@@ -43,3 +43,16 @@ def test_unknown_does_not_treat_as_wrong_option() -> None:
     before = hs.posteriors()["H_L1"]
     hs.observe_unknown("p_a0_derivative")
     assert hs.posteriors()["H_L1"] > before
+
+
+def test_plugin_evidence_replaces_the_default_table() -> None:
+    weights = {"p_a0_derivative": {"A": {"H_L1": 1.2}}}
+    hs = HypothesisSet.from_alignment(_alignment(), evidence=weights)
+
+    hs.observe("p_a0_derivative", "A")
+
+    assert hs.top()[0] == "H_L1"
+    assert hs.supported_by("p_a0_derivative", "A") == ("H_L1",)
+    # A probe outside this model carries no evidence, rather than falling back
+    # to the seed table by accident.
+    assert hs.supported_by("p_boundary_check", "A") == ()

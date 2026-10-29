@@ -15,6 +15,11 @@ class Probe:
     options: tuple[str, ...] = ()
     targets: tuple[str, ...] = ()
     hint_level: int = 0
+    # ``option letter -> hypothesis id -> log-odds`` (M2.5 S5). A generated
+    # graph carries its own evidence; the hand-written seed graph keeps using
+    # the table in ``EVIDENCE``. Empty means "this probe carries no evidence",
+    # never "fall back to another problem's weights".
+    evidence: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
     # Kept in the graph, never serialised into a learning-mode response.
     correct_option: str | None = None
 
@@ -61,7 +66,22 @@ class Problem:
     graph: SolutionGraph
     subject: str = "math"
     grade: str = "high_school"
-    keywords: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class ProblemDraft:
+    """A submitted problem that has no annotated graph yet (M2.5 S4).
+
+    Kept separate from ``Problem`` on purpose: a ``Problem`` always owns a
+    graph, while a draft is exactly the input the model is asked to decompose.
+    Until S5 wires generated graphs into the request path, drafts only flow
+    through the graph generator and the S4 evaluation harness.
+    """
+
+    id: str
+    text: str
+    subject: str = "math"
+    grade: str = "high_school"
 
 
 @dataclass(frozen=True, slots=True)

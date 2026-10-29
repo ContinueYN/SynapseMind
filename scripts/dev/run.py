@@ -163,6 +163,10 @@ def main() -> int:
         str(args.api_port),
         "--reload",
     ]
+    env_file = ROOT / ".env"
+    if env_file.is_file():
+        # uvicorn loads KEY=VALUE itself; real environment variables still win.
+        api_cmd += ["--env-file", str(env_file)]
     web_cmd = f'"{npm}" run dev -- --port {args.web_port}'
     print(f"API  http://localhost:{args.api_port}")
     print(f"Web  http://localhost:{args.web_port}")

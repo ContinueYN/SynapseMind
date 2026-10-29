@@ -98,6 +98,20 @@
           "items": {"type": "string"},
           "minItems": 1
         },
+        "evidence": {
+          "description": "选项 -> 假设 -> log-odds；生成图必须给每个选项配权重（结构规则强制），手写图可省略。",
+          "type": "object",
+          "propertyNames": {"pattern": "^[A-D]$"},
+          "additionalProperties": {
+            "type": "object",
+            "propertyNames": {"pattern": "^H_[A-Z0-9_]+$"},
+            "additionalProperties": {
+              "type": "number",
+              "minimum": -1,
+              "maximum": 1
+            }
+          }
+        },
         "hint_level": {
           "type": "integer",
           "minimum": 0,

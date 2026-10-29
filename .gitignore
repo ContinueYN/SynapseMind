@@ -62,6 +62,7 @@ blob-report/
 # Runtime artifacts
 .tmp/
 .run/
+var/
 logs/
 *.log
 *.pid
@@ -80,5 +81,7 @@ docs/design/release/
 # scripts/release/export_public.py when needed.
 docs/design/
 docs/reference/
-eval/
+# Root-only: the private evaluation material. `scripts/eval/` is tooling and
+# must stay tracked (an unanchored `eval/` also swallowed it once).
+/eval/
 tools/

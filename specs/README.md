@@ -5,7 +5,7 @@
 | 文件 | 用途 | 消费者 |
 |---|---|---|
 | [`problem-input.schema.json`](problem-input.schema.json) | 交题入口 | Web、API |
-| [`solution-graph.schema.json`](solution-graph.schema.json) | 题目解法图 | API、内容后台 |
+| [`solution-graph.schema.json`](solution-graph.schema.json) | 题目解法图 | API（生成物运行时严格校验）、内容后台 |
 | [`diagnosis.schema.json`](diagnosis.schema.json) | 卡点卡输出 | API、Web、评测 |
 | [`dialogue-state.md`](dialogue-state.md) | 追问状态机与事件 | API、AI 编排、评测 |
 
@@ -23,4 +23,8 @@
 python scripts/checks/check_repo.py
 ```
 
-当前只校验 JSON 可解析与文件存在；后续接入 `jsonschema` 做严格校验。
+当前只校验 JSON 可解析与文件存在。
+
+解法图生成物是例外：`infrastructure/llm/graph.py` 在运行时用 `jsonschema` 直接加载本目录的 `solution-graph.schema.json` 做严格校验（M2.5 S4）。契约只有这一份，代码不另抄一套字段。
+
+`solution-graph.schema.json` 的 `probe.evidence` 是可选字段：生成图必须为每个选项给出 log-odds 权重（结构规则强制），手写种子图可省略并从 `EVIDENCE` 取权重；字段形状在 schema 里约束，跨字段一致性（选项覆盖、targets 对应、每个 target 至少被使用一次）在 `domain/problem/graph_structure.py` 里校验（M2.5 S5）。

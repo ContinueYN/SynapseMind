@@ -11,6 +11,8 @@ dependencies = [
   "fastapi>=0.115,<1",
   "uvicorn[standard]>=0.30,<1",
   "pydantic>=2.8,<3",
+  "httpx>=0.27,<1",
+  "jsonschema>=4.22,<5",
 ]
 
 [project.optional-dependencies]
@@ -20,6 +22,8 @@ dev = [
   "ruff>=0.6,<1",
   "mypy>=1.11,<2",
   "import-linter>=2.0,<3",
+  "types-jsonschema>=4.23",
+  "sympy>=1.13,<2",
 ]
 
 [tool.hatch.build.targets.wheel]
