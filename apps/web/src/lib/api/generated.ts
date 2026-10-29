@@ -280,6 +280,8 @@ export interface components {
             problem_id: string;
             /** Problem Title */
             problem_title: string;
+            /** Problem Text */
+            problem_text: string;
             /** Mode */
             mode: string;
             /** Turn */

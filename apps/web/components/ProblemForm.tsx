@@ -1,16 +1,37 @@
 "use client";
 
-import { FormEvent, MouseEvent, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 
 import type { CreateSessionInput } from "@/src/lib/api/types";
 
+export type SelfReport = NonNullable<CreateSessionInput["attempt"]["self_report"]>;
+
+export interface Draft {
+  problem: string;
+  answer: string;
+  work: string;
+  stuckAt: string;
+  selfReport: SelfReport;
+}
+
+export const EMPTY_DRAFT: Draft = {
+  problem: "",
+  answer: "",
+  work: "",
+  stuckAt: "",
+  selfReport: "unsure",
+};
+
 interface ProblemFormProps {
+  value: Draft;
+  onChange: (next: Draft) => void;
   busy: boolean;
   error: string | null;
   onSubmit: (input: CreateSessionInput) => Promise<void>;
+  /** 光标在哪个字段上：左侧树突用它做联动高亮 */
+  onFocusField?: (field: string | null) => void;
 }
-
-type SelfReport = NonNullable<CreateSessionInput["attempt"]["self_report"]>;
 
 const SAMPLE_PROBLEM =
   "已知函数 f(x)=ln x - a x，a∈R。若 f(x)≤0 对任意 x>0 恒成立，求 a 的取值范围。";
@@ -24,145 +45,207 @@ const SELF_REPORTS: { value: SelfReport; label: string }[] = [
   { value: "no_idea", label: "完全不会" },
 ];
 
-export function ProblemForm({ busy, error, onSubmit }: ProblemFormProps) {
-  const [problemText, setProblemText] = useState("");
-  const [answer, setAnswer] = useState("");
-  const [work, setWork] = useState("");
-  const [stuckAt, setStuckAt] = useState("");
-  const [selfReport, setSelfReport] = useState<SelfReport>("unsure");
+/** 文本框跟着内容长高：中文换行多，固定 rows 会一直出现内滚动条 */
+function useAutosize(value: string) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    node.style.height = "auto";
+    node.style.height = `${node.scrollHeight}px`;
+  }, [value]);
+
+  return ref;
+}
+
+export function ProblemForm({
+  value,
+  onChange,
+  busy,
+  error,
+  onSubmit,
+  onFocusField,
+}: ProblemFormProps) {
   const [localError, setLocalError] = useState<string | null>(null);
+  const [more, setMore] = useState(false);
   const submitRef = useRef<HTMLButtonElement>(null);
 
-  function fillSample() {
-    setProblemText(SAMPLE_PROBLEM);
-    setWork(SAMPLE_WORK);
-    setAnswer("a≥1/e");
-    setStuckAt("令导数为 0 那一步，不确定要不要先管 a 是正是负");
-    setSelfReport("correct_but_guessed");
-    setLocalError(null);
+  const problemRef = useAutosize(value.problem);
+  const workRef = useAutosize(value.work);
+
+  const clueCount = [value.problem, value.answer, value.work].filter((item) =>
+    item.trim(),
+  ).length;
+
+  /* 按钮里那团光跟着指针走：直接写 CSS 变量，不进 state */
+  function trackCta(event: ReactPointerEvent<HTMLButtonElement>) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    event.currentTarget.style.setProperty(
+      "--bx",
+      `${((event.clientX - rect.left) / rect.width) * 100}%`,
+    );
+    event.currentTarget.style.setProperty(
+      "--by",
+      `${((event.clientY - rect.top) / rect.height) * 100}%`,
+    );
   }
 
-  function ripple(event: MouseEvent<HTMLButtonElement>) {
-    const button = submitRef.current;
-    if (!button) return;
-    const rect = button.getBoundingClientRect();
-    const size = Math.max(rect.width, rect.height) * 2.4;
-    const span = document.createElement("span");
-    span.className = "sm-ripple";
-    span.style.width = `${size}px`;
-    span.style.height = `${size}px`;
-    span.style.left = `${event.clientX - rect.left}px`;
-    span.style.top = `${event.clientY - rect.top}px`;
-    button.appendChild(span);
-    window.setTimeout(() => span.remove(), 720);
+  function patch(next: Partial<Draft>) {
+    onChange({ ...value, ...next });
+  }
+
+  function fillSample() {
+    onChange({
+      problem: SAMPLE_PROBLEM,
+      answer: "a≥1/e",
+      work: SAMPLE_WORK,
+      stuckAt: "令导数为 0 那一步，不确定要不要先管 a 是正是负",
+      selfReport: "correct_but_guessed",
+    });
+    setMore(true);
+    setLocalError(null);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLocalError(null);
 
-    if (!problemText.trim()) {
+    if (!value.problem.trim()) {
       setLocalError("先把题目粘进来。");
       return;
     }
-    if (!answer.trim()) {
+    if (!value.answer.trim()) {
       setLocalError("填一个答案；完全不会就写“不会”。");
       return;
     }
 
     await onSubmit({
-      problem: { text: problemText.trim() },
+      problem: { text: value.problem.trim() },
       attempt: {
-        answer: answer.trim(),
-        work: work.trim(),
-        stuck_at: stuckAt.trim() || undefined,
-        self_report: selfReport,
+        answer: value.answer.trim(),
+        work: value.work.trim(),
+        stuck_at: value.stuckAt.trim() || undefined,
+        self_report: value.selfReport,
       },
       mode: "learning",
     });
   }
 
   return (
-    <form className="sm-fields" onSubmit={handleSubmit}>
-      <div className="sm-field">
-        <label className="sm-field-k" htmlFor="field-problem">
-          题目<em>必填</em>
-        </label>
-        <label className="sm-inp">
-          <textarea
-            id="field-problem"
-            onChange={(event) => setProblemText(event.target.value)}
-            placeholder="粘贴题目；只有照片的话，把题干敲成一行也行"
-            rows={3}
-            value={problemText}
-          />
-        </label>
+    <form className="sm-form" noValidate onSubmit={handleSubmit}>
+      <div className="sm-form-head">
+        <span className="sm-lab" style={{ margin: 0 }}>
+          交题
+        </span>
+        <span className="sm-form-count">
+          <i aria-hidden="true" className="sm-form-tube">
+            <u key={clueCount} style={{ width: `${(clueCount / 3) * 100}%` }} />
+          </i>
+          线索 <b>{clueCount}</b> / 3
+        </span>
       </div>
 
-      <div className="sm-field">
-        <label className="sm-field-k" htmlFor="field-answer">
-          你的答案<em>必填</em>
-        </label>
-        <label className="sm-inp">
-          <input
-            id="field-answer"
-            onChange={(event) => setAnswer(event.target.value)}
-            placeholder="例如 a≥1/e；完全不会就写“不会”"
-            type="text"
-            value={answer}
-          />
-        </label>
-      </div>
+      <label className="sm-f">
+        <span className="sm-f-label">
+          题目 <em>必填</em>
+        </span>
+        <textarea
+          id="field-problem"
+          onBlur={() => onFocusField?.(null)}
+          onChange={(event) => patch({ problem: event.target.value })}
+          onFocus={() => onFocusField?.("problem")}
+          placeholder="粘贴题目；只有照片的话，把题干敲成一行也行"
+          ref={problemRef}
+          rows={2}
+          value={value.problem}
+        />
+      </label>
 
-      <div className="sm-field">
-        <label className="sm-field-k" htmlFor="field-work">
-          你的过程
-        </label>
-        <label className="sm-inp">
-          <textarea
-            id="field-work"
-            onChange={(event) => setWork(event.target.value)}
-            placeholder="写多少都行；没有过程就留空"
-            rows={4}
-            value={work}
-          />
-        </label>
-      </div>
+      <label className="sm-f">
+        <span className="sm-f-label">
+          你的答案 <em>必填</em>
+        </span>
+        <input
+          id="field-answer"
+          onBlur={() => onFocusField?.(null)}
+          onChange={(event) => patch({ answer: event.target.value })}
+          onFocus={() => onFocusField?.("answer")}
+          placeholder="例如 a≥1/e；完全不会就写“不会”"
+          type="text"
+          value={value.answer}
+        />
+      </label>
 
-      <div className="sm-field">
-        <label className="sm-field-k" htmlFor="field-stuck">
-          卡在哪
-        </label>
-        <label className="sm-inp">
-          <input
-            id="field-stuck"
-            onChange={(event) => setStuckAt(event.target.value)}
-            placeholder="一句话就行，例如：写到求导就不确定要不要分类"
-            type="text"
-            value={stuckAt}
-          />
-        </label>
-      </div>
+      <label className="sm-f">
+        <span className="sm-f-label">
+          你的过程 <em>最有用，可以不写</em>
+        </span>
+        <textarea
+          id="field-work"
+          onBlur={() => onFocusField?.(null)}
+          onChange={(event) => patch({ work: event.target.value })}
+          onFocus={() => onFocusField?.("work")}
+          placeholder="写多少都行。卡住的那一行为什么卡住，比答案有用"
+          ref={workRef}
+          rows={3}
+          value={value.work}
+        />
+      </label>
 
-      <div className="sm-field">
-        <div className="sm-field-k">你的判断</div>
-        <div className="sm-radios" role="radiogroup" aria-label="这题你有几成把握">
-          {SELF_REPORTS.map((item) => (
-            <label className="sm-radio" key={item.value}>
-              <input
-                checked={selfReport === item.value}
-                name="self-report"
-                onChange={() => setSelfReport(item.value)}
-                type="radio"
-                value={item.value}
-              />
-              <span>{item.label}</span>
-            </label>
-          ))}
+      <div>
+        <button
+          aria-controls="form-more"
+          aria-expanded={more}
+          className="sm-link sm-link-quiet"
+          onClick={() => setMore((open) => !open)}
+          type="button"
+        >
+          {more ? "收起补充" : "补一条：卡在哪 / 有几分把握"}
+          {value.stuckAt.trim() || value.selfReport !== "unsure" ? " · 已填" : ""}
+        </button>
+
+        <div className="sm-more" data-open={more} id="form-more">
+          <div className="sm-more-in">
+            <div className="sm-more-body">
+              <label className="sm-f">
+                <span className="sm-f-label">卡在哪</span>
+                <input
+                  id="field-stuck"
+                  onBlur={() => onFocusField?.(null)}
+                  onChange={(event) => patch({ stuckAt: event.target.value })}
+                  onFocus={() => onFocusField?.("stuck")}
+                  placeholder="一句话就行，例如：写到求导就不确定要不要分类"
+                  type="text"
+                  value={value.stuckAt}
+                />
+              </label>
+
+              <div>
+                <div className="sm-f-label" style={{ marginBottom: 8 }}>
+                  这题你有几成把握
+                </div>
+                <div aria-label="这题你有几成把握" className="sm-picks" role="radiogroup">
+                  {SELF_REPORTS.map((item) => (
+                    <label className="sm-pick" key={item.value}>
+                      <input
+                        checked={value.selfReport === item.value}
+                        name="self-report"
+                        onChange={() => patch({ selfReport: item.value })}
+                        type="radio"
+                        value={item.value}
+                      />
+                      <span>{item.label}</span>
+                    </label>
+                  ))}
+                </div>
+                <p className="sm-note sm-note-quiet" style={{ marginTop: 10 }}>
+                  只用来区分真会和蒙对。答案对、过程缺一环，是最需要被看见的一种。
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
-        <p className="sm-note sm-note-quiet" style={{ marginTop: 10 }}>
-          这一项不影响对错判断，只用来区分真会和蒙对。答案对、过程缺一环，是最需要被看见的一种。
-        </p>
       </div>
 
       {localError ?? error ? (
@@ -171,28 +254,29 @@ export function ProblemForm({ busy, error, onSubmit }: ProblemFormProps) {
         </p>
       ) : null}
 
-      <div>
-        <button
-          className="sm-act"
-          disabled={busy}
-          onClick={ripple}
-          ref={submitRef}
-          type="submit"
-        >
-          {busy ? "正在拆题……" : "开始诊断"}
+      <div className="sm-form-foot">
+        <button className="sm-cta" disabled={busy} onPointerMove={trackCta} ref={submitRef} type="submit">
+          {busy ? "正在拆题" : "开始拆题"}
           <span aria-hidden="true" className="sm-ar">
             →
           </span>
         </button>
-      </div>
-
-      {busy ? <p className="sm-busy">正在读你的过程，不打断你……</p> : null}
-
-      <p className="sm-disclaimer">
-        当前只支持高中数学「函数与导数」的示例题。
-        <button className="sm-bail" onClick={fillSample} type="button">
+        <button className="sm-link" disabled={busy} onClick={fillSample} type="button">
           没有题目？填入示例题
         </button>
+      </div>
+
+      {busy ? (
+        <p className="sm-busy" role="status">
+          <i />
+          <i />
+          <i />
+          正在读你的过程，不打断你
+        </p>
+      ) : null}
+
+      <p className="sm-fine" style={{ marginTop: 0 }}>
+        当前只支持高中数学「函数与导数」的示例题。前 3 轮不给最终答案。
       </p>
     </form>
   );
