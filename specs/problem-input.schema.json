@@ -24,13 +24,15 @@
         },
         "subject": {
           "type": "string",
-          "enum": ["math"],
-          "default": "math"
+          "enum": ["math", "physics"],
+          "default": "math",
+          "description": "学科标签。当前只有 math 有可用解法图；其他学科会返回 422，属显式边界（M2.5 S6 接物理）。"
         },
         "grade": {
           "type": "string",
-          "enum": ["high_school"],
-          "default": "high_school"
+          "enum": ["primary_school", "middle_school", "high_school"],
+          "default": "high_school",
+          "description": "学段标签，不参与路由；当前只服务 high_school（M2.5 扩学段时再定映射）。"
         }
       },
       "anyOf": [

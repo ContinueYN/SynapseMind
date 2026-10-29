@@ -89,6 +89,4 @@ def _parse_mode(raw: str) -> tuple[LLMMode, int]:
         percent = int(value[3:])
         if 0 <= percent <= 100:
             return "on", percent
-    raise ValueError(
-        f"SYNAPSE_LLM_MODE={raw!r}: expected off | shadow | on | on:<0-100>"
-    )
+    raise ValueError(f"SYNAPSE_LLM_MODE={raw!r}: expected off | shadow | on | on:<0-100>")

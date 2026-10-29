@@ -38,6 +38,7 @@ def create_session(
         confidence=request.attempt.confidence,
         self_report=request.attempt.self_report,
         mode=request.mode,
+        subject=request.problem.subject,
     )
     try:
         view = service.start(command)

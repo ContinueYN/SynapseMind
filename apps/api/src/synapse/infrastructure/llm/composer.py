@@ -57,8 +57,7 @@ def build_request(
     are exactly what a leaking prompt would reveal.
     """
     options = "\n".join(
-        f"{chr(ord('A') + index)}. {option}"
-        for index, option in enumerate(probe.options)
+        f"{chr(ord('A') + index)}. {option}" for index, option in enumerate(probe.options)
     )
     tone = _TONE[min(max(hint_level, 0), 3)]
     user = (

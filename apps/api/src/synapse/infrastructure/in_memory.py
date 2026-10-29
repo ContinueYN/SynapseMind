@@ -9,9 +9,11 @@ from __future__ import annotations
 from threading import RLock
 
 from synapse.application.ports import ProblemRepository
+from synapse.application.subject import SubjectRegistry
 from synapse.domain.dialogue.session import DialogueSession
 from synapse.domain.problem.models import Problem
 from synapse.infrastructure.seed import SAMPLE_ANSWER, SAMPLE_PROBLEM, SAMPLE_SOLUTION
+from synapse.infrastructure.subjects.math import MathPlugin
 
 
 class InMemorySessionRepository:
@@ -33,20 +35,29 @@ class InMemorySessionRepository:
 
 
 class InMemoryProblemRepository(ProblemRepository):
-    def __init__(self, problems: tuple[Problem, ...] = (SAMPLE_PROBLEM,)) -> None:
+    def __init__(
+        self,
+        problems: tuple[Problem, ...] = (SAMPLE_PROBLEM,),
+        plugins: SubjectRegistry | None = None,
+    ) -> None:
         self._problems = {problem.id: problem for problem in problems}
+        self._plugins = plugins or SubjectRegistry((MathPlugin(self._problems),))
+
+    @property
+    def plugins(self) -> SubjectRegistry:
+        return self._plugins
 
     def get(self, problem_id: str) -> Problem | None:
         return self._problems.get(problem_id)
 
     def find_for(self, text: str) -> Problem | None:
-        # M1 has one annotated problem. Do not silently diagnose a different
-        # stem with the sample graph; an explicit 422 is safer.
-        if not text.strip():
+        # Identification now goes through the subject plugin (M2.5 S2). M1 had
+        # one annotated problem; do not silently diagnose a different stem with
+        # the sample graph — an explicit 422 is still safer.
+        hit = self._plugins.identify(text)
+        if hit is None:
             return None
-        if any(keyword.lower() in text.lower() for keyword in SAMPLE_PROBLEM.keywords):
-            return SAMPLE_PROBLEM
-        return None
+        return self._problems.get(hit[1].problem_id)
 
 
 class InMemoryAnswerStore:

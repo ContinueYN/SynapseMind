@@ -62,9 +62,7 @@ def _composer(client: FakeClient, auditor: InMemoryCallAuditor | None = None) ->
 
 def test_rewrite_keeps_options_and_derives_action() -> None:
     auditor = InMemoryCallAuditor()
-    prompt = _composer(FakeClient(VALID), auditor).compose(
-        SAMPLE_PROBLEM, PROBE, confidence=0.62
-    )
+    prompt = _composer(FakeClient(VALID), auditor).compose(SAMPLE_PROBLEM, PROBE, confidence=0.62)
 
     assert prompt.question == "如果 a 等于 0，导数还会出现零点吗？"
     assert prompt.options == PROBE.options

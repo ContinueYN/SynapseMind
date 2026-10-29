@@ -33,6 +33,7 @@ from synapse.application.llm import LLMClient
 from synapse.application.planner import HypothesisTargetedPlanner
 from synapse.application.ports import AnswerStore, ProblemRepository, SessionRepository
 from synapse.application.service import SessionService
+from synapse.application.subject import SubjectRegistry
 from synapse.domain.problem.alignment import RuleBasedAligner
 from synapse.infrastructure.guards import AnswerStoreLeakGuardFactory
 from synapse.infrastructure.in_memory import (
@@ -54,6 +55,7 @@ class Container:
     answers: AnswerStore
     service: SessionService
     settings: LLMSettings
+    subjects: SubjectRegistry
 
 
 def build_container(
@@ -90,6 +92,7 @@ def build_container(
         answers=answers,
         service=service,
         settings=resolved,
+        subjects=problems.plugins,
     )
 
 

@@ -22,9 +22,7 @@ from synapse.application.service import SessionService
 from synapse.domain.diagnosis.hypotheses import HYPOTHESES
 from synapse.domain.dialogue.states import DialogueState
 
-CATEGORIES = frozenset(
-    {"wrong_answer", "right_answer_missing_case", "no_idea", "negative"}
-)
+CATEGORIES = frozenset({"wrong_answer", "right_answer_missing_case", "no_idea", "negative"})
 # "NONE" labels a case with no gap at all (a complete solution), where a
 # cognitive layer would be meaningless.
 LAYERS = frozenset({"L1", "L2", "L4", "NONE"})

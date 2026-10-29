@@ -16,7 +16,7 @@
 |---|---|
 | LLM 追问 | **有**：`infrastructure/llm/`（DeepSeek，默认 `off`）；T5「LLM 辅助对齐」未做且默认不做 |
 | `shadow` 真实对照 | 代码可用；**未跑真实模型**（本机无 key），CI 用 stub 客户端验证管线 |
-| 学科插件 / 解法图生成 | 无；图写死在 `seed.py` |
+| 学科插件 / 解法图生成 | **骨架有**：`SubjectPlugin` 端口 + `MathPlugin` 包装种子图（M2.5 S1/S2）；图仍手写，**生成属 S4**，第二学科属 S6 |
 | RAG / 向量检索 | 无 |
 | PostgreSQL / Redis / Alembic | 无；`InMemorySessionRepository` |
 | OCR | 无；`image_url` 仅在 DTO 预留 |
@@ -50,8 +50,11 @@
 1. **M2 收尾**（T1–T4 + T6–T7 已完成，见 §一）：
    - 用真实 key 跑一次 shadow 回放（命令见 §四），产出真实差异报告（本机未跑过）；
    - `on:10` 灰度前先确认首问 P95 与 JSON 合法率（审计日志 `var/audit/llm.jsonl`）。
-2. **M2.5**：第 13 章 S1–S7。关键门槛是 S6（接第二个学科且状态机零改动）。
-   - 顺带解决两件被 M2 暴露的标定问题：证据表只覆盖 3 个探针；平均 2.4 轮即饱和。
+2. **M2.5**：第 13 章 S1–S7。S1/S2 已完成（枚举扩到 `math`/`physics` + 三学段；`SubjectPlugin` + `MathPlugin`，行为不变，语义仍是「只服务一道种子题」）。下一步：
+   - **S3** 把识别彻底移到插件（`find_for` 里已无关键字逻辑，剩下的是给 `physics` 补 handler）；
+   - **S4** 建图生成 + schema 校验 + 修复重试（20 道未见题 ≥80%）；
+   - **S5** 证据表由插件提供，补上 `p_union` 缺权重与「平均 2.4 轮饱和」两处标定问题。
+   - 关键门槛仍是 S6（接第二个学科且状态机零改动）。
 3. **待收口的既有问题**：前端无自动化测试（只有手工 smoke）；`docs/design/plan/` 未入库；评测集有 10 条、`eval/golden/README` 的 100 条配额未达（需 M2.5 扩题）。
 
 ---
@@ -67,6 +70,7 @@ python scripts/dev/run.py --check        # 只查环境
 cd apps/api
 pytest
 ruff check src tests
+ruff format --check src tests          # CI 会跑，别只跑 check
 mypy src
 .\.venv\Scripts\lint-imports.exe         # 分层契约，CI 强制
 
@@ -109,6 +113,7 @@ python tools/merge_markdown.py
 | `seed.py` 只有一道题 | 换题 422 是刻意边界，扩题属 M2.5 |
 | `lint-imports.exe` 静默 exit 1 | venv 里没有 editable 安装的 `synapse`，先 `$env:PYTHONPATH="src"`（或 `pip install -e .`）再跑；契约通过时应打印「Contracts: 1 kept」 |
 | `eval/` 整体在 `.gitignore` | golden 数据必须 `git add -f eval/golden/golden-v0.1.jsonl`，否则新克隆/CI 没有 case（`eval/golden/README.md` 被跟踪是历史遗留）；`eval/reports/` 是产物，不入库 |
+| CI 跑 `ruff format --check` | 只跑 `ruff check` 会在 CI 挂（format 与 check 是两套规则）；写完先 `ruff format src tests`。文件末尾缺换行也算未格式化 |
 
 ---
 

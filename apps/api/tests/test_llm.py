@@ -97,9 +97,7 @@ def test_unknown_mode_is_loud() -> None:
 
 def test_mode_without_key_stays_rule_based() -> None:
     assert not LLMSettings.from_env({"SYNAPSE_LLM_MODE": "on"}).llm_enabled
-    assert LLMSettings.from_env(
-        {"SYNAPSE_LLM_MODE": "on", "DEEPSEEK_API_KEY": "sk-x"}
-    ).llm_enabled
+    assert LLMSettings.from_env({"SYNAPSE_LLM_MODE": "on", "DEEPSEEK_API_KEY": "sk-x"}).llm_enabled
 
 
 def test_canary_is_stable_per_session() -> None:

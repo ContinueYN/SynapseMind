@@ -13,9 +13,7 @@ from synapse.application.llm import LLMCallFailed, LLMRequest, LLMResponse
 
 
 def request_key(request: LLMRequest) -> str:
-    material = "\x1f".join(
-        (request.purpose, request.schema_name, request.system, request.user)
-    )
+    material = "\x1f".join((request.purpose, request.schema_name, request.system, request.user))
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 

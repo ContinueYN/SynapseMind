@@ -32,12 +32,15 @@ apps/api/src/synapse/
 │  ├─ composer.py             # GraphProbeComposer + LeakSafe/Fallback/Shadow/Canary 装饰器
 │  ├─ card_builder.py         # 由收敛假设生成 DiagnosisCard
 │  ├─ replay.py               # golden 回放与退出判定（eval 与 pytest 共用）
+│  ├─ subject.py              # SubjectPlugin 端口：识别/建图/探针/证据/验证
 │  └─ service.py              # SessionService（Facade）：start/get/submit/exit
 ├─ infrastructure/            # 端口实现
 │  ├─ seed.py                 # M1 唯一种子题 + 4 个探针 + 标准答案
 │  ├─ in_memory.py            # 会话/题目/答案仓储（重启即丢）
 │  ├─ guards.py               # 唯一读取答案的适配器：构造泄漏防护
 │  ├─ system.py               # UTC 时钟 / S_ 会话 ID
+│  ├─ subjects/               # 学科插件实现（M2.5）
+│  │  └─ math.py              # MathPlugin：关键字识别 + 种子图 + EVIDENCE
 │  └─ llm/                    # 唯一允许 import 模型客户端的包
 │     ├─ settings.py          # off/shadow/on:10 开关、模型、超时、canary 分桶
 │     ├─ client.py            # OpenAI 兼容客户端（默认 DeepSeek）
@@ -112,6 +115,20 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 失败链：JSON 不合法 → 重试 1 次 → 仍失败回退规则；超时与传输失败不重试（保 8s 首问预算），直接回退。每次调用、每次降级、每条 shadow 差异都写 `AuditEntry`：`session_id`、`turn`、`model`、`latency_ms`、`prompt_tokens`、`completion_tokens`、`retried`、`fallback_reason`、`schema_ok`。
 
 答案隔离：发给模型的只有题面 `stem` 与探针本身；`node.text` / `common_errors` 不发送。出口仍是 `LeakSafeProbeComposer`（最外层），命中即改写。
+
+## 学科插件（M2.5）
+
+`SubjectPlugin` 是「对话内核不认识学科」的接缝：插件只提供**内容**（识别、图、探针、证据权重、验证结论），状态机仍决定状态。契约见第 13 章，端口在 [`application/subject.py`](src/synapse/application/subject.py)，当前唯一实现在 [`infrastructure/subjects/math.py`](src/synapse/infrastructure/subjects/math.py)。
+
+| 方法 | 现在（S2） | 后续 |
+|---|---|---|
+| `identify()` | 关键字命中种子题 | S3 给 `physics` 补 handler；语义识别在 S4 之后 |
+| `build_graph()` | 直接返回手写种子图 | S4 生成 + schema 校验 + 修复重试 |
+| `probes_for()` | 返回节点自带探针 | 接口不变 |
+| `evidence_model()` | 过滤 `EVIDENCE`（只有 3 个探针有权重） | S5 按图生成，补 `p_union` 等缺口 |
+| `verify()` | 恒返回 `unknown` | S5 接 SymPy；STRONG 档才允许 `diagnose` |
+
+`subject` 是显式声明：文本识别出的学科与声明不一致时返回 **422**，而不是静默按文本路由。注册表目前只有一个插件，S6 接物理时只加一个实现。
 
 ## 本地命令
 

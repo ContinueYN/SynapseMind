@@ -18,8 +18,8 @@ class StrictModel(BaseModel):
 class ProblemIn(StrictModel):
     text: str | None = Field(default=None, min_length=1, max_length=4000)
     image_url: str | None = Field(default=None, max_length=2000)
-    subject: Literal["math"] = "math"
-    grade: Literal["high_school"] = "high_school"
+    subject: Literal["math", "physics"] = "math"
+    grade: Literal["primary_school", "middle_school", "high_school"] = "high_school"
 
     @model_validator(mode="after")
     def require_text_or_image(self) -> ProblemIn:
