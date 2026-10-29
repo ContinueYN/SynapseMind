@@ -25,7 +25,7 @@
 ├─ docs/
 │  ├─ adr/               # 架构决策记录（为什么这样选）
 │  ├─ design/
-│  │  ├─ chapters/       # 第 0–13 章，唯一手写源
+│  │  ├─ chapters/       # 第 0–14 章 + 附录，唯一手写源
 │  │  └─ assets/         # 3 张设计图，由脚本生成
 │  └─ reference/         # 能力清单等原始参考
 ├─ .github/workflows/     # CI
@@ -58,7 +58,7 @@ docs/design/release/      # 合并 MD / DOCX / PDF；生成物，不进 Git
 | `tools/` | `diagrams.py`、`merge_markdown.py`、`generate_docx.py`、TOC/PDF 脚本 | 运行时依赖、业务逻辑 | 5 个脚本 + `requirements.txt` |
 | `scripts/` | 按职责分组：`dev/` 启动、`contracts/` 契约、`checks/` 检查、`eval/` 评测、`release/` 可选导出 | 应用入口、部署脚本 | 5 组脚本 + `README.md` |
 | `docs/adr/` | 一个决策一个文件：背景、选项、评分、后果、改选条件 | 教程、会议记录、未决讨论 | `0001` 语言与代码架构 |
-| `docs/design/chapters/` | 第 0–13 章 Markdown，按编号排序 | DOCX/PDF、合并稿、图片 | 14 个章节源文件 |
+| `docs/design/chapters/` | 第 0–14 章 + 附录 Markdown，按编号排序 | DOCX/PDF、合并稿、图片 | 16 个章节源文件 |
 | `docs/design/assets/` | 由 `tools/diagrams.py` 生成的 3 张 PNG | 手工改图、截图堆 | 3 张图 |
 | `docs/reference/` | 原始能力清单、外部资料摘要 | 正式设计正文 | `skill.txt` |
 | `.github/workflows/` | CI：链接、JSON、skill 映射检查 | 本地脚本 | `ci.yml` |

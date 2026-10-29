@@ -17,4 +17,4 @@
 - 不引入外部字体（本机直连外网不通，`next/font/google` 会卡死构建），只用 `tokens.css` 里的系统栈。
 - 旧变量名（`--bg`、`--text`、`--accent` 等）在 `tokens.css` 里作为别名保留，避免一次性改爆。
 - `paper.css` 已删除：纸与出版那套（衬线、零圆角、零玻璃）在 H4 被明确否决，不要恢复。
-- `components/reactbits/` 已删除：Aurora、GradientText、SpotlightCard、StarBorder 属于第 13 章 §13.12 的反模式，不要重新引入。
+- `components/reactbits/` 已删除：Aurora、GradientText、SpotlightCard、StarBorder 属于第 14 章 §14.12 的反模式，不要重新引入。
