@@ -302,6 +302,10 @@ class SessionService:
     def problem_title(self, problem_id: str) -> str:
         return self._problem(problem_id).title
 
+    def problem_text(self, problem_id: str) -> str:
+        """题面全文。追问时前端要能随时回看整道题——只给题面，不给答案。"""
+        return self._problem(problem_id).text
+
     def _stop_without_card(self, session: DialogueSession, notice: str) -> SessionView:
         if session.state is not DialogueState.STOP:
             session.advance(DialogueEvent.ABORT)
