@@ -52,6 +52,7 @@
    - `on:10` 灰度前仍需确认的是**首问整体** P95（现在是单次改写延迟，不含检索/状态推进）；
    - 请求 `deepseek-chat` 实际服务 id 是 `deepseek-flash`，冻结基线看审计里的 `model` 字段。
 2. **M2.5**：第 13 章 S1–S7。S1/S2/S3 已完成（枚举扩到 `math`/`physics` + 三学段；`SubjectPlugin` + `MathPlugin`；识别从关键字换成「归一化包含」严格匹配，不同题返回 422）。下一步：
+   - **S4 题源已定（2026-10-29）**：20 道题**先由模型建图，再人工抽查修订**；抽查不通过的题不计入成功率，验收口径仍是「20 道未见题 ≥80%」。
    - **S4** 建图生成 + schema 校验 + 修复重试（20 道未见题 ≥80%）——这是真正的门槛，之前的三步只是把插槽挖好；
    - **S5** 证据表由插件提供，补上 `p_union` 缺权重与「平均 2.4 轮饱和」两处标定问题；
    - **S6** 接第二个学科（状态机零改动）。
@@ -86,8 +87,8 @@ python scripts/contracts/generate.py
 # M2 退出判定（10 条 golden 回放，产出 eval/reports/m2-exit-v0.1.md）
 cd apps/api
 .\.venv\Scripts\python.exe ..\..\scripts\eval\m2_exit.py
-# 真实模型双跑（需 DEEPSEEK_API_KEY；结果不变，只多一份差异报告）
-$env:SYNAPSE_LLM_MODE = "shadow"; .\.venv\Scripts\python.exe ..\..\scripts\eval\m2_exit.py
+# 真实模型双跑（key 放仓库根 .env，或导出 DEEPSEEK_API_KEY；结果不变，只多一份差异报告）
+.\.venv\Scripts\python.exe ..\..\scripts\eval\m2_exit.py --live-shadow
 
 # 仓库一致性（CI 第一个 job）
 python scripts/checks/check_repo.py
@@ -148,10 +149,12 @@ eval/reports/                退出判定报告（产物，不入库）
 
 ## 八、历史背景（为什么长这样）
 
-项目起点是"12 分钟测评 + 学习 OS"，在设计与评审中被判定跑偏，整体归档到 `_local/archive/v0-broad-os/`，转向**单题诊断引导**（3 人 / 8 周）。因此仓库里有两代材料的痕迹：
+项目起点是"12 分钟测评 + 学习 OS"，在设计与评审中被判定跑偏，整体归档到 `_local/archive/v0-broad-os/`，转向**单题诊断引导**。因此仓库里有两代材料的痕迹：
 
 - `_local/archive/v0-broad-os/` — 旧方案全文，**不要当现状引用**；
 - 第 11 章记录的是当时的 Java/Spring 设计过程，**已被 ADR-0001 取代**，只作方法论留存；
 - 旧会话里的 "M2 = 处方-验证闭环" 属于 v0 口径，与当前 M2（LLM 追问）无关。
 
 当前 M2 / M2.5 的定义见第 12、13 章。
+
+文档与计划按**范围与验收**表述，不写「几人几周」这类投入估算。

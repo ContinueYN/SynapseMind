@@ -113,6 +113,8 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 
 环境变量：`SYNAPSE_LLM_MODE`、`SYNAPSE_LLM_MODEL`（默认 `deepseek-chat`）、`SYNAPSE_LLM_BASE_URL`、`SYNAPSE_LLM_API_KEY`（或 `DEEPSEEK_API_KEY`）、`SYNAPSE_LLM_TIMEOUT_S`、`SYNAPSE_LLM_AUDIT_PATH`。没有 key 时即使 `mode=on` 也走规则版。
 
+本地把变量写进**仓库根目录的 `.env`** 即可：`scripts/dev/run.py` 用 `uvicorn --env-file` 传入，`scripts/eval/m2_exit.py` 显式 `load_dotenv()`。库代码与测试**不会**隐式读这个文件，所以本机的 key 不会改变测试结果。
+
 失败链：JSON 不合法 → 重试 1 次 → 仍失败回退规则；超时与传输失败不重试（保 8s 首问预算），直接回退。每次调用、每次降级、每条 shadow 差异都写 `AuditEntry`：`session_id`、`turn`、`model`、`latency_ms`、`prompt_tokens`、`completion_tokens`、`retried`、`fallback_reason`、`schema_ok`。
 
 答案隔离：发给模型的只有题面 `stem` 与探针本身；`node.text` / `common_errors` 不发送。出口仍是 `LeakSafeProbeComposer`（最外层），命中即改写。

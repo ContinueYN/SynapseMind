@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+from pathlib import Path
 
 import httpx
 import pytest
@@ -10,7 +12,31 @@ import pytest
 from synapse.application.llm import LLMCallFailed, LLMRequest, LLMTimeout
 from synapse.infrastructure.llm.client import OpenAICompatibleClient
 from synapse.infrastructure.llm.schema import SchemaRejected, parse_rewrite
-from synapse.infrastructure.llm.settings import LLMSettings
+from synapse.infrastructure.llm.settings import LLMSettings, load_dotenv
+
+
+def test_load_dotenv_fills_missing_keys_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        '# comment\nSYNAPSE_TEST_KEY=abc\nQUOTED="v"\nnot a pair\n',
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("SYNAPSE_TEST_KEY", raising=False)
+    monkeypatch.delenv("QUOTED", raising=False)
+
+    load_dotenv(env_file)
+    assert os.environ["SYNAPSE_TEST_KEY"] == "abc"
+    assert os.environ["QUOTED"] == "v"
+
+    monkeypatch.setenv("SYNAPSE_TEST_KEY", "real")
+    load_dotenv(env_file)
+    assert os.environ["SYNAPSE_TEST_KEY"] == "real"
+
+
+def test_load_dotenv_ignores_a_missing_file(tmp_path: Path) -> None:
+    load_dotenv(tmp_path / "nope.env")  # must not raise
 
 
 def _request() -> LLMRequest:

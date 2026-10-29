@@ -11,6 +11,7 @@ import hashlib
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
 LLMMode = Literal["off", "shadow", "on"]
@@ -19,6 +20,42 @@ DEFAULT_PROVIDER = "deepseek"
 DEFAULT_MODEL = "deepseek-chat"
 DEFAULT_BASE_URL = "https://api.deepseek.com/v1"
 DEFAULT_TIMEOUT_S = 4.0
+
+
+def load_dotenv(path: Path | None = None) -> None:
+    """Read ``KEY=VALUE`` lines into ``os.environ``; existing keys win.
+
+    Deliberately explicit: importing the package never reads a file, and the
+    tests never call this, so a developer's local ``.env`` cannot change test
+    behaviour. Entry points (``scripts/dev/run.py`` via uvicorn, the eval
+    script) opt in.
+    """
+    target = path if path is not None else _default_env_file()
+    if target is None:
+        return
+    try:
+        lines = target.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+def _default_env_file() -> Path | None:
+    """``<repo root>/.env`` when running from a checkout."""
+    here = Path(__file__).resolve()
+    if len(here.parents) < 7:
+        return None
+    return here.parents[6] / ".env"
 
 
 @dataclass(frozen=True, slots=True)

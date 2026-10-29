@@ -18,7 +18,7 @@ import json
 import math
 import sys
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 
@@ -33,7 +33,7 @@ from synapse.application.replay import (  # noqa: E402
     load_cases,
     replay_case,
 )
-from synapse.infrastructure.llm.settings import LLMSettings  # noqa: E402
+from synapse.infrastructure.llm.settings import LLMSettings, load_dotenv  # noqa: E402
 
 PASS_BAR = 8
 MAX_DIFF_SAMPLES = 6
@@ -94,12 +94,13 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    load_dotenv()
     settings = LLMSettings.from_env()
     if args.live_shadow and settings.mode == "off":
-        settings = LLMSettings.from_env({"SYNAPSE_LLM_MODE": "shadow"})
+        settings = replace(settings, mode="shadow")
     if settings.mode != "off" and not settings.llm_enabled:
         print("! model mode requested but no API key; running the rule baseline")
-        settings = LLMSettings.from_env({"SYNAPSE_LLM_MODE": "off"})
+        settings = replace(settings, mode="off")
 
     container = build_container(settings)
     cases = load_cases(Path(args.golden))
