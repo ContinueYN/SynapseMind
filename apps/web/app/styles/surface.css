@@ -148,7 +148,7 @@ svg {
   height: 56vw;
   background: radial-gradient(circle at 36% 34%, #ffffff 0%, rgba(255, 255, 255, 0) 66%);
   opacity: 0.95;
-  animation: sm-drift-a 96s ease-in-out infinite alternate;
+  animation: sm-drift-a 40s ease-in-out infinite alternate;
   translate: calc(var(--gx, 0) * 20px) calc(var(--scroll, 0) * 0.03px + var(--gy, 0) * 20px);
 }
 
@@ -159,7 +159,7 @@ svg {
   height: 60vw;
   background: radial-gradient(circle at 50% 50%, #cfe5ff 0%, rgba(207, 229, 255, 0) 64%);
   opacity: 0.85;
-  animation: sm-drift-b 124s ease-in-out infinite alternate;
+  animation: sm-drift-b 52s ease-in-out infinite alternate;
   translate: calc(var(--gx, 0) * 28px) calc(var(--scroll, 0) * -0.06px + var(--gy, 0) * 28px);
 }
 
@@ -170,7 +170,7 @@ svg {
   height: 66vw;
   background: radial-gradient(circle at 50% 50%, #b9d7f8 0%, rgba(185, 215, 248, 0) 62%);
   opacity: 0.72;
-  animation: sm-drift-c 150s ease-in-out infinite alternate;
+  animation: sm-drift-c 64s ease-in-out infinite alternate;
   translate: calc(var(--gx, 0) * 36px) calc(var(--scroll, 0) * 0.085px + var(--gy, 0) * 36px);
 }
 
@@ -386,7 +386,7 @@ svg {
     rgba(255, 255, 255, 0) 72%
   );
   filter: blur(26px);
-  animation: sm-sheen-drift 32s ease-in-out infinite alternate;
+  animation: sm-sheen-drift 20s ease-in-out infinite alternate;
 }
 
 .sm-sheen::before {
@@ -398,7 +398,7 @@ svg {
     rgba(255, 255, 255, 0) 72%
   );
   filter: blur(22px);
-  animation: sm-sheen-drift-b 46s ease-in-out infinite alternate;
+  animation: sm-sheen-drift-b 28s ease-in-out infinite alternate;
 }
 
 .sm-sheen::after {
@@ -410,7 +410,7 @@ svg {
     rgba(206, 231, 255, 0) 74%
   );
   filter: blur(24px);
-  animation: sm-sheen-drift-c 58s ease-in-out infinite alternate;
+  animation: sm-sheen-drift-c 36s ease-in-out infinite alternate;
 }
 
 @keyframes sm-sheen-drift {
@@ -440,7 +440,7 @@ svg {
   }
 }
 
-/* 一道斜着掠过的镜面光：26s 一趟。玻璃"在反光"最直接的证据 */
+/* 一道斜着掠过的镜面光：13s 一趟。玻璃"在反光"最直接的证据——第一版 26s，肉眼根本等不到 */
 .sm-glass-clip::after {
   content: "";
   position: absolute;
@@ -457,7 +457,7 @@ svg {
   );
   filter: blur(14px);
   transform: translate3d(-40%, 0, 0) rotate(16deg);
-  animation: sm-streak 26s var(--ease-out) infinite;
+  animation: sm-streak 13s var(--ease-out) infinite;
   pointer-events: none;
 }
 
@@ -720,6 +720,7 @@ svg {
 }
 
 .sm-rule i {
+  position: relative;
   display: block;
   height: 2px;
   width: var(--read, 0%);
@@ -727,74 +728,125 @@ svg {
   transition: width 90ms linear;
 }
 
-.sm-page {
-  animation: sm-page-in var(--t-rise) var(--ease-glide) both;
+/* 进度头部那颗水珠：滚动时它是先动的，后面那根线才跟上 */
+.sm-rule i::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: 11px;
+  height: 11px;
+  margin-top: -5.5px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 34%, #ffffff 0%, #8fc0f4 48%, rgba(74, 140, 224, 0) 78%);
+  transform: translateX(50%);
+  animation: sm-rule-bead 3.8s var(--ease-out) infinite;
+  pointer-events: none;
 }
 
-@keyframes sm-page-in {
-  from {
-    opacity: 0;
-    translate: 0 14px;
-    filter: blur(4px);
+@keyframes sm-rule-bead {
+  0%,
+  100% {
+    transform: translateX(50%) scale(0.86);
+  }
+  50% {
+    transform: translateX(50%) scale(1.16);
   }
 }
 
-/* ───────────────────────── 换页：一层水往下淌 ─────────────────────────
- * 换页时先盖一层薄玻璃，再让它往下淌走——新页面从顶部被"揭开"。
- * 只跑一次，不挡点击，跑完即隐藏。
+/* ───────────────────────── 换页：一道光掠过去，页面自己浮上来 ─────────────────────────
+ * 上一版是"一层玻璃盖住整屏再淌走"——那是加载动画，不是换页：视线被挡住、页面在底下
+ * 一边淡入一边被揭开，两件事叠在一起就不自然。
+ * 这一版什么都不盖：两道斜光从左侧掠到右侧（一宽一窄、一前一后），新页面同时从下方
+ * 26px 处带一点失焦浮上来。光是引导，内容是连续出现的。
  */
+
+.sm-page {
+  animation: sm-page-in 620ms var(--ease-liquid) both;
+}
+
+/* 不从 0 透明度开始：从 0 开始会有 150ms 的"空屏"，那一段最像卡住。
+ * 让内容一开始就看得见，只是浮上来、对一次焦——变化由掠光交代，不由淡出交代。 */
+@keyframes sm-page-in {
+  from {
+    opacity: 0.72;
+    translate: 0 22px;
+    scale: 0.996;
+    filter: blur(8px);
+  }
+  55% {
+    filter: blur(0);
+  }
+}
 
 .sm-transit {
   position: fixed;
-  inset: -1px 0 0;
+  inset: 0;
   z-index: 90;
+  overflow: hidden;
   pointer-events: none;
-  background:
-    radial-gradient(58% 40% at 22% 8%, #ffffff 0%, rgba(255, 255, 255, 0) 72%),
-    radial-gradient(60% 46% at 84% 96%, rgba(150, 190, 240, 0.5) 0%, rgba(150, 190, 240, 0) 70%),
-    linear-gradient(180deg, #f8fcff 0%, #e9f3fe 54%, #d8e8fc 100%);
-  /* 前缘：一道白线与一层很软的阴影，像水面推过去 */
-  box-shadow:
-    inset 0 -1px 0 rgba(255, 255, 255, 0.96),
-    inset 0 -12px 24px -18px rgba(31, 63, 107, 0.34),
-    0 26px 48px -26px rgba(31, 63, 107, 0.34);
-  animation: sm-transit 660ms var(--ease-glide) 60ms both;
 }
 
-/* 前缘上的一道斜光：让它看起来是"液体"而不是"纸片" */
+.sm-transit::before,
 .sm-transit::after {
   content: "";
   position: absolute;
-  left: -10%;
-  right: -10%;
-  bottom: 0;
-  height: 42px;
+  top: -40%;
+  height: 180%;
+  opacity: 0;
+  will-change: transform, opacity;
+}
+
+/* 宽的一道：像一大片水从玻璃前划过，边缘是糊的，不挡字 */
+.sm-transit::before {
+  left: -40%;
+  width: 38%;
   background: linear-gradient(
-    100deg,
+    90deg,
     rgba(255, 255, 255, 0) 0%,
-    rgba(255, 255, 255, 0.85) 38%,
-    rgba(255, 255, 255, 0) 78%
+    rgba(255, 255, 255, 0.5) 26%,
+    rgba(163, 201, 245, 0.48) 52%,
+    rgba(120, 168, 226, 0.28) 72%,
+    rgba(255, 255, 255, 0) 100%
   );
-  mask-image: linear-gradient(180deg, transparent, #000 70%);
-  transform: translateX(-18%);
-  animation: sm-transit-sheen 660ms var(--ease-glide) 60ms both;
+  filter: blur(46px);
 }
 
-@keyframes sm-transit {
-  from {
-    transform: translateY(0);
-  }
-  to {
-    transform: translateY(101%);
-  }
+.sm-transit[data-run="true"]::before {
+  animation: sm-sweep 680ms cubic-bezier(0.34, 0.06, 0.3, 1) 20ms both;
 }
 
-@keyframes sm-transit-sheen {
-  from {
-    transform: translateX(-18%);
+/* 窄的一道：前缘的高光，晚 70ms、略快——两条一起看才有纵深 */
+.sm-transit::after {
+  left: -16%;
+  width: 10%;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.9) 46%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  filter: blur(13px);
+}
+
+.sm-transit[data-run="true"]::after {
+  animation: sm-sweep 720ms cubic-bezier(0.34, 0.06, 0.3, 1) 90ms both;
+}
+
+@keyframes sm-sweep {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(-13deg);
+    opacity: 0;
   }
-  to {
-    transform: translateX(38%);
+  16% {
+    opacity: 1;
+  }
+  74% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: translate3d(150vw, 0, 0) rotate(-13deg);
+    opacity: 0;
   }
 }
 
@@ -1861,6 +1913,12 @@ svg {
   transform: scale(1.06);
 }
 
+/* 按下去的那一下，底缘的反光被挤开——"有内容物"的感觉全靠这一下 */
+.sm-cta:active:not(:disabled)::after {
+  opacity: 1;
+  transform: scale(1.2);
+}
+
 .sm-cta:hover:not(:disabled) {
   background: linear-gradient(178deg, #5091e3 0%, #235cae 100%);
   box-shadow:
@@ -1870,7 +1928,7 @@ svg {
 }
 
 .sm-cta:active:not(:disabled) {
-  transform: translateY(1px);
+  transform: translateY(1px) scale(0.99);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.45),
     inset 0 2px 8px rgba(20, 48, 92, 0.35),
@@ -1881,6 +1939,28 @@ svg {
   cursor: not-allowed;
   filter: saturate(0.6);
   opacity: 0.55;
+}
+
+/* 拆题那几秒：按键里有一道光照过去又回来——"在动"比"转圈"更像液体 */
+.sm-cta:disabled::before {
+  opacity: 1;
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0) 24%,
+    rgba(255, 255, 255, 0.42) 50%,
+    rgba(255, 255, 255, 0) 76%
+  );
+  background-size: 220% 100%;
+  animation: sm-cta-fill 1.5s linear infinite;
+}
+
+@keyframes sm-cta-fill {
+  from {
+    background-position: 180% 0;
+  }
+  to {
+    background-position: -80% 0;
+  }
 }
 
 .sm-ar {
@@ -3487,6 +3567,40 @@ svg {
   color: var(--ink);
   font-size: var(--fs-body);
   font-weight: 600;
+}
+
+/* ───────────────────────── 会呼吸的边 ─────────────────────────
+ * 静止的圆角 = 塑料；玻璃的边随重力微微变形。幅度 6–8px、周期 23s、各自错相位，
+ * 所以三块砖的边不会同时呼吸（同时呼吸就变成整体缩放，更像 PPT 动画）。
+ * 只给装饰性的砖用：卡片、输入框、选项不动——那些东西一动就像在漂。
+ */
+
+.sm-step,
+.sm-note-item {
+  animation: sm-soft-morph 23s var(--ease-out) infinite alternate;
+}
+
+.sm-step:nth-of-type(2),
+.sm-note-item:nth-of-type(2) {
+  animation-delay: -5s;
+}
+
+.sm-step:nth-of-type(3),
+.sm-note-item:nth-of-type(3) {
+  animation-delay: -11s;
+}
+
+.sm-step:nth-of-type(4) {
+  animation-delay: -17s;
+}
+
+@keyframes sm-soft-morph {
+  from {
+    border-radius: var(--r-3);
+  }
+  to {
+    border-radius: 26px 19px 25px 21px;
+  }
 }
 @media print {
   .sm-top,
