@@ -109,9 +109,12 @@ class MathPlugin:
         return EvidenceModel(weights={})
 
     def verify(self, step: StudentStep) -> Verdict:
-        # A STRONG subject without a verifier must say so, never pretend.
+        # A STRONG subject without a step verifier must say so, never pretend.
+        # S5's verifier checks the graph's *answer claim*
+        # (``infrastructure/verification``); checking a student's free-text
+        # step is a different job and has no implementation yet.
         del step
         return Verdict(
             status="unknown",
-            detail="数学验证器在 M2.5 S5 接入（SymPy 子进程）；在此之前不作断言",
+            detail="学生步骤验证尚未实现；S5 只验证解法图里 claim 声明的答案区间，不对步骤作断言",
         )

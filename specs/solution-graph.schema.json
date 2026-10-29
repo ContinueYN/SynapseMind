@@ -19,6 +19,10 @@
       "type": "string",
       "maxLength": 4000
     },
+    "claim": {
+      "description": "可验证的答案声明（M2.5 S5）。只有答案是一个参数区间时才写；没有形式化声明的图在验证时返回 unknown，不视为失败。",
+      "$ref": "#/$defs/claim"
+    },
     "nodes": {
       "type": "array",
       "minItems": 3,
@@ -117,6 +121,82 @@
           "minimum": 0,
           "maximum": 3,
           "default": 0
+        }
+      }
+    },
+    "interval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lower", "upper"],
+      "properties": {
+        "lower": {
+          "description": "下端点，SymPy 表达式字符串；null 表示 −∞。",
+          "type": ["string", "null"],
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "upper": {
+          "description": "上端点，SymPy 表达式字符串；null 表示 +∞。",
+          "type": ["string", "null"],
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "lower_inclusive": {"type": "boolean", "default": true},
+        "upper_inclusive": {"type": "boolean", "default": true}
+      }
+    },
+    "claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "parameter",
+        "variable",
+        "variable_domain",
+        "constraint",
+        "answer"
+      ],
+      "properties": {
+        "kind": {
+          "description": "v1 只支持一种：对所有 x∈D 有 f(x,a) rel 0，答案是一个参数区间。",
+          "enum": ["parameter_range"]
+        },
+        "parameter": {
+          "description": "被求解的参数符号，单个小写字母，如 a、m。",
+          "type": "string",
+          "pattern": "^[a-z]$"
+        },
+        "variable": {
+          "description": "约束中量词的变量符号，单个小写字母，如 x。",
+          "type": "string",
+          "pattern": "^[a-z]$"
+        },
+        "variable_domain": {
+          "description": "变量定义域，区间写法，如 (0,+inf)、[1,3]、(-inf,+inf)。",
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 60
+        },
+        "constraint": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["expression", "relation"],
+          "properties": {
+            "expression": {
+              "description": "含 variable 与 parameter 的表达式，SymPy 语法（exp/log/sqrt/Abs/sin/cos，^ 也接受）。",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "relation": {"enum": ["<=", ">=", "<", ">"]}
+          }
+        },
+        "answer": {
+          "description": "使该命题成立的 parameter 取值集合，按区间给出；多个区间即并集。",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 6,
+          "items": {"$ref": "#/$defs/interval"}
         }
       }
     }

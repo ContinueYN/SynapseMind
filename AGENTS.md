@@ -10,7 +10,7 @@
 
 **M2（窄口径）已落地**：`infrastructure/llm` + `LLMProbeComposer` + 校验/重试/降级 + `shadow` 双跑 + 10 条 golden 回放与退出判定报告。默认 `SYNAPSE_LLM_MODE=off`，部署形态与 M1 相同（内存仓储、无队列）。
 
-**M2.5 S4/S5 已落地（2026-10-29）**：解法图可由模型生成，必须过结构规则与 `specs/solution-graph.schema.json`，失败只重试一次并显式报错；生成图自带每个选项的 log-odds 证据权重（prompt `graph-v2`），`MathPlugin.evidence_model()` 只对已标注种子图回退 `EVIDENCE`。真实 20 题重跑：结构 18/20（90%，`P_DERIV_007`/`P_GEOM_001` 两次生成都没有探针），68/68 个探针、204/204 个选项都有权重且 68/68 有正负对比；4 次重试，2 次重试后通过、2 次因 `no_probes` 失败；p50 3.91s / p95 5.04s。**尚未接入 HTTP 主链路**——入口仍只收种子题；通用对齐与通用卡点卡属 S5 剩余。
+**M2.5 S4/S5 已落地（2026-10-29）**：解法图可由模型生成，必须过结构规则与 `specs/solution-graph.schema.json`，失败只重试一次并显式报错；生成图自带每个选项的 log-odds 证据权重（prompt 升到 `graph-v3`），`MathPlugin.evidence_model()` 只对已标注种子图回退 `EVIDENCE`。**S5 第三阶段：答案可被反例打脸**——图顶层可选 `claim`（`∀x∈D: f(x,a) rel 0 ⇔ a∈区间`），`infrastructure/verification/` 用 SymPy 做反例搜索并返回 `pass|fail|unknown`，`fail` 带具体反例回灌给模型重试一次。真实 20 题重跑（`graph-v3` 连跑四轮）：**建图稳定 20/20**，最后一轮 23 次调用、3 次重试，p50 4.05s / p95 5.51s；20 题里只有 `P_DERIV_003` 属于 v1 能形式化的形状，四轮都给出同一个错的 `a∈(-∞,e]`——`a=-24.46` 在答案区间内但 `x=-6.8e12` 时表达式 `-1.67e14 < 0`，带反例重试一次仍是同一区间，于是**丢弃 claim、保留图**。另外，模型偶尔会把存在性条件（`P_DERIV_004` 两个零点、`P_GEO_001` 两个交点）写成 `relation:"="` 的 claim，四轮里出现过 0–3 次，按“形状不支持”丢弃（`claim_dropped_unsupported`）；同一题两次生成的节点数/claim 数量会变，这是 `temperature=0` 不保证可重复的已知问题。**尚未接入 HTTP 主链路**——入口仍只收种子题；通用对齐与通用卡点卡属 S5 剩余。
 
 **2026-10-29 内容修正（重要）**：种子题 `P_FUNC_001` 的 `SAMPLE_ANSWER` 原写成 `a∈(-∞,0]∪[1/e,∞)`，但 `a≤0` 时 `f(x)=ln x - a x→+∞`，不满足恒成立；正确范围是 `a≥1/e`。已修正答案/参考解、n6 节点文本、`p_union` 的正确选项与证据方向、卡点卡 one-line、golden v0.1 的 g-001/g-004/g-005/g-006/g-009 标注（配额改为 3/3/2/2），并新增 `test_seed_math.py` 用 SymPy 直接验证答案。10 条 golden 仍 10/10、平均 2.40 轮。**教训**：关键词对齐的 golden 只能证明“步骤覆盖率”，不能证明数学正确；验证器必须能对形式化断言给出反例或证明。
 
@@ -20,7 +20,7 @@
 |---|---|
 | LLM 追问 | **有**：`infrastructure/llm/`（DeepSeek，默认 `off`）；T5「LLM 辅助对齐」未做且默认不做 |
 | `shadow` 真实对照 | **已跑（2026-10-29，真实 key）**：10/10 不变，24/24 JSON 合法，p95 1.10s，0 重试 0 降级；细节见 `eval/reports/m2-exit-v0.1-shadow.md` 与 ADR-0002 §5.1 |
-| 学科插件 / 解法图生成 | `SubjectPlugin` + `MathPlugin` 包装种子图（S1–S3）；识别为严格匹配（不同题 422）。**S4/S5 有生成器**：`LLMGraphGenerator`（prompt → JSON → 机械修复 → 结构规则 → schema → 一次重试）生成图与逐选项证据权重，20 题结构 18/20、证据 68/68 探针；尚未接入请求主链路，第二学科属 S6 |
+| 学科插件 / 解法图生成 | `SubjectPlugin` + `MathPlugin` 包装种子图（S1–S3）；识别为严格匹配（不同题 422）。**S4/S5 有生成器**：`LLMGraphGenerator`（prompt → JSON → 机械修复 → 结构规则 → schema → 验证 → 一次重试）生成图、逐选项证据权重与可证伪 `claim`，20 题建图 20/20；尚未接入请求主链路，第二学科属 S6 |
 | RAG / 向量检索 | 无 |
 | PostgreSQL / Redis / Alembic | 无；`InMemorySessionRepository` |
 | OCR | 无；`image_url` 仅在 DTO 预留 |
@@ -28,7 +28,7 @@
 | worker 实际任务 | 无；`apps/worker` 只有说明 |
 | 24h 迁移验证 / 教师复核 | 无 |
 
-**已知硬边界**：HTTP 入口只支持一道种子题（函数与导数），换题返回 **422** —— 这是显式设计，不是 bug；建图器已能处理任意题干并生成证据权重，但接进入口还要通用对齐（`RuleBasedAligner` 写死种子节点）与通用卡点卡（`_ONE_LINE`/`next_action` 也是种子专用），属 S5 剩余。证据表 `EVIDENCE` 覆盖四个探针，实测只有 `H_L2` 能越过 `0.80 + 0.25`；`L1`/`L4` 案例按「低置信不硬判」收束（见 `eval/reports/m2-exit-v0.1.md`）。
+**已知硬边界**：HTTP 入口只支持一道种子题（函数与导数），换题返回 **422** —— 这是显式设计，不是 bug；建图器已能处理任意题干并生成证据权重与 claim，但接进入口还要通用对齐（`RuleBasedAligner` 写死种子节点）与通用卡点卡（`_ONE_LINE`/`next_action` 也是种子专用），属 S5 剩余。证据表 `EVIDENCE` 覆盖四个探针，实测只有 `H_L2` 能越过 `0.80 + 0.25`；`L1`/`L4` 案例按「低置信不硬判」收束（见 `eval/reports/m2-exit-v0.1.md`）。
 
 ---
 
@@ -60,7 +60,8 @@
    - **S4 暴露的两件事**：① 抽查唯一失败是 P_DERIV_003 漏 `a=0` 边界——**prompt 守不住数学边界**，S5 的验证器/反例必须补；② `temperature=0` 仍不可重复（同题两次 7/8 节点、指纹不同），缓存只保进程内，回归比对记录指纹。
    - **S5 第一阶段已完成（2026-10-29）**：证据表改为会话级数据——`HypothesisSet.from_alignment(..., evidence=...)`，`SessionFactory` 调 `SubjectPlugin.evidence_model()`；`EVIDENCE` 只作无插件时的默认。补齐 `p_union` 四个选项的权重（原来答了也不更新后验），契约测试保证种子题每个探针每个选项都有权重。10 条 golden 仍 10/10、平均 2.40 轮。
    - **S5 第二阶段已完成（2026-10-29）**：生成图新增 `Probe.evidence`（`选项 → 假设 → log-odds`），生成 prompt 升到 `graph-v2`。结构规则强制每个选项都有权重、权重键只能在该探针 `targets` 内、每个 target 至少被一个选项使用、权重有正有负（能区分假设）、钳制在 −1~1；`MathPlugin.evidence_model()` 优先读图内权重，只有已标注种子图回退 `EVIDENCE`，未知图返回空表。真实 20 题：结构 18/20（`P_DERIV_007`/`P_GEOM_001` 两次都无探针），68/68 探针、204/204 选项有权重且 68/68 有正负对比；4 次重试，2 次重试后通过、2 次因 `no_probes` 失败；p50 3.91s / p95 5.04s。`P_DERIV_003` 仍漏 `a=0`——**证据权重只保证「答了会更新后验」，不保证图的数学结论正确**。
-   - **S5 剩余（下一步）**：① SymPy 验证器与反例。前置条件是形式化：在 `specs/solution-graph.schema.json` 给关键节点加可选的 `claim`（函数/关系/变量域/参数端点/`included` 或 `excluded`），或在图顶层加 `answer` 区间；`infrastructure/verification` 用 SymPy 做最值/区间/反例检查，返回 `pass|fail|unknown`，`fail` 必须附具体反例并触发一次带反馈重试，`unknown` 记录但不失败。纯文本节点只能检查显式声明的分支，抓不到“漏写 a=0”；不先做形式化字段就只是措辞检查。② 把生成的图接进 ALIGN/PROBE（入口仍 422）——需要通用对齐（`RuleBasedAligner` 写死种子节点）与通用卡点卡（`_ONE_LINE`/`next_action` 是种子专用），不能沿用 `_NODE_RULES`。建议先做 ① 的形式化字段设计，再动 ②。
+   - **S5 第三阶段已完成（2026-10-29）：SymPy 验证器 + 反例。** 形式化字段按建议放在**图顶层** `claim`（`specs/solution-graph.schema.json` 的 `$defs/claim`）：`kind`（v1 只有 `parameter_range`）、`parameter`/`variable`（单字母小写）、`variable_domain`、`constraint{expression,relation}`、`answer[{lower,upper,lower_inclusive,upper_inclusive}]`，语义是 `∀x∈D: f(x,a) rel 0 ⇔ a∈answer`。`application/verification.py` 定义端口与 `pass|fail|unknown`，`infrastructure/verification/sympy_verifier.py` 做**反例搜索**：表达式走字符白名单 + `__builtins__` 置空的 SymPy 命名空间 + 自由符号白名单；x 取线性网格 + 12 个数量级 + 边界加密，参数在区间内外各取样（含端点本身），对最紧处做黄金分割细化；两个方向都查（区间内不满足 → 偏宽；区间外满足 → 偏窄）。`fail` 带 `a=…, x=…, 表达式=…` 的具体反例，回灌给模型重试一次；仍失败则**丢弃 claim、保留图**（`claim_dropped_refuted`），这是刻意的：`P_GEO_001` 这种“图对、claim 形式化错”的题不该整题报废，但答案也不能再被当作已核对。claim 的 kind/relation/符号冲突直接丢弃（`claim_dropped_unsupported`），不浪费重试。真实 20 题见上方状态；报告：`eval/reports/m2.5-s5-verification.md`（含变形自检与正向对照：同一题 `[0,E]` → pass、`(-∞,E]` → fail 带反例）。
+   - **S5 剩余（下一步）**：② 把生成的图接进 ALIGN/PROBE（入口仍 422）——需要通用对齐（`RuleBasedAligner` 写死种子节点）与通用卡点卡（`_ONE_LINE`/`next_action` 是种子专用），不能沿用 `_NODE_RULES`。③ 提高 claim 覆盖率：四轮里模型每次只对 `P_DERIV_003` 一题给出 claim（它也是这 20 题里唯一适合 v1 形状的题），但这题两次都写 `(-∞,e]`——验证器能拦，拦下之后模型没有第二次修正能力，得靠“端点必须代回检验”的 prompt 约束或第二轮回灌更强的提示。扩到 100 题评测集时把「claim 覆盖率」和「推翻率」一起记。
    - **S6**：接第二个学科（物理），状态机零改动。
 3. **待收口的既有问题**：前端无自动化测试（只有手工 smoke）；`docs/design/plan/` 未入库；评测集有 10 条、`eval/golden/README` 的 100 条配额未达（需 M2.5 扩题）。
 
@@ -99,6 +100,9 @@ cd apps/api
 # M2.5 S4 建图（20 道未见题；需真实 key；产出 eval/reports/m2.5-s4-graph-build.md）
 .\.venv\Scripts\python.exe ..\..\scripts\eval\s4_graph_build.py
 
+# M2.5 S5 建图 + claim 反例验证（同 20 题；产出 eval/reports/m2.5-s5-verification.md 与 s5-graphs/）
+.\.venv\Scripts\python.exe ..\..\scripts\eval\s5_verify.py
+
 # 仓库一致性（CI 第一个 job）
 python scripts/checks/check_repo.py
 
@@ -125,7 +129,11 @@ python tools/merge_markdown.py
 | 新增 Python 依赖要重装 venv | `pyproject.toml` 加了 `jsonschema`（运行时）与 `types-jsonschema`（dev）；旧 venv 没有时会 ImportError。`pip install -e ".[dev]"` 一次补齐 |
 | 根目录 `eval/` 在 `.gitignore` | 只忽略**根目录**的私有评测材料；`scripts/eval/` 是工具、必须入库（早先写成不带锚点的 `eval/`，把 `m2_exit.py` 一起吞了）。golden 数据仍需 `git add -f eval/golden/golden-v0.1.jsonl`，`eval/reports/` 是产物不入库 |
 | CI 跑 `ruff format --check` | 只跑 `ruff check` 会在 CI 挂（format 与 check 是两套规则）；写完先 `ruff format src tests`。文件末尾缺换行也算未格式化 |
-| 生成图 prompt 已升到 `graph-v2` | v2 起每个探针的每个选项都必须有 `evidence` 权重；v1 的旧图和旧报告没有该字段，比较时先看报告头部的 prompt 版本。schema 里 `probe.evidence` 仍是可选（种子图合法），「生成图必须有」由 `graph_structure.review(require_evidence=True)` 强制 |
+| 生成图 prompt 已升到 `graph-v3` | v2 起每个探针的每个选项都必须有 `evidence` 权重；v3 起可选 `claim`（参数区间）并把验证接进建图。旧图和旧报告没有 `claim`，比较时先看报告头部的 prompt 版本。schema 里 `probe.evidence` 与 `claim` 都是可选，「生成图必须有 evidence」由 `graph_structure.review(require_evidence=True)` 强制 |
+| SymPy 没有 `py.typed` | `mypy src` 会报 `import-untyped`；`pyproject.toml` 里对 `sympy*` 开了 `ignore_missing_imports`（验证器把所有 SymPy 调用收在 float 边界的 helper 后面）。`sympy` 只在 `[dev]` extras 里，生产环境缺它时验证器返回 `unknown/unavailable`，不抛异常 |
+| `claim` 是可丢弃的元数据 | 形状不支持（`kind`/`relation` 不在 v1、`parameter` 与 `variable` 同字母）→ 直接丢弃并记 `claim_dropped_unsupported`；反例推翻且重试后仍错 → 丢弃并记 `claim_dropped_refuted`。两种情况**图都保留**，`graph.claim` 变 `None`、反例留在 `GraphBuildResult.verification`。不要顺手把它改成建图失败，也别把丢弃当静默降级——修复码和审计里的 `verification_status` 都记着 |
+| 模型会把探针放到顶层 | 观测到 `{"nodes":[...],"probes":[...]}` 的扁平化写法；探针没有归属节点，猜归属就是发明结构，所以判 `probes_top_level`（`schema_invalid`）并让重试带着提示改。prompt 第 1、12 条写死了「探针在节点内部」 |
+| 验证是反例搜索，不是证明 | `pass` 只表示固定网格 + 黄金分割细化没找到反例；`unknown` 是没 claim / 读不懂 / 落在 1e-9 容差带。对外表述只能用「未发现反例」，不能写「已证明」 |
 
 ---
 

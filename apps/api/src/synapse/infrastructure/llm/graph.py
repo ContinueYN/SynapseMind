@@ -43,6 +43,7 @@ from synapse.application.llm import (
     LLMResponse,
     LLMTimeout,
 )
+from synapse.application.verification import GraphVerifier
 from synapse.domain.diagnosis.hypotheses import HYPOTHESES
 from synapse.domain.problem.graph_structure import (
     GraphCheck,
@@ -51,12 +52,15 @@ from synapse.domain.problem.graph_structure import (
     review,
 )
 from synapse.domain.problem.models import (
+    Interval,
     Probe,
     ProblemDraft,
     SolutionGraph,
     SolutionNode,
+    VerificationClaim,
 )
 from synapse.infrastructure.llm.settings import LLMSettings
+from synapse.infrastructure.verification import default_verifier
 
 GRAPH_MAX_TOKENS = 4096
 GRAPH_CACHE_SIZE = 128
@@ -70,8 +74,20 @@ ALLOWED_PROBE_TARGETS = frozenset(HYPOTHESES)
 GRAPH_SYSTEM_PROMPT = """你是高中数学解法图标注器。输入一道高中数学题，输出一张“解法图”JSON。
 解法图描述解这道题需要完成的认知步骤，不是完整演算稿。
 硬性要求：
-1. 只输出一个 JSON 对象，不要 markdown、代码块或解释，结构为：
-   {"nodes":[{"id":"n1","type":"READ","text":"...","demand":{"V":0.2},"probes":[{"id":"p1","question":"...","options":["...","...","..."],"targets":["H_L2","H_L1"],"evidence":{"A":{"H_L2":-0.4,"H_L1":0.2},"B":{"H_L2":0.35,"H_L1":-0.1},"C":{"H_L1":0.3}}}]}],"edges":[["n1","n2"]]}
+1. 只输出一个 JSON 对象，不要 markdown、代码块或解释。顶层只有 nodes / edges（外加可选的 claim），
+   探针必须写在**所属节点内部的 probes 数组**里，不要放到顶层：
+   {"nodes": [
+      {"id": "n1", "type": "READ", "text": "...", "demand": {"V": 0.2},
+       "probes": [
+         {"id": "p1", "question": "...", "options": ["...", "...", "..."],
+          "targets": ["H_L2", "H_L1"],
+          "evidence": {"A": {"H_L2": -0.4, "H_L1": 0.2},
+                       "B": {"H_L2": 0.35, "H_L1": -0.1},
+                       "C": {"H_L1": 0.3}}}
+       ]}
+    ],
+    "edges": [["n1", "n2"]],
+    "claim": {...}}
 2. nodes 为 3–10 个（硬上限 20）；id 从 n1 连续编号；
    text 不超过 60 字，写这一步做什么，不写最终答案。
 3. type 只能是 READ / CONCEPT / CONDITION / STRATEGY / TRANSFORM / COMPUTE / CHECK 之一。
@@ -82,12 +98,41 @@ GRAPH_SYSTEM_PROMPT = """你是高中数学解法图标注器。输入一道高�
 6. 关键节点挂 1–2 个探针，整张图至少 2 个探针；探针一次只问一个小问题，选项 2–4 个，不给答案。
 7. 每个探针的 targets 至少写 2 个假设 id，只能从 H_L1、H_L2、H_L4 中选：
    H_L1=概念不清（定义、定理条件）；H_L2=条件转译/参数分类；H_L4=执行/计算错误。
-8. 不要复述题目，不要输出答案。
+8. 不要复述题目，不要输出答案（claim 字段除外，见第 11 条）。
 9. 每个探针的每个选项都必须有 evidence；键 A/B/C 依次对应 options 的第 1/2/3 个。
    evidence 的值是 log-odds 权重，范围 -1~1：正数表示选这个选项支持该假设，
    负数表示反对；0 等于没写，不要用。
 10. evidence 里只能出现该探针 targets 中的假设；每个 target 至少要在一个选项上有非零权重；
-    同一探针要让至少两个假设拿到方向相反的权重，否则这个探针没有区分度，不要设。"""
+    同一探针要让至少两个假设拿到方向相反的权重，否则这个探针没有区分度，不要设。
+11. 如果题目是“含参数的不等式对定义域内所有 x 恒成立，求参数的取值范围”，**必须**输出 claim，
+    把答案写成可验证的形式；其它题型（求一个值、求零点个数、解方程/解集、证明）**不要**输出 claim。
+    claim 的形状：
+    "claim":{"kind":"parameter_range","parameter":"a","variable":"x","variable_domain":"(0,+inf)",
+             "constraint":{"expression":"log(x)-a*x","relation":"<="},
+             "answer":[{"lower":"1/E","upper":null,"lower_inclusive":true,"upper_inclusive":false}]}
+    含义：对所有 x∈variable_domain 都有 expression <relation> 0，当且仅当 parameter ∈ answer。
+    例：“x^2-a x+1>0 对任意 x∈R 恒成立，求 a 的取值范围”，答案应写成
+        {"kind":"parameter_range","parameter":"a","variable":"x","variable_domain":"(-inf,+inf)",
+         "constraint":{"expression":"x^2-a*x+1","relation":">"},
+         "answer":[{"lower":"-2","upper":"2","lower_inclusive":false,"upper_inclusive":false}]}
+    因为 a=±2 时左边可以等于 0，端点必须排除。
+    - expression 只用题目的变量、参数和 exp/log/sqrt/Abs/sin/cos 与 + - * / ^；
+      乘号可省略（a x 就是 a*x），e 写成 e 或 E，log_2(x) 表示以 2 为底的对数。
+    - variable_domain 用区间写法：(0,+inf)、[1,3]、(-inf,+inf)；写无穷的一端必须用圆括号。
+    - answer 的端点是数学表达式字符串（如 "0"、"1/E"、"E"）；−∞/+∞ 用 null；
+      含端点写 true，不含写 false。
+    - 端点必须逐个代回约束检查：把这个端点当作 parameter 代入，若约束成立就必须包含（true），
+      不成立就必须排除（false）。分类讨论时先列出所有满足条件的参数值（包括 0、负数、边界值），
+      再写成区间；不要用“a>0”直接替换“a≥0”。
+    - relation 只表示恒成立的方向：题目要求 f(x)≥0 恒成立就写 ">="，f(x)≤0 恒成立就写 "<="；
+      "="、"!=" 或其它关系不要写 claim。
+    - 判断标准是“条件能不能写成对 x 的恒成立不等式”：条件里有“存在 x”“有两个零点”“方程有解”
+      这类存在性说法时，不要写 claim（形态不对会被判为无法验证）。确实属于“恒成立求参数范围”的
+      题目必须写；端点拿不准就把端点逐个代回约束检验，不要靠印象。
+    - 再确认一次：nodes 和 probes 是必填部分，claim 是可选部分；不要因为写 claim 而省掉探针，
+      每个探针仍然要有 2–4 个选项和完整的 evidence。
+12. 探针属于某个节点：写在那个节点的 "probes" 里。把探针放到顶层、或写成节点数组之外，
+    整张图会被判为无效。"""
 
 _ISSUE_HINTS = {
     "bad_json": "只输出一个合法 JSON 对象",
@@ -105,6 +150,7 @@ _ISSUE_HINTS = {
     "probe_targets_too_few": "每个探针至少指向 2 个假设",
     "probe_target_unknown": "探针 targets 只能取 H_L1 / H_L2 / H_L4",
     "no_probes": "解法图至少要有一个探针",
+    "probes_top_level": "探针必须写在所属节点的 probes 数组里，不能放在顶层",
     "probe_evidence_missing": "每个探针的每个选项都要有 evidence 权重",
     "probe_evidence_option_missing": "选项 A/B/C 每一个都要有 evidence",
     "probe_evidence_empty": "选项权重不能全为 0，否则答了也不更新后验",
@@ -114,6 +160,20 @@ _ISSUE_HINTS = {
     "evidence_option_dropped": "evidence 的选项键只能是 A/B/C，并与 options 数量一致",
     "evidence_value_dropped": "evidence 的权重必须是有限数字",
     "evidence_clamped": "evidence 权重必须在 -1~1 之间",
+    "claim_expression_empty": "claim 必须给出约束表达式",
+    "claim_answer_empty": "claim 必须给出至少一个答案区间",
+    "claim_endpoint_empty": "区间端点不能是空字符串；无界的一端写 null",
+    "claim": "claim 必须是第 11 条描述的对象",
+    "claim.constraint": "claim.constraint 必须是含 expression 与 relation 的对象",
+    "claim.answer": "claim.answer 必须是非空的区间数组",
+    "claim.answer[0]": "claim.answer 的每一项必须是含 lower 与 upper 的对象",
+    "verification_counterexample": (
+        "答案区间与约束不一致：偏宽就收紧或删掉这一段，偏窄就补上漏掉的区间"
+        "（尤其检查 0、负数分支和端点是否包含）；修完后重新检查端点"
+    ),
+    "verification_malformed": (
+        "claim 写法不符合要求：只用量词变量与参数、exp/log/sqrt/Abs/sin/cos；端点必须是常数"
+    ),
 }
 
 _DEGENERATE_CODES = frozenset({"node_count", "no_edges", "isolated_node", "no_probes"})
@@ -179,7 +239,7 @@ def to_payload(graph: SolutionGraph) -> dict[str, object]:
     ``Probe.correct_option`` is deliberately absent: the schema forbids it and
     the builder never receives answer keys.
     """
-    return {
+    payload: dict[str, object] = {
         "problem_id": graph.problem_id,
         "version": graph.version,
         "stem": graph.stem,
@@ -208,6 +268,29 @@ def to_payload(graph: SolutionGraph) -> dict[str, object]:
         ],
         "edges": [[source, target] for source, target in graph.edges],
     }
+    if graph.claim is not None:
+        payload["claim"] = claim_payload(graph.claim)
+    return payload
+
+
+def claim_payload(claim: VerificationClaim) -> dict[str, object]:
+    """The claim in the shape ``specs/solution-graph.schema.json`` publishes."""
+    return {
+        "kind": claim.kind,
+        "parameter": claim.parameter,
+        "variable": claim.variable,
+        "variable_domain": claim.variable_domain,
+        "constraint": {"expression": claim.expression, "relation": claim.relation},
+        "answer": [
+            {
+                "lower": interval.lower,
+                "upper": interval.upper,
+                "lower_inclusive": interval.lower_inclusive,
+                "upper_inclusive": interval.upper_inclusive,
+            }
+            for interval in claim.intervals
+        ],
+    }
 
 
 def validate_payload(payload: Mapping[str, object]) -> tuple[str, ...]:
@@ -231,11 +314,15 @@ class LLMGraphGenerator:
         *,
         settings: LLMSettings,
         auditor: CallAuditor | None = None,
+        verifier: GraphVerifier | None = None,
         cache_size: int = GRAPH_CACHE_SIZE,
     ) -> None:
         self._client = client
         self._settings = settings
         self._auditor = auditor
+        # The default verifier imports SymPy lazily, so a build without a claim
+        # never pays for it.
+        self._verifier: GraphVerifier = verifier if verifier is not None else default_verifier()
         self._cache: dict[str, GraphBuildResult] = {}
         self._cache_size = max(0, cache_size)
 
@@ -297,12 +384,52 @@ class LLMGraphGenerator:
                 )
                 continue
 
+            verification = self._verifier.verify(check.graph)
+            if verification.status == "fail":
+                # A wrong answer range is retried exactly like a schema error:
+                # the counterexample goes back to the model as feedback.
+                issues = (verification.as_issue(),)
+                self._audit(
+                    response,
+                    schema_ok=False,
+                    retried=attempt > 0,
+                    reason=verification.reason,
+                    verification_status=verification.status,
+                )
+                if attempt + 1 < attempts:
+                    continue
+                # Out of attempts: keep the graph (its probes are what the
+                # dialogue uses) but refuse to certify the answer. The claim is
+                # dropped so nothing downstream can read a refuted range as
+                # checked; the counterexample stays in ``verification``.
+                graph = replace(check.graph, claim=None)
+                digest = fingerprint(graph)
+                self._audit(
+                    response,
+                    schema_ok=True,
+                    retried=attempt > 0,
+                    fingerprint=digest,
+                    reason=verification.reason,
+                    verification_status=verification.status,
+                )
+                result = GraphBuildResult(
+                    graph=graph,
+                    fingerprint=digest,
+                    attempts=attempt + 1,
+                    repairs=tuple(sorted({*check.repairs, "claim_dropped_refuted"})),
+                    notes=quality_notes(graph),
+                    verification=verification,
+                )
+                self._store(cache_key, result)
+                return result
+
             digest = fingerprint(check.graph)
             self._audit(
                 response,
                 schema_ok=True,
                 retried=attempt > 0,
                 fingerprint=digest,
+                verification_status=verification.status,
             )
             result = GraphBuildResult(
                 graph=check.graph,
@@ -310,6 +437,7 @@ class LLMGraphGenerator:
                 attempts=attempt + 1,
                 repairs=check.repairs,
                 notes=quality_notes(check.graph),
+                verification=verification,
             )
             self._store(cache_key, result)
             return result
@@ -336,6 +464,7 @@ class LLMGraphGenerator:
         retried: bool,
         reason: str | None = None,
         fingerprint: str = "",
+        verification_status: str = "",
     ) -> None:
         if self._auditor is None:
             return
@@ -354,6 +483,7 @@ class LLMGraphGenerator:
                 fallback_reason=reason,
                 schema_ok=schema_ok,
                 graph_fingerprint=fingerprint,
+                verification_status=verification_status,
             )
         )
 
@@ -371,6 +501,16 @@ def _build_graph(draft: ProblemDraft, text: str) -> GraphCheck:
     except ValidationError as exc:
         raise _Rejected("schema_invalid", _format_validation(exc)) from exc
 
+    # Observed with graph-v3: the model sometimes flattens probes to the top
+    # level, where a probe has no owner. Guessing an owner would invent
+    # structure, so say exactly what is wrong and let the retry fix it.
+    top_level_probes = raw.get("probes")
+    if isinstance(top_level_probes, list) and top_level_probes:
+        raise _Rejected(
+            "schema_invalid",
+            ("probes_top_level: 探针必须写在所属节点的 probes 数组里，不能放在顶层",),
+        )
+
     nodes = tuple(_node(item) for item in payload.nodes)
     edges: list[tuple[str, str]] = []
     for edge in payload.edges:
@@ -384,6 +524,7 @@ def _build_graph(draft: ProblemDraft, text: str) -> GraphCheck:
         stem=draft.text,
         nodes=nodes,
         edges=tuple(edges),
+        claim=_claim(raw.get("claim")),
     )
     check = review(
         graph,
@@ -418,6 +559,103 @@ def _node(item: _NodePayload) -> SolutionNode:
             for probe in item.probes
         ),
     )
+
+
+def _claim(raw: object) -> VerificationClaim | None:
+    """Read the optional ``claim`` block; the spec validates it again later.
+
+    Parsing it here (rather than leaning on the final schema run) means a
+    malformed claim is reported before the graph is built, with the same
+    retry-with-feedback path as every other model mistake.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, Mapping):
+        raise _Rejected("schema_invalid", ("claim: 必须是对象",))
+
+    errors: list[str] = []
+    interval_items = raw.get("answer")
+    intervals: list[Interval] = []
+    if not isinstance(interval_items, list) or not interval_items:
+        errors.append("claim.answer: 必须是非空的区间数组")
+    else:
+        for index, item in enumerate(interval_items):
+            interval = _interval(item, index, errors)
+            if interval is not None:
+                intervals.append(interval)
+
+    constraint = raw.get("constraint")
+    expression = ""
+    relation = ""
+    if not isinstance(constraint, Mapping):
+        errors.append("claim.constraint: 必须是含 expression 与 relation 的对象")
+    else:
+        expression = _text_field(constraint, "expression", "claim.constraint", errors)
+        relation = _text_field(constraint, "relation", "claim.constraint", errors)
+
+    claim = VerificationClaim(
+        kind=_text_field(raw, "kind", "claim", errors),
+        parameter=_text_field(raw, "parameter", "claim", errors),
+        variable=_text_field(raw, "variable", "claim", errors),
+        variable_domain=_text_field(raw, "variable_domain", "claim", errors),
+        expression=expression,
+        relation=relation,
+        intervals=tuple(intervals),
+    )
+    if errors:
+        raise _Rejected("schema_invalid", tuple(errors))
+    return claim
+
+
+def _interval(item: object, index: int, errors: list[str]) -> Interval | None:
+    prefix = f"claim.answer[{index}]"
+    if not isinstance(item, Mapping):
+        errors.append(f"{prefix}: 必须是含 lower 与 upper 的对象")
+        return None
+    endpoints: dict[str, str | None] = {}
+    for key in ("lower", "upper"):
+        if key not in item:
+            errors.append(f"{prefix}.{key}: 缺少这个字段（无界的一端写 null）")
+            endpoints[key] = None
+            continue
+        value = item[key]
+        if value is None or isinstance(value, str):
+            endpoints[key] = value
+        else:
+            errors.append(f"{prefix}.{key}: 必须是字符串或 null")
+            endpoints[key] = None
+    return Interval(
+        lower=endpoints["lower"],
+        upper=endpoints["upper"],
+        lower_inclusive=_bool_field(item, "lower_inclusive", prefix, errors),
+        upper_inclusive=_bool_field(item, "upper_inclusive", prefix, errors),
+    )
+
+
+def _text_field(
+    raw: Mapping[str, object],
+    key: str,
+    prefix: str,
+    errors: list[str],
+) -> str:
+    value = raw.get(key)
+    if not isinstance(value, str) or not value.strip():
+        errors.append(f"{prefix}.{key}: 必须是非空字符串")
+        return ""
+    return value.strip()
+
+
+def _bool_field(
+    raw: Mapping[str, object],
+    key: str,
+    prefix: str,
+    errors: list[str],
+) -> bool:
+    value = raw.get(key, True)
+    if not isinstance(value, bool):
+        errors.append(f"{prefix}.{key}: 必须是 true 或 false")
+        return True
+    return value
 
 
 def _classify(issues: Sequence[str]) -> GraphFailureReason:

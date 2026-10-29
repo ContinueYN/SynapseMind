@@ -15,6 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
+from synapse.application.verification import VerificationResult
 from synapse.domain.problem.models import ProblemDraft, SolutionGraph
 
 GraphFailureReason = Literal[
@@ -36,6 +37,13 @@ class GraphBuildResult:
     repairs: tuple[str, ...] = ()
     notes: tuple[str, ...] = ()
     cached: bool = False
+    # ``pass`` (no counterexample found), ``unknown`` (nothing to check / could
+    # not decide) or ``fail``. A ``fail`` never fails the build: the answer is
+    # retried once with the counterexample as feedback, and a claim that is
+    # still refuted is dropped (``claim_dropped_refuted``) so ``graph.claim``
+    # stays ``None`` and nothing downstream can read a refuted range as
+    # checked. The counterexample itself is kept here.
+    verification: VerificationResult | None = None
 
 
 class GraphBuildFailed(RuntimeError):

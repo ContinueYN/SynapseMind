@@ -92,6 +92,39 @@ _VALID: dict[str, Any] = {
 
 VALID = json.dumps(_VALID, ensure_ascii=False)
 
+RANGE_DRAFT = ProblemDraft(
+    id="P_DERIV_003",
+    text="已知函数 f(x)=e^x-a x，a∈R。若 f(x)≥0 对任意 x∈R 恒成立，求 a 的取值范围。",
+)
+
+
+def _range_payload(answer: dict[str, Any], *, expression: str = "exp(x) - a*x") -> dict[str, Any]:
+    payload = copy.deepcopy(_VALID)
+    payload["claim"] = {
+        "kind": "parameter_range",
+        "parameter": "a",
+        "variable": "x",
+        "variable_domain": "(-inf,+inf)",
+        "constraint": {"expression": expression, "relation": ">="},
+        "answer": [answer],
+    }
+    return payload
+
+
+def _range_json(*, lower_inclusive: bool, expression: str = "exp(x) - a*x") -> str:
+    return json.dumps(
+        _range_payload(
+            {
+                "lower": "0",
+                "upper": "E",
+                "lower_inclusive": lower_inclusive,
+                "upper_inclusive": True,
+            },
+            expression=expression,
+        ),
+        ensure_ascii=False,
+    )
+
 
 class FakeClient:
     def __init__(self, *replies: str | Exception) -> None:
@@ -159,8 +192,12 @@ def test_valid_graph_is_built_and_audited() -> None:
     assert entry.schema_ok is True
     assert entry.retried is False
     assert entry.model == "fake-1"
-    assert entry.prompt_version == "graph-v2"
+    assert entry.prompt_version == "graph-v3"
     assert entry.graph_fingerprint == result.fingerprint
+    # No claim in the reply: the build is fine, the answer is just unverified.
+    assert entry.verification_status == "unknown"
+    assert result.verification is not None
+    assert result.verification.status == "unknown"
 
 
 def test_bad_json_is_retried_with_feedback() -> None:
@@ -425,3 +462,113 @@ def test_plugin_without_a_generator_says_so() -> None:
 
     assert info.value.reason == "disabled"
     assert "LLMGraphGenerator" in info.value.detail
+
+
+def test_a_wrong_answer_range_is_retried_with_the_counterexample() -> None:
+    auditor = InMemoryCallAuditor()
+    client = FakeClient(_range_json(lower_inclusive=False), _range_json(lower_inclusive=True))
+
+    result = _generator(client, auditor).generate(RANGE_DRAFT)
+
+    assert result.attempts == 2
+    # The counterexample itself goes back to the model: a=0 works but is
+    # excluded by the first answer.
+    assert "verification_counterexample" in client.calls[1].user
+    assert "a=0" in client.calls[1].user
+    assert result.verification is not None
+    assert result.verification.status == "pass"
+    assert result.graph.claim is not None
+    first, second = auditor.entries
+    assert first.fallback_reason == "counterexample"
+    assert first.verification_status == "fail"
+    assert second.verification_status == "pass"
+
+
+def test_an_answer_range_that_keeps_failing_loses_its_claim_but_not_the_graph() -> None:
+    wrong = _range_json(lower_inclusive=False)
+
+    result = _generator(FakeClient(wrong, wrong)).generate(RANGE_DRAFT)
+
+    assert result.attempts == 2
+    # The graph's probes are what the dialogue uses; the refuted answer is the
+    # part that must not be treated as checked.
+    assert result.graph.claim is None
+    assert "claim_dropped_refuted" in result.repairs
+    assert result.verification is not None
+    assert result.verification.status == "fail"
+    assert result.verification.counterexample is not None
+    assert "no_claim" in result.notes
+    assert "claim" not in to_payload(result.graph)
+
+
+def test_a_malformed_claim_is_retried_with_a_syntax_hint() -> None:
+    client = FakeClient(
+        _range_json(lower_inclusive=True, expression="exp(x) - b*x"),
+        _range_json(lower_inclusive=True),
+    )
+
+    result = _generator(client).generate(RANGE_DRAFT)
+
+    assert result.attempts == 2
+    assert "verification_malformed" in client.calls[1].user
+
+
+def test_the_claim_is_serialised_and_conforms_to_the_spec() -> None:
+    result = _generator(FakeClient(_range_json(lower_inclusive=True))).generate(RANGE_DRAFT)
+
+    payload = to_payload(result.graph)
+
+    assert payload["claim"] == {
+        "kind": "parameter_range",
+        "parameter": "a",
+        "variable": "x",
+        "variable_domain": "(-inf,+inf)",
+        "constraint": {"expression": "exp(x) - a*x", "relation": ">="},
+        "answer": [
+            {
+                "lower": "0",
+                "upper": "E",
+                "lower_inclusive": True,
+                "upper_inclusive": True,
+            }
+        ],
+    }
+    assert validate_payload(payload) == ()
+
+
+def test_a_top_level_probe_list_is_rejected_with_a_placement_hint() -> None:
+    # graph-v3 regression: the model flattened probes out of the nodes, so no
+    # probe had an owner. The retry must say which field is wrong.
+    flattened = copy.deepcopy(_VALID)
+    probes = [probe for node in flattened["nodes"] for probe in node.pop("probes", [])]
+    flattened["probes"] = probes
+
+    client = FakeClient(json.dumps(flattened, ensure_ascii=False), VALID)
+
+    result = _generator(client).generate(DRAFT)
+
+    assert result.attempts == 2
+    assert "probes_top_level" in client.calls[1].user
+    assert len(result.graph.probes()) == 2
+
+
+def test_a_claim_that_is_not_an_object_is_rejected() -> None:
+    payload = copy.deepcopy(_VALID)
+    payload["claim"] = "a∈[0,e]"
+
+    with pytest.raises(GraphBuildFailed) as info:
+        _generator(FakeClient(json.dumps(payload), json.dumps(payload))).generate(RANGE_DRAFT)
+
+    assert info.value.reason == "schema_invalid"
+    assert "claim" in info.value.detail
+
+
+def test_an_interval_without_endpoints_is_rejected() -> None:
+    payload = _range_payload({"lower": "0", "lower_inclusive": True})
+    bad = json.dumps(payload, ensure_ascii=False)
+
+    with pytest.raises(GraphBuildFailed) as info:
+        _generator(FakeClient(bad, bad)).generate(RANGE_DRAFT)
+
+    assert info.value.reason == "schema_invalid"
+    assert "claim.answer[0].upper" in info.value.detail

@@ -29,6 +29,9 @@ class AuditEntry:
     baseline: str = ""
     candidate: str = ""
     graph_fingerprint: str = ""
+    # M2.5 S5: "pass" | "fail" | "unknown" for the graph's claim, "" when the
+    # call produced no graph (or the build had no verifier wired).
+    verification_status: str = ""
 
     def as_dict(self) -> dict[str, object]:
         return asdict(self)

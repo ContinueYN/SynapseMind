@@ -28,3 +28,18 @@ python scripts/checks/check_repo.py
 解法图生成物是例外：`infrastructure/llm/graph.py` 在运行时用 `jsonschema` 直接加载本目录的 `solution-graph.schema.json` 做严格校验（M2.5 S4）。契约只有这一份，代码不另抄一套字段。
 
 `solution-graph.schema.json` 的 `probe.evidence` 是可选字段：生成图必须为每个选项给出 log-odds 权重（结构规则强制），手写种子图可省略并从 `EVIDENCE` 取权重；字段形状在 schema 里约束，跨字段一致性（选项覆盖、targets 对应、每个 target 至少被使用一次）在 `domain/problem/graph_structure.py` 里校验（M2.5 S5）。
+
+图顶层的 `claim` 也是可选字段（M2.5 S5），把答案写成机器可证伪的形式：
+
+```json
+"claim": {
+  "kind": "parameter_range",
+  "parameter": "a",
+  "variable": "x",
+  "variable_domain": "(0,+inf)",
+  "constraint": {"expression": "log(x) - a*x", "relation": "<="},
+  "answer": [{"lower": "1/E", "upper": null, "lower_inclusive": true, "upper_inclusive": false}]
+}
+```
+
+含义是 `∀x∈variable_domain: expression <relation> 0 ⇔ parameter ∈ answer`；`answer` 的端点是 SymPy 表达式字符串，`null` 表示无穷，多个区间即并集。v1 只支持这一种形状（参数区间）；求一个值、解集、证明题没有 `claim`，验证结果为 `unknown`，不算失败。`kind`/`relation` 不在支持范围内时，结构规则会丢弃 claim 并记一条修复（`claim_dropped_unsupported`），图仍然可用。校验与反例由 `infrastructure/verification/` 执行（`pass|fail|unknown`）：`fail` 会带具体反例让建图器重试一次，仍失败则丢弃 claim（`claim_dropped_refuted`）、保留图，反例留在 `GraphBuildResult.verification` 里。

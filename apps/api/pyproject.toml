@@ -49,6 +49,12 @@ warn_unused_ignores = true
 mypy_path = "src"
 files = ["src"]
 
+# SymPy ships no py.typed or stubs; the verifier isolates every SymPy call
+# behind float-typed helpers, so the untyped surface is one module.
+[[tool.mypy.overrides]]
+module = ["sympy", "sympy.*"]
+ignore_missing_imports = true
+
 [tool.importlinter]
 root_packages = ["synapse"]
 

@@ -9,7 +9,13 @@ from synapse.domain.problem.graph_structure import (
     quality_notes,
     review,
 )
-from synapse.domain.problem.models import Probe, SolutionGraph, SolutionNode
+from synapse.domain.problem.models import (
+    Interval,
+    Probe,
+    SolutionGraph,
+    SolutionNode,
+    VerificationClaim,
+)
 
 TARGETS = frozenset({"H_L1", "H_L2", "H_L4"})
 
@@ -495,4 +501,84 @@ def test_quality_notes_are_advisory() -> None:
         (("n1", "n2"), ("n2", "n3")),
     )
 
-    assert quality_notes(graph) == ("no_check_node", "few_probes")
+    assert quality_notes(graph) == ("no_check_node", "few_probes", "no_claim")
+
+
+def _claim(**overrides: object) -> VerificationClaim:
+    values: dict[str, object] = {
+        "kind": "parameter_range",
+        "parameter": "a",
+        "variable": "x",
+        "variable_domain": "(0,+inf)",
+        "expression": "log(x) - a*x",
+        "relation": "<=",
+        "intervals": (Interval(lower="1/E", upper=None, lower_inclusive=True),),
+    }
+    values.update(overrides)
+    return VerificationClaim(**values)  # type: ignore[arg-type]
+
+
+def test_a_claim_survives_review_unchanged() -> None:
+    graph = replace(_clean_graph(), claim=_claim())
+
+    check = review(graph, allowed_targets=TARGETS)
+
+    assert check.ok
+    assert check.repairs == ()
+    assert check.graph.claim == graph.claim
+
+
+def test_claim_whitespace_is_trimmed_and_reported() -> None:
+    graph = replace(
+        _clean_graph(),
+        claim=_claim(expression="  log(x) - a*x  ", variable_domain=" (0,+inf) "),
+    )
+
+    check = review(graph, allowed_targets=TARGETS)
+
+    assert check.ok
+    assert check.repairs == ("claim_trimmed",)
+    assert check.graph.claim is not None
+    assert check.graph.claim.expression == "log(x) - a*x"
+
+
+def test_parameter_and_variable_must_differ() -> None:
+    # Same letter on both sides of the quantifier is a shape error, not a typo;
+    # the claim is dropped and the graph survives.
+    graph = replace(_clean_graph(), claim=_claim(parameter="x", expression="log(x) - x*x"))
+
+    check = review(graph, allowed_targets=TARGETS)
+
+    assert check.ok
+    assert check.graph.claim is None
+    assert "claim_dropped_unsupported" in check.repairs
+
+
+def test_an_unsupported_relation_drops_the_claim_instead_of_the_graph() -> None:
+    # "f(x)=0 有两个零点" is a real question but not a parameter-range claim;
+    # the graph stays usable, the answer simply stays unverified.
+    graph = replace(_clean_graph(), claim=_claim(relation="="))
+
+    check = review(graph, allowed_targets=TARGETS)
+
+    assert check.ok
+    assert check.graph.claim is None
+    assert "claim_dropped_unsupported" in check.repairs
+    assert "no_claim" in quality_notes(check.graph)
+
+
+def test_an_unsupported_claim_kind_is_dropped() -> None:
+    graph = replace(_clean_graph(), claim=_claim(kind="solution_set"))
+
+    check = review(graph, allowed_targets=TARGETS)
+
+    assert check.ok
+    assert check.graph.claim is None
+    assert "claim_dropped_unsupported" in check.repairs
+
+
+def test_a_missing_claim_is_only_a_quality_note() -> None:
+    check = review(_clean_graph(), allowed_targets=TARGETS)
+
+    assert check.ok
+    assert "no_claim" in quality_notes(check.graph)

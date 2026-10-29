@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from synapse.domain.problem.models import (
+    Interval,
     Probe,
     Problem,
     SolutionGraph,
     SolutionNode,
+    VerificationClaim,
 )
 
 SAMPLE_PROBLEM_ID = "P_FUNC_001"
@@ -18,6 +20,20 @@ SAMPLE_SOLUTION = (
     "分 a≤0 与 a>0：a≤0 时 f(x)→+∞，不满足，排除；"
     "a>0 时 f'(x)=1/x-a，最大值 f(1/a)=-ln a-1≤0，得 a≥1/e。"
     "所以 a∈[1/e,+∞)。"
+)
+
+# The formalised answer (M2.5 S5). Same sentence as ``SAMPLE_ANSWER``, written
+# so a machine can refute it: "∀x>0: ln x − a x ≤ 0 ⇔ a ∈ [1/e, +∞)".
+# ``tests/test_seed_math.py`` checks the mathematics with SymPy directly and
+# ``tests/test_verification.py`` checks that this block verifies.
+SAMPLE_CLAIM = VerificationClaim(
+    kind="parameter_range",
+    parameter="a",
+    variable="x",
+    variable_domain="(0,+inf)",
+    expression="log(x) - a*x",
+    relation="<=",
+    intervals=(Interval(lower="1/E", upper=None, lower_inclusive=True, upper_inclusive=False),),
 )
 
 SAMPLE_PROBLEM = Problem(
@@ -122,5 +138,6 @@ SAMPLE_PROBLEM = Problem(
             ("n4", "n6"),
             ("n5", "n6"),
         ),
+        claim=SAMPLE_CLAIM,
     ),
 )

@@ -26,7 +26,13 @@ from collections import deque
 from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass, replace
 
-from synapse.domain.problem.models import Probe, SolutionGraph, SolutionNode
+from synapse.domain.problem.models import (
+    Interval,
+    Probe,
+    SolutionGraph,
+    SolutionNode,
+    VerificationClaim,
+)
 
 NODE_TYPES = (
     "READ",
@@ -53,6 +59,12 @@ HINT_LEVELS = (0, 1, 2, 3)
 OPTION_LETTERS = "ABCD"
 EVIDENCE_MIN = -1.0
 EVIDENCE_MAX = 1.0
+CLAIM_KINDS = ("parameter_range",)
+CLAIM_RELATIONS = ("<=", ">=", "<", ">")
+MAX_CLAIM_INTERVALS = 6
+MAX_CLAIM_EXPRESSION = 200
+MAX_CLAIM_ENDPOINT = 40
+MAX_CLAIM_DOMAIN = 60
 
 FINGERPRINT_LENGTH = 16
 
@@ -162,12 +174,17 @@ def review(
     if total_probes == 0:
         issues.append("no_probes: 解法图至少要有一个探针")
 
+    claim = _repair_claim(graph.claim, codes) if graph.claim is not None else None
+    if claim is not None:
+        issues.extend(_claim_issues(claim))
+
     repaired = SolutionGraph(
         problem_id=graph.problem_id,
         version=graph.version,
         stem=stem,
         nodes=nodes,
         edges=edges,
+        claim=claim,
     )
     return GraphCheck(graph=repaired, repairs=tuple(sorted(codes)), issues=tuple(issues))
 
@@ -179,6 +196,10 @@ def quality_notes(graph: SolutionGraph) -> tuple[str, ...]:
         notes.append("no_check_node")
     if len(graph.probes()) < 2:
         notes.append("few_probes")
+    if graph.claim is None:
+        # Not a defect: many answers are a value or a solution set, which v1
+        # cannot formalise. It is the coverage number the S5 report tracks.
+        notes.append("no_claim")
     return tuple(notes)
 
 
@@ -364,6 +385,93 @@ def _probe_evidence_issues(probe: Probe, *, require_evidence: bool) -> list[str]
         any(weight > 0 for weight in all_weights) and any(weight < 0 for weight in all_weights)
     ):
         issues.append(f"probe_evidence_no_contrast: {probe.id} 的权重没有正负对比，无法区分假设")
+    return issues
+
+
+def _repair_claim(claim: VerificationClaim, codes: set[str]) -> VerificationClaim | None:
+    """Trim and truncate, or drop a claim whose *shape* v1 cannot read.
+
+    Dropping is deliberate: a model that formalises "f(x)=0 有两个零点" as a
+    ``=`` constraint is not making a false statement about a parameter range,
+    it is stating something outside the verified shape. The graph stays usable
+    and the answer is reported as unverified (``unknown``), which is honest.
+    A claim that *is* in shape but unreadable (bad expression, empty endpoint)
+    is different — that is an issue, not a drop.
+    """
+    if claim.kind not in CLAIM_KINDS or claim.relation not in CLAIM_RELATIONS:
+        codes.add("claim_dropped_unsupported")
+        return None
+    if claim.parameter == claim.variable:
+        # A quantifier variable and the parameter being solved for cannot be
+        # the same letter; the model misunderstood the shape, so drop it rather
+        # than burn a retry on it.
+        codes.add("claim_dropped_unsupported")
+        return None
+
+    expression = claim.expression.strip()
+    trimmed = expression != claim.expression
+    if len(expression) > MAX_CLAIM_EXPRESSION:
+        expression = expression[:MAX_CLAIM_EXPRESSION]
+        codes.add("claim_expression_truncated")
+
+    domain = claim.variable_domain.strip()
+    trimmed = trimmed or domain != claim.variable_domain
+    if len(domain) > MAX_CLAIM_DOMAIN:
+        domain = domain[:MAX_CLAIM_DOMAIN]
+        codes.add("claim_domain_truncated")
+
+    if len(claim.intervals) > MAX_CLAIM_INTERVALS:
+        codes.add("claim_answer_truncated")
+    intervals = tuple(
+        _repair_interval(interval, codes) for interval in claim.intervals[:MAX_CLAIM_INTERVALS]
+    )
+    if any(
+        repaired != original for repaired, original in zip(intervals, claim.intervals, strict=False)
+    ):
+        trimmed = True
+
+    if trimmed:
+        codes.add("claim_trimmed")
+    return replace(claim, expression=expression, variable_domain=domain, intervals=intervals)
+
+
+def _repair_interval(interval: Interval, codes: set[str]) -> Interval:
+    return replace(
+        interval,
+        lower=_trim_endpoint(interval.lower, codes),
+        upper=_trim_endpoint(interval.upper, codes),
+    )
+
+
+def _trim_endpoint(value: str | None, codes: set[str]) -> str | None:
+    """Whitespace and length only; an empty endpoint is an issue, not a repair."""
+    if value is None:
+        return None
+    trimmed = value.strip()
+    if len(trimmed) > MAX_CLAIM_ENDPOINT:
+        trimmed = trimmed[:MAX_CLAIM_ENDPOINT]
+        codes.add("claim_endpoint_truncated")
+    return trimmed
+
+
+def _claim_issues(claim: VerificationClaim) -> list[str]:
+    """Cross-field rules the JSON schema cannot express.
+
+    Endpoint *values* are not parsed here on purpose: that needs SymPy, and a
+    domain module must not import a CAS. An endpoint that does not parse is
+    reported by the verifier as a malformed claim, which is retried once with
+    the parse error as feedback and then dropped.
+    """
+    issues: list[str] = []
+    if not claim.expression:
+        issues.append("claim_expression_empty: claim 缺少约束表达式")
+    if not claim.intervals:
+        issues.append("claim_answer_empty: claim 没有给出答案区间")
+    for index, interval in enumerate(claim.intervals, start=1):
+        if interval.lower is not None and not interval.lower:
+            issues.append(f"claim_endpoint_empty: 第 {index} 个区间的下端点为空")
+        if interval.upper is not None and not interval.upper:
+            issues.append(f"claim_endpoint_empty: 第 {index} 个区间的上端点为空")
     return issues
 
 
