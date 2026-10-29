@@ -188,6 +188,9 @@ Nginx（SSE 关闭缓冲、限流、超时）
 | [解法图契约](specs/solution-graph.schema.json) | 节点类型、七维需求、探针 |
 | [答案泄漏守卫](apps/api/src/synapse/domain/guard/leak.py) | 禁用词 + 5-gram 出口检测 |
 | [后验与决策](apps/api/src/synapse/domain/diagnosis/hypotheses.py) | log-odds 累加、阈值守卫 |
+| [M2 交付计划](docs/design/chapters/12-M2交付计划.md) | 追问交给 LLM 后的边界、退出条件与验收 |
+| [学科插件与可扩展](docs/design/chapters/13-学科插件与可扩展架构.md) | 从一道题到任意题：可验证性三档与插件接口 |
+| [开发交接](AGENTS.md) | 当前实现边界、下一步、环境陷阱 |
 
 ---
 
