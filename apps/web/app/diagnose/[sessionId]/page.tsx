@@ -5,6 +5,8 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { DiagnosisCardView } from "@/components/DiagnosisCardView";
+import { GlassCard } from "@/components/GlassCard";
+import { LiquidVessel } from "@/components/LiquidVessel";
 import { ProbeCard } from "@/components/ProbeCard";
 import { ProgressRail } from "@/components/ProgressRail";
 import { Transcript } from "@/components/Transcript";
@@ -34,27 +36,11 @@ export default function DiagnosePage() {
     };
   }, [sessionId]);
 
-  async function answer(optionId: string, optionText: string) {
+  async function send(answer: string, optionId: string) {
     setBusy(true);
     setError(null);
     try {
-      setSession(
-        await submitTurn(sessionId, { answer: optionText, option_id: optionId }),
-      );
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "提交失败，请重试。");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function unknown() {
-    setBusy(true);
-    setError(null);
-    try {
-      setSession(
-        await submitTurn(sessionId, { answer: "不会", option_id: "unknown" }),
-      );
+      setSession(await submitTurn(sessionId, { answer, option_id: optionId }));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "提交失败，请重试。");
     } finally {
@@ -76,70 +62,100 @@ export default function DiagnosePage() {
 
   if (error && !session) {
     return (
-      <section className="state-panel">
-        <h1>会话没打开</h1>
-        <p>{error}</p>
-        <Link className="primary-link" href="/">
-          回到交题页
-        </Link>
+      <section className="sm-state">
+        <p className="sm-kicker">会话没打开</p>
+        <h1 className="sm-h1">{error}</h1>
+        <p className="sm-p">诊断服务可能在 8000 端口没起来。</p>
+        <div className="sm-card-acts">
+          <Link className="sm-act" href="/">
+            回到交题页
+            <span aria-hidden="true" className="sm-ar">
+              →
+            </span>
+          </Link>
+        </div>
       </section>
     );
   }
 
   if (!session) {
     return (
-      <section className="state-panel">
-        <p className="eyebrow">正在恢复会话</p>
-        <h1>先看一下你刚才写到哪。</h1>
+      <section className="sm-state">
+        <p className="sm-kicker">正在恢复会话</p>
+        <h1 className="sm-h1">先看一下你刚才写到哪。</h1>
       </section>
     );
   }
 
-  return (
-    <div className="diagnose-layout">
-      <div className="diagnose-main">
-        <div className="session-meta">
-          <span>{session.problem_title}</span>
-          <span className="muted">{session.session_id}</span>
-        </div>
-        <ProgressRail
-          turn={session.turn}
-          maxTurns={session.max_turns}
-          confidence={session.progress.confidence}
-          topHypothesis={session.progress.top_hypothesis}
-        />
+  const located = Boolean(session.diagnosis);
 
-        {session.diagnosis ? (
-          <DiagnosisCardView card={session.diagnosis.card} sessionId={sessionId} />
-        ) : session.prompt ? (
-          <ProbeCard
-            busy={busy}
-            onExit={leave}
-            onSelect={answer}
-            onUnknown={unknown}
-            probe={session.prompt}
-          />
-        ) : (
-          <section className="state-panel">
-            <p className="eyebrow">本轮结束</p>
-            <h1>{session.notice ?? "先停在这里。"}</h1>
-            <p>
-              没有足够证据时，系统不硬判卡点。你可以回到交题页，补一步更具体的过程。
-            </p>
-            <Link className="primary-link" href="/">
-              重新交一道题
-            </Link>
-          </section>
-        )}
-        {error && session ? <p className="inline-error">{error}</p> : null}
+  return (
+    <div>
+      <div className="sm-screenbar">
+        <span>{located ? "屏 03" : "屏 02"}</span>
+        <b>{located ? "定位 · 处置" : "拆题 · 追问"}</b>
+        <i>{session.problem_title}</i>
       </div>
-      <aside className="diagnose-aside">
-        <Transcript items={session.history ?? []} />
-        <section className="principle-card">
-          <p className="eyebrow">这一轮的原则</p>
-          <p>一次只问一个可回答的问题；不重复问；前 3 轮不给最终答案。</p>
-        </section>
-      </aside>
+
+      <div className="sm-work">
+        <aside className="sm-work-side">
+          <LiquidVessel maxTurns={session.max_turns} turn={session.turn} />
+          <div>
+            <p className="sm-lab">诊断进度</p>
+            <p className="sm-turn">
+              {session.turn}
+              <small>/ {session.max_turns} 轮</small>
+            </p>
+            <div style={{ marginTop: 14 }}>
+              <ProgressRail state={session.state} />
+            </div>
+          </div>
+        </aside>
+
+        <div className="sm-work-main">
+          <Transcript items={session.history ?? []} />
+
+          {session.diagnosis ? (
+            <DiagnosisCardView card={session.diagnosis.card} sessionId={sessionId} />
+          ) : session.prompt ? (
+            <GlassCard>
+              <ProbeCard
+                busy={busy}
+                onExit={leave}
+                onSelect={send}
+                onUnknown={() => send("不会", "unknown")}
+                probe={session.prompt}
+              />
+            </GlassCard>
+          ) : (
+            <GlassCard>
+              <p className="sm-kicker">本轮结束</p>
+              <h2 className="sm-h2">{session.notice ?? "先停在这里。"}</h2>
+              <p className="sm-p">
+                没有足够证据时，系统不硬判卡点。回交题页补一步更具体的过程，会让定位更准。
+              </p>
+              <div className="sm-card-acts">
+                <Link className="sm-act" href="/">
+                  重新交一道题
+                  <span aria-hidden="true" className="sm-ar">
+                    →
+                  </span>
+                </Link>
+              </div>
+            </GlassCard>
+          )}
+
+          {error && session ? (
+            <p className="sm-alert" role="alert" style={{ marginTop: 16 }}>
+              {error}
+            </p>
+          ) : null}
+        </div>
+      </div>
+
+      <p className="sm-fine">
+        这一轮的原则：一次只问一个可回答的问题；不重复问；前 3 轮不给最终答案。
+      </p>
     </div>
   );
 }
