@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import GradientText from "@/components/reactbits/GradientText";
-import SpotlightCard from "@/components/reactbits/SpotlightCard";
+import { GlassCard, shineGlass } from "@/components/GlassCard";
 import type { DiagnosisCard } from "@/src/lib/api/types";
 
 interface DiagnosisCardViewProps {
@@ -25,86 +24,86 @@ export function DiagnosisCardView({
   showCardLink = true,
 }: DiagnosisCardViewProps) {
   const [disagreed, setDisagreed] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  const minutes = card.next_action.duration_min ?? 3;
+  const dueHours = card.verify?.due_hours ?? 24;
+  const excluded = card.excluded ?? [];
+  const confidence = Math.round((card.confidence ?? 0) * 100);
+
+  /* 卡一出现，一块玻璃被光扫过——这是"定位到了"的仪式感 */
+  useEffect(() => {
+    const el = wrapRef.current?.querySelector<HTMLElement>(".sm-glass");
+    if (el) shineGlass(el);
+  }, [card.node_id]);
 
   return (
-    <SpotlightCard
-      aria-label="卡点卡"
-      className="diagnosis-card"
-      intensity={0.18}
-      role="article"
-      spotlightColor="rgba(94, 234, 212, 0.55)"
-      spotlightSize={520}
-      theme="dark"
-    >
-      <header className="diagnosis-head">
-        <p className="eyebrow">卡点卡 · {card.layer}</p>
-        <h1>
-          <GradientText
-            animationSpeed={11}
-            colors={["#f8fafc", "#a5b4fc", "#5eead4"]}
-            direction="horizontal"
-            variant="linear"
-          >
-            {card.label}
-          </GradientText>
-        </h1>
-        <p className="diagnosis-line">{card.one_line}</p>
-        <div className="badge-row">
-          <span className={`confidence-badge ${card.confidence_label}`}>
-            {CONFIDENCE_LABEL[card.confidence_label]} {Math.round(card.confidence * 100)}%
+    <div ref={wrapRef}>
+      <GlassCard>
+        <p className="sm-verdict-lab">
+          卡点 · {CONFIDENCE_LABEL[card.confidence_label]} · {card.layer}
+          <span className="sm-meter" title={`置信度 ${confidence}%`}>
+            <i style={{ width: `${Math.min(100, Math.max(6, confidence))}%` }} />
           </span>
-          <span className="soft-badge">对应节点 {card.node_id}</span>
-        </div>
-      </header>
-
-      <section className="card-section" aria-labelledby="evidence-title">
-        <div className="section-label">
-          <h2 id="evidence-title">证据</h2>
-          <span>{card.evidence.length} 条</span>
-        </div>
-        <ul>
-          {card.evidence.map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ul>
-      </section>
-
-      <section className="card-section" aria-labelledby="excluded-title">
-        <div className="section-label">
-          <h2 id="excluded-title">已排除</h2>
-          <span>not this</span>
-        </div>
-        <ul>
-          {(card.excluded ?? []).map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ul>
-      </section>
-
-      <section className="next-action">
-        <p className="eyebrow">
-          下一步 · {card.next_action.duration_min ?? 3} 分钟
         </p>
-        <h2>{card.next_action.type === "micro_lesson" ? "只讲一个点" : "再补一个例子"}</h2>
-        <p>
-          先补“{card.label}”对应的最小动作，再做一道同构题；24 小时后用新题验证，
-          而不是马上刷更多同类题。
-        </p>
-        <div className="next-actions">
+
+        <h2 className="sm-h2">{card.label}</h2>
+        <p className="sm-vsub">{card.one_line}</p>
+
+        <dl className="sm-rows">
+          {card.evidence.map((item, index) => (
+            <div className="sm-row" key={item}>
+              <dt>{String(index + 1).padStart(2, "0")}</dt>
+              <dd>{item}</dd>
+            </div>
+          ))}
+        </dl>
+
+        <p className="sm-fine">每条依据都来自你自己的原话或原步骤，不改写、不推断。</p>
+
+        {excluded.length > 0 ? (
+          <p className="sm-excl">
+            <b>已排除</b>　{excluded.join(" · ")}
+          </p>
+        ) : null}
+
+        <div className="sm-act3">
+          <div>
+            <div className="sm-ch">即刻 · {minutes} 分钟</div>
+            <p>只补「{card.label}」对应的最小动作，不重做整道题。</p>
+          </div>
+          <div>
+            <div className="sm-ch">同构题 · 1 道</div>
+            <p>
+              {card.next_action.type === "micro_lesson"
+                ? "换一道同结构题，只写关键几步，不必算完。"
+                : "再补一个同类型的例子，只写关键几步。"}
+            </p>
+          </div>
+          <div>
+            <div className="sm-ch">验证 · {dueHours} 小时后</div>
+            <p>一道新题，检查这个动作有没有变成习惯。不刷同类题。</p>
+          </div>
+        </div>
+
+        <div className="sm-card-acts">
           {showCardLink ? (
-            <Link className="primary-link" href={`/card/${sessionId}`}>
-              打开完整卡点卡 <span aria-hidden="true">↗</span>
+            <Link className="sm-act" href={`/card/${sessionId}`}>
+              打开完整卡点卡
+              <span aria-hidden="true" className="sm-ar">
+                →
+              </span>
             </Link>
           ) : null}
-          <button
-            className="text-button quiet"
-            onClick={() => setDisagreed(true)}
-            type="button"
-          >
+          <button className="sm-bail" onClick={() => setDisagreed(true)} type="button">
             {disagreed ? "已记录，等待复核" : "我不同意这个判断"}
           </button>
         </div>
-      </section>
-    </SpotlightCard>
+
+        <p className="sm-fine">
+          本记录仅用于教学定位：不产出能力分数，不做智力或医学评估，不给提分承诺。
+        </p>
+      </GlassCard>
+    </div>
   );
 }

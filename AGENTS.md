@@ -141,7 +141,7 @@ python tools/merge_markdown.py
 README.md                    对外：架构（无进度）
 AGENTS.md                    对内：本文件
 docs/adr/                    决策记录（改选条件）
-docs/design/chapters/        设计书正文 00–13 + 附录（会被合并成 DOCX/PDF）
+docs/design/chapters/        设计书正文 00–14 + 附录（会被合并成 DOCX/PDF）
 docs/design/plan/            本地详尽计划（未入库）
 docs/design/release/         构建产物（未入库，需重建）
 specs/                       机器可验证契约（JSON Schema + 状态机）

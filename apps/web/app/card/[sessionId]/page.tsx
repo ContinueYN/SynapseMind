@@ -24,47 +24,71 @@ export default function CardPage() {
 
   if (error) {
     return (
-      <section className="state-panel">
-        <h1>卡点卡没打开</h1>
-        <p>{error}</p>
-        <Link className="primary-link" href="/">
-          回到交题页
-        </Link>
+      <section className="sm-state">
+        <p className="sm-kicker">卡点卡没打开</p>
+        <h1 className="sm-h1">{error}</h1>
+        <div className="sm-card-acts">
+          <Link className="sm-act" href="/">
+            回到交题页
+            <span aria-hidden="true" className="sm-ar">
+              →
+            </span>
+          </Link>
+        </div>
       </section>
     );
   }
 
   if (!session) {
     return (
-      <section className="state-panel">
-        <p className="eyebrow">正在读取</p>
-        <h1>把证据整理成一张卡。</h1>
+      <section className="sm-state">
+        <p className="sm-kicker">正在读取</p>
+        <h1 className="sm-h1">把证据整理成一张卡。</h1>
       </section>
     );
   }
 
   if (!session.diagnosis) {
     return (
-      <section className="state-panel">
-        <h1>这次还没有卡点卡。</h1>
-        <p>{session.notice ?? "追问还没收敛；先回到对话继续，或补一步过程。"}</p>
-        <Link className="primary-link" href={`/diagnose/${sessionId}`}>
-          回到对话
-        </Link>
+      <section className="sm-state">
+        <p className="sm-kicker">还没有卡点卡</p>
+        <h1 className="sm-h1">这次还没收敛到一处。</h1>
+        <p className="sm-p">
+          {session.notice ?? "追问还没收敛；先回到对话继续，或补一步过程。"}
+        </p>
+        <div className="sm-card-acts">
+          <Link className="sm-act" href={`/diagnose/${sessionId}`}>
+            回到对话
+            <span aria-hidden="true" className="sm-ar">
+              →
+            </span>
+          </Link>
+        </div>
       </section>
     );
   }
 
   return (
-    <div className="card-page">
-      <Link className="back-link" href={`/diagnose/${sessionId}`}>
-        ← 回到对话
-      </Link>
-      <DiagnosisCardView
-        card={session.diagnosis.card}
-        sessionId={sessionId}
-        showCardLink={false}
-      />
+    <div>
+      <div className="sm-screenbar">
+        <span>屏 03</span>
+        <b>卡点卡</b>
+        <i>{session.problem_title}</i>
+      </div>
+
+      <div style={{ marginTop: 18 }}>
+        <Link className="sm-bail" href={`/diagnose/${sessionId}`}>
+          ← 回到对话
+        </Link>
+      </div>
+
+      <div className="sm-band">
+        <DiagnosisCardView
+          card={session.diagnosis.card}
+          sessionId={sessionId}
+          showCardLink={false}
+        />
+      </div>
     </div>
   );
 }

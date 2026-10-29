@@ -3,44 +3,16 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { GlassCard } from "@/components/GlassCard";
 import { ProblemForm } from "@/components/ProblemForm";
-import GradientText from "@/components/reactbits/GradientText";
-import SpotlightCard from "@/components/reactbits/SpotlightCard";
 import { createSession } from "@/src/lib/api/client";
 import type { CreateSessionInput } from "@/src/lib/api/types";
 
-const STEPS = [
-  {
-    number: "01",
-    title: "拆题",
-    text: "把题目拆成读题、概念、条件、策略、执行、校验。",
-    color: "rgba(94, 234, 212, 0.6)",
-  },
-  {
-    number: "02",
-    title: "对齐",
-    text: "把你的过程贴到解法图上，找第一处偏离。",
-    color: "rgba(129, 140, 248, 0.6)",
-  },
-  {
-    number: "03",
-    title: "追问",
-    text: "一次只问一个可回答的问题，用反例和边界逼出真实理解。",
-    color: "rgba(251, 191, 36, 0.55)",
-  },
-  {
-    number: "04",
-    title: "定位",
-    text: "给一张带证据的卡点卡，不是成绩单。",
-    color: "rgba(244, 114, 182, 0.55)",
-  },
-];
-
-const TRACE = [
-  ["读题", "题目：f(x)=ln x - ax，a∈R", "done"],
-  ["条件转译", "对所有 x>0 成立 → 最大值 ≤ 0", "done"],
-  ["参数分类", "a>0 走完，a≤0 没有单独检查", "open"],
-  ["校验", "回代边界 a=0", "waiting"],
+const LOOP = [
+  ["交题", "题目、答案、过程。写不到最后也没关系，卡住的那一行最有用。"],
+  ["拆题", "把这题拆成读题、求导、分情况、收尾四步，只给路径，不给答案。"],
+  ["追问", "一次只问一个能回答的问题，2–6 轮，问到的是你自己的话。"],
+  ["定位", "一句话说清断在哪一步，附上证据和已经排除掉的可能。"],
 ] as const;
 
 export default function HomePage() {
@@ -62,97 +34,38 @@ export default function HomePage() {
   }
 
   return (
-    <div className="home-page">
-      <section className="home-grid">
-        <div className="home-intro">
-          <p className="eyebrow">
-            <span className="pulse-dot" aria-hidden="true" />
-            单题诊断 · 不是题库
-          </p>
-
-          <h1 className="hero-title">
-            答案对错不重要，
-            <br />
-            <GradientText
-              animationSpeed={7}
-              colors={["#5eead4", "#a5b4fc", "#f0abfc"]}
-              direction="horizontal"
-              glow={0.35}
-              variant="flow"
-            >
-              你卡在哪一步才重要。
-            </GradientText>
-          </h1>
-
-          <p className="lede">
-            交一道你不会或做错的题，加上你的答案和过程。系统用 2–6 轮追问，
-            找到最早断掉的认知动作，给一张卡点卡。
-          </p>
-
-          <div className="hero-stats" aria-label="诊断概览">
-            <div>
-              <strong>2–6</strong>
-              <span>轮追问</span>
-            </div>
-            <div>
-              <strong>1</strong>
-              <span>张卡点卡</span>
-            </div>
-            <div>
-              <strong>3 min</strong>
-              <span>最小干预</span>
-            </div>
-          </div>
-
-          <div className="trace-preview" aria-label="诊断轨迹示例">
-            <div className="trace-header">
-              <span>诊断轨迹</span>
-              <span className="trace-live">
-                <span className="pulse-dot" aria-hidden="true" />
-                find the first break
-              </span>
-            </div>
-            <ol>
-              {TRACE.map(([title, detail, status], index) => (
-                <li className={`trace-step ${status}`} key={title}>
-                  <span className="trace-index">{String(index + 1).padStart(2, "0")}</span>
-                  <div>
-                    <strong>{title}</strong>
-                    <span>{detail}</span>
-                  </div>
-                  <span className="trace-status">{status === "open" ? "待验证" : ""}</span>
-                </li>
-              ))}
-            </ol>
-          </div>
-        </div>
-
-        <ProblemForm busy={busy} error={error} onSubmit={start} />
+    <div>
+      <section className="sm-hero">
+        <p className="sm-eyebrow">单题诊断 · 学习模式</p>
+        <h1 className="sm-h1">
+          把题给我，<span className="sm-glaze">写到哪算哪</span>。
+        </h1>
+        <p className="sm-lede">
+          不用写完整。写到卡住的那一行停下就行——那个位置比答案有用。
+        </p>
       </section>
 
-      <section className="process-section" id="how-it-works">
-        <div className="section-heading">
-          <p className="eyebrow">HOW IT WORKS</p>
-          <h2>把“不会”拆成可验证的动作。</h2>
-          <p>不急着讲答案；先找到你从哪一步开始偏离。</p>
-        </div>
+      <div className="sm-panel">
+        <GlassCard>
+          <ProblemForm busy={busy} error={error} onSubmit={start} />
+        </GlassCard>
+      </div>
 
-        <div className="step-grid">
-          {STEPS.map((step) => (
-            <SpotlightCard
-              className="step-card"
-              intensity={0.18}
-              key={step.number}
-              spotlightColor={step.color}
-              spotlightSize={280}
-              theme="dark"
-            >
-              <span className="step-number">{step.number}</span>
-              <h3>{step.title}</h3>
-              <p>{step.text}</p>
-            </SpotlightCard>
+      <section className="sm-band">
+        <h2 className="sm-h2">四段，走完一轮</h2>
+        <div className="sm-cols" data-cols="4">
+          {LOOP.map(([title, text], index) => (
+            <div className="sm-col" key={title}>
+              <div className="sm-ch">
+                {String(index + 1).padStart(2, "0")} · {title}
+              </div>
+              <p>{text}</p>
+            </div>
           ))}
         </div>
+        <p className="sm-fine">
+          前 3 轮不给最终答案。每轮都有一个「我还是不懂」，可以往下退一级提示，而不是卡住。
+        </p>
       </section>
     </div>
   );
