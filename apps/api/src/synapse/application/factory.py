@@ -7,11 +7,13 @@ alignment strategy. The service never constructs a session by hand.
 from __future__ import annotations
 
 from synapse.application.commands import StartSessionCommand
+from synapse.application.errors import ProblemNotSupported, UnsupportedMode
 from synapse.application.ports import (
     Clock,
     IdGenerator,
     ProblemRepository,
 )
+from synapse.application.problem_resolver import ProblemResolver
 from synapse.application.subject import SubjectRegistry
 from synapse.domain.diagnosis.hypotheses import (
     EvidenceWeights,
@@ -36,13 +38,7 @@ _ALIGNMENT_SUPPORT = {
     "n6": ("H_L2",),
 }
 
-
-class ProblemNotSupported(ValueError):
-    """The M1 seed set has no matching problem."""
-
-
-class UnsupportedMode(ValueError):
-    """Only learning mode is available in the walking skeleton."""
+__all__ = ["ProblemNotSupported", "SessionFactory", "UnsupportedMode"]
 
 
 class SessionFactory:
@@ -54,12 +50,17 @@ class SessionFactory:
         clock: Clock,
         *,
         subjects: SubjectRegistry | None = None,
+        resolver: ProblemResolver | None = None,
     ) -> None:
         self._problems = problems
         self._aligner = aligner
         self._ids = ids
         self._clock = clock
         self._subjects = subjects
+        # Without an explicit resolver the factory still serves the annotated
+        # catalog and refuses everything else — generation needs a store to
+        # keep the new problem and a plugin that can build graphs.
+        self._resolver = resolver or ProblemResolver(problems, subjects)
 
     def _evidence_for(self, subject: str, graph: SolutionGraph) -> EvidenceWeights | None:
         """Ask the subject plugin for its evidence model; ``None`` = M1 default.
@@ -79,16 +80,7 @@ class SessionFactory:
         if command.mode != "learning":
             raise UnsupportedMode(command.mode)
 
-        problem = self._problems.find_for(command.problem_text)
-        if problem is None:
-            raise ProblemNotSupported(
-                "could not identify this problem; only the sample problem "
-                "(function and derivative) is annotated"
-            )
-        if command.subject is not None and command.subject != problem.subject:
-            # A declared subject we cannot serve is an explicit boundary, not a
-            # silently ignored field (M2.5 S1 widened the enum; S6 adds physics).
-            raise ProblemNotSupported(f"subject {command.subject!r} has no annotated problem yet")
+        problem = self._resolver.resolve(command.problem_text, command.subject)
 
         attempt = StudentAttempt(
             answer=command.answer,

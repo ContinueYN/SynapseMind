@@ -29,12 +29,14 @@ from synapse.application.composer import (
     ShadowProbeComposer,
 )
 from synapse.application.factory import SessionFactory
+from synapse.application.graph import GraphGenerator
 from synapse.application.llm import LLMClient
 from synapse.application.planner import HypothesisTargetedPlanner
 from synapse.application.ports import AnswerStore, ProblemRepository, SessionRepository
+from synapse.application.problem_resolver import ProblemResolver
 from synapse.application.service import SessionService
 from synapse.application.subject import SubjectRegistry
-from synapse.domain.problem.alignment import RuleBasedAligner
+from synapse.domain.problem.alignment import CompositeAligner, RuleBasedAligner, TypeCueAligner
 from synapse.infrastructure.guards import AnswerStoreLeakGuardFactory
 from synapse.infrastructure.in_memory import (
     InMemoryAnswerStore,
@@ -44,7 +46,9 @@ from synapse.infrastructure.in_memory import (
 from synapse.infrastructure.llm.audit import JsonlCallAuditor
 from synapse.infrastructure.llm.client import OpenAICompatibleClient
 from synapse.infrastructure.llm.composer import LLMProbeComposer
+from synapse.infrastructure.llm.graph import LLMGraphGenerator
 from synapse.infrastructure.llm.settings import LLMSettings
+from synapse.infrastructure.subjects.math import MathPlugin
 from synapse.infrastructure.system import SystemClock, UuidSessionIdGenerator
 
 
@@ -63,17 +67,31 @@ def build_container(
     *,
     llm_client: LLMClient | None = None,
     auditor: CallAuditor | None = None,
+    generator: GraphGenerator | None = None,
 ) -> Container:
     resolved = settings or LLMSettings.from_env()
     sessions = InMemorySessionRepository()
     problems = InMemoryProblemRepository()
     answers = InMemoryAnswerStore()
+    sink = auditor or JsonlCallAuditor(Path(resolved.audit_path))
+    graph_generator = generator or build_graph_generator(resolved, client=llm_client, auditor=sink)
+    # The plugin owns the generator; the repository owns the store, so a
+    # generated problem can be served again on later turns (M2.5 S5 ②).
+    problems.set_plugins(
+        SubjectRegistry((MathPlugin(problems.catalog, generator=graph_generator),))
+    )
+    aligner = CompositeAligner(
+        annotated=RuleBasedAligner(),
+        generated=TypeCueAligner(),
+        annotated_ids=problems.annotated_ids,
+    )
     factory = SessionFactory(
         problems=problems,
-        aligner=RuleBasedAligner(),
+        aligner=aligner,
         ids=UuidSessionIdGenerator(),
         clock=SystemClock(),
         subjects=problems.plugins,
+        resolver=ProblemResolver(problems, problems.plugins, store=problems),
     )
     planner = HypothesisTargetedPlanner()
     composer = LeakSafeProbeComposer(
@@ -94,6 +112,27 @@ def build_container(
         service=service,
         settings=resolved,
         subjects=problems.plugins,
+    )
+
+
+def build_graph_generator(
+    settings: LLMSettings,
+    *,
+    client: LLMClient | None = None,
+    auditor: CallAuditor | None = None,
+) -> GraphGenerator | None:
+    """Graph generation is only wired when the model path is actually serving.
+
+    ``off`` keeps the M1 behaviour (annotated catalog only, 422 otherwise) and
+    ``shadow`` must not change what the student sees, so neither generates.
+    """
+
+    if not settings.llm_enabled or settings.mode == "shadow":
+        return None
+    return LLMGraphGenerator(
+        client or OpenAICompatibleClient(settings),
+        settings=settings,
+        auditor=auditor,
     )
 
 

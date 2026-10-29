@@ -62,7 +62,7 @@ def test_a_different_math_problem_is_refused_end_to_end(
     )
 
     assert response.status_code == 422
-    assert "could not identify" in response.json()["detail"]
+    assert "没有标注解法图" in response.json()["detail"]
 
 
 def test_graph_probes_and_evidence_come_from_the_seed() -> None:

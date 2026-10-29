@@ -7,7 +7,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from synapse.api.deps import build_container
+from synapse.api.deps import Container, build_container
 from synapse.api.routes import router
 
 
@@ -19,13 +19,15 @@ def _web_origins() -> list[str]:
     return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
 
-def create_app() -> FastAPI:
+def create_app(container: Container | None = None) -> FastAPI:
     app = FastAPI(
         title="SynapseMind API",
         version="0.1.0",
         description="单题诊断引导：状态机、探针、卡点卡。学习模式不返回答案。",
     )
-    app.state.container = build_container()
+    # The composition root is injectable so tests can swap one adapter (a fake
+    # graph generator, a stub LLM client) without patching globals.
+    app.state.container = container or build_container()
     app.add_middleware(
         CORSMiddleware,
         allow_origins=_web_origins(),

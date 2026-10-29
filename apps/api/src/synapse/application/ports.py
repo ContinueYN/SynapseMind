@@ -27,6 +27,12 @@ class ProblemRepository(Protocol):
     def find_for(self, text: str) -> Problem | None: ...
 
 
+class MutableProblemRepository(ProblemRepository, Protocol):
+    """A catalog that also accepts a problem generated on demand (M2.5 S5 ②)."""
+
+    def add(self, problem: Problem) -> None: ...
+
+
 class AnswerStore(Protocol):
     """Physically separate from the prompt builder.
 

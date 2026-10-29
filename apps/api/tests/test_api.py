@@ -114,4 +114,4 @@ def test_unsupported_problem_is_not_silently_remapped(client: TestClient) -> Non
         },
     )
     assert response.status_code == 422
-    assert "could not identify" in response.json()["detail"]
+    assert "没有标注解法图" in response.json()["detail"]
