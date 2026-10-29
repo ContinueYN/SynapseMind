@@ -113,7 +113,7 @@ python tools/merge_markdown.py
 | Git 远端走 HTTPS + GCM | SSH 22/443 均不通；`git push` 无需交互 |
 | `seed.py` 只有一道题 | 换题 422 是刻意边界，扩题属 M2.5 |
 | `lint-imports.exe` 静默 exit 1 | venv 里没有 editable 安装的 `synapse`，先 `$env:PYTHONPATH="src"`（或 `pip install -e .`）再跑；契约通过时应打印「Contracts: 1 kept」 |
-| `eval/` 整体在 `.gitignore` | golden 数据必须 `git add -f eval/golden/golden-v0.1.jsonl`，否则新克隆/CI 没有 case（`eval/golden/README.md` 被跟踪是历史遗留）；`eval/reports/` 是产物，不入库 |
+| 根目录 `eval/` 在 `.gitignore` | 只忽略**根目录**的私有评测材料；`scripts/eval/` 是工具、必须入库（早先写成不带锚点的 `eval/`，把 `m2_exit.py` 一起吞了）。golden 数据仍需 `git add -f eval/golden/golden-v0.1.jsonl`，`eval/reports/` 是产物不入库 |
 | CI 跑 `ruff format --check` | 只跑 `ruff check` 会在 CI 挂（format 与 check 是两套规则）；写完先 `ruff format src tests`。文件末尾缺换行也算未格式化 |
 
 ---
