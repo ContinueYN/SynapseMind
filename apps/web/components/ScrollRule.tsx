@@ -3,9 +3,11 @@
 import { useEffect } from "react";
 
 /**
- * 页面顶端那根 1px 的阅读线。
+ * 页面顶端那根 1px 的阅读线 + 全站唯一的滚动量。
  *
- * 整页是一张纸，滚到哪儿就画到哪儿——它替代了“进度条”，也替代了装饰性的渐变。
+ * `--read`：读到整页的百分之几（顶部液面的宽度）；
+ * `--scroll`：滚了多少 px，背景的几层光按不同的系数用它做景深错位。
+ * 一个监听器管两件事，滚动里只写 CSS 变量，不触发重渲染。
  */
 export function ScrollRule() {
   useEffect(() => {
@@ -15,8 +17,10 @@ export function ScrollRule() {
     function update() {
       frame = 0;
       const max = root.scrollHeight - window.innerHeight;
-      const progress = max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
+      const y = window.scrollY;
+      const progress = max > 0 ? Math.min(1, Math.max(0, y / max)) : 0;
       root.style.setProperty("--read", `${(progress * 100).toFixed(2)}%`);
+      root.style.setProperty("--scroll", `${Math.round(y)}`);
     }
 
     function schedule() {
@@ -32,6 +36,7 @@ export function ScrollRule() {
       window.removeEventListener("scroll", schedule);
       window.removeEventListener("resize", schedule);
       root.style.removeProperty("--read");
+      root.style.removeProperty("--scroll");
     };
   }, []);
 

@@ -1,11 +1,15 @@
 /**
- * 树突：一句话的进度语法。
+ * 进度柱：一句话的进度语法。
  *
- * 交题页用它数“手上有几条线索”，诊断页用它记“问到第几层”。
- * 同一形状在两处出现，用户不用重新学一遍——这是“连续”的来源，不是装饰。
+ * 交题页用它数"手上有几条线索"，诊断页用它记"问到第几层"。
+ * 同一形状在两处出现，用户不用重新学一遍——这是"连续"的来源，不是装饰。
  *
- * 坐标全部由序号算出，没有随机数：服务端渲染和客户端必须画出同一条线。
+ * 画法：一根玻璃管 + 液面。走过的部分被蓝填满，液面停在当前这一格；
+ * 节点是一颗玻璃珠，不是折线——上一版的曲线与"卡点"三根短须在 22px 宽里
+ * 糊成一团（用户原话：卡点线不好看），所以这版只用两种东西：一根管、几颗珠。
  */
+
+import type { CSSProperties } from "react";
 
 export type DendriteState = "done" | "active" | "todo" | "stuck";
 
@@ -14,7 +18,7 @@ export interface DendriteStop {
   label: string;
   detail?: string;
   state: DendriteState;
-  /** 提示轮：路径退回一级，枝干向左让一下 */
+  /** 提示轮：路径退回一级，标签前加一个"退"字 */
   hint?: boolean;
   /** 指针停在别处的某一行上：这一格跟着亮 */
   hot?: boolean;
@@ -24,86 +28,48 @@ interface DendriteProps {
   stops: DendriteStop[];
   /** 相邻两点的纵向间距 */
   step?: number;
-  pad?: number;
 }
 
-const SPINE_X = 24;
-
-function xAt(index: number, hint: boolean) {
-  if (hint) return 10;
-  return SPINE_X + (index % 2 === 0 ? -3 : 3);
+/** 液面停在"你正在这一格"：优先 active/stuck，否则停在最后一个已完成的格子 */
+function fillIndex(stops: DendriteStop[]) {
+  const current = stops.findIndex((stop) => stop.state === "active" || stop.state === "stuck");
+  if (current >= 0) return current;
+  let last = -1;
+  stops.forEach((stop, index) => {
+    if (stop.state === "done") last = index;
+  });
+  return Math.max(0, last);
 }
 
-function segment(x0: number, y0: number, x1: number, y1: number, bend: boolean) {
-  const mid = (y0 + y1) / 2;
-  const bow = bend ? -14 : 0;
-  return `M${x0} ${y0} C${x0 + bow} ${mid} ${x1} ${mid} ${x1} ${y1}`;
-}
-
-export function Dendrite({ stops, step = 58, pad = 14 }: DendriteProps) {
+export function Dendrite({ stops, step = 58 }: DendriteProps) {
   if (stops.length === 0) return null;
 
-  const height = pad * 2 + (stops.length - 1) * step;
-  const ys = stops.map((_, index) => pad + index * step);
-  const xs = stops.map((stop, index) => xAt(index, Boolean(stop.hint)));
+  const ratio = stops.length > 1 ? fillIndex(stops) / (stops.length - 1) : 1;
+  const fill = `${Math.round(ratio * 100)}%`;
 
   return (
-    <div className="sm-dendrite" style={{ height }}>
-      <svg
-        aria-hidden="true"
-        height={height}
-        preserveAspectRatio="none"
-        viewBox={`0 0 44 ${height}`}
-        width={44}
-      >
-        {stops.slice(1).map((stop, index) => {
-          const from = index;
-          const to = index + 1;
-          return (
-            <path
-              className="sm-d-seg"
-              d={segment(xs[from], ys[from], xs[to], ys[to], Boolean(stop.hint))}
-              data-state={stop.state}
-              key={`seg-${stop.id}`}
-            />
-          );
-        })}
+    <div className="sm-col" style={{ "--col-fill": fill, "--col-step": `${step}px` } as CSSProperties}>
+      <span aria-hidden="true" className="sm-col-tube">
+        <i />
+      </span>
 
-        {stops.map((stop, index) => (
-          <g
-            className="sm-d-node"
-            data-hot={stop.hot ? "true" : undefined}
-            data-state={stop.state}
-            key={stop.id}
-            transform={`translate(${xs[index]} ${ys[index]})`}
-          >
-            {stop.state === "active" || stop.state === "stuck" ? (
-              <circle className="sm-d-halo" r={stop.state === "stuck" ? 11 : 9} />
-            ) : null}
-            <circle className="sm-d-dot" r={stop.state === "stuck" ? 4.4 : 3.4} />
-            {stop.state === "stuck" ? (
-              <g className="sm-d-spur">
-                <path d="M2 -8 L8 -13" />
-                <path d="M4 2 L10 5" />
-                <path d="M-3 -8 L-8 -11" />
-              </g>
-            ) : null}
-          </g>
-        ))}
-      </svg>
-
-      <ol className="sm-d-labels">
-        {stops.map((stop, index) => (
+      <ol className="sm-col-rows">
+        {stops.map((stop) => (
           <li
             aria-current={stop.state === "active" ? "step" : undefined}
-            className="sm-d-label"
+            className="sm-col-row"
             data-hot={stop.hot ? "true" : undefined}
             data-state={stop.state}
             key={stop.id}
-            style={{ top: ys[index] }}
           >
-            <b>{stop.label}</b>
-            {stop.detail ? <small>{stop.detail}</small> : null}
+            <span aria-hidden="true" className="sm-col-bead" />
+            <span className="sm-col-txt">
+              <b>
+                {stop.hint ? <em className="sm-col-hint">退</em> : null}
+                {stop.label}
+              </b>
+              {stop.detail ? <small>{stop.detail}</small> : null}
+            </span>
           </li>
         ))}
       </ol>

@@ -15,7 +15,7 @@ export function TopBar() {
     <div className="sm-top-meta">
       <span className="sm-mode">
         <span aria-hidden="true" className="sm-dot" />
-        学习模式 · 不给最终答案
+        学习模式
       </span>
 
       {onHome ? null : (

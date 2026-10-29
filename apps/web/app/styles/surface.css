@@ -1,12 +1,17 @@
-/* 琉璃 · 浅蓝 · 液态白 —— 材质、排版与交互的唯一实现。
+/* 琉璃 · 浅蓝 · 液态白 —— v5「层次」
  *
- * 一池白里透蓝的光。三条不变量：
- * 1) 底色几乎白（最深只到 #DCEAFB），蓝从低处和角落里渗出来；
- * 2) 玻璃靠"边缘 + 落影 + 玻璃里慢慢走的一团光"读出来，不靠压暗背景；
- * 3) 动效只有两种：跟手的（光、倾斜）和交代变化的（液面、键帽、错位入场）。
+ * 四层材质，从上到下：
+ *   chip   玻璃键（标签页签、选项、按钮）—— 最薄、最白、抬 1px
+ *   tile   玻璃砖（步、条目、问答行）—— 嵌在板上，抬 2px
+ *   plane  玻璃板（每段文字都坐在上面）—— 抬 6px，半透，能看见底下的光
+ *   ground 底（白 → 浅蓝的光池）—— 有景深，随滚动轻微错位
  *
- * 版面是**一整条流**：没有色带、没有分栏细线、没有卡片阵列；
- * 段落之间只用留白、一个 11px 的小标签、一条会跟着悬停填满的液面轨道。
+ * 三条不变量：
+ * 1) 文字永远不直接压在底上：最小的一层也是 tile；
+ * 2) 玻璃靠"更蓝的板 + 白色镜面高光 + 有厚度的内壁 + 一圈更亮的边"读出来，
+ *    不靠压暗背景；透明度留够，能看见底下的光在动；
+ * 3) 动效只有两种：跟手的（光、倾斜）和交代变化的（液面、键帽、错层入场）。
+ *    所有变化都走 240–780ms 的缓出，没有硬切、没有回弹过冲。
  */
 
 *,
@@ -67,10 +72,13 @@ svg {
   inset: 0;
   z-index: -1;
   overflow: hidden;
+  /* 四段光：顶上一团白、右上一点白、底部一池蓝、整页一条竖渐变。
+     蓝集中在下半页和左下角——板子浮在浓一点的地方，边缘才看得出来。 */
   background:
-    radial-gradient(46% 34% at 18% 2%, #ffffff 0%, rgba(255, 255, 255, 0) 74%),
-    radial-gradient(42% 32% at 86% -4%, #ffffff 0%, rgba(255, 255, 255, 0) 72%),
-    linear-gradient(178deg, #ffffff 0%, #f6fbff 26%, #e9f3fe 62%, #dceafb 100%);
+    radial-gradient(52% 38% at 10% -2%, #ffffff 0%, rgba(255, 255, 255, 0) 70%),
+    radial-gradient(44% 34% at 90% -8%, #ffffff 0%, rgba(255, 255, 255, 0) 68%),
+    radial-gradient(88% 48% at 44% 114%, rgba(178, 210, 248, 0.92) 0%, rgba(178, 210, 248, 0) 74%),
+    linear-gradient(176deg, #ffffff 0%, #f5fbff 18%, #e8f2fe 52%, #d2e4fa 100%);
 }
 
 /* 水光：三团很慢的浅色，像水面反到天花板上 */
@@ -79,11 +87,13 @@ svg {
   position: absolute;
   inset: -12%;
   background:
-    radial-gradient(34% 22% at 24% 16%, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0) 72%),
-    radial-gradient(28% 18% at 76% 40%, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0) 74%),
-    radial-gradient(32% 20% at 44% 76%, rgba(214, 233, 253, 0.55) 0%, rgba(214, 233, 253, 0) 72%);
+    radial-gradient(34% 22% at 24% 16%, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 72%),
+    radial-gradient(28% 18% at 76% 40%, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0) 74%),
+    radial-gradient(32% 20% at 44% 76%, rgba(206, 230, 253, 0.62) 0%, rgba(206, 230, 253, 0) 72%);
   filter: blur(30px);
   animation: sm-caustic 38s ease-in-out infinite alternate;
+  /* 景深：滚动时这一层比底色慢 5%，页面的"厚度"从这里开始 */
+  translate: calc(var(--gx, 0) * 9px) calc(var(--scroll, 0) * 0.05px + var(--gy, 0) * 9px);
   pointer-events: none;
 }
 
@@ -102,8 +112,9 @@ svg {
     rgba(176, 209, 247, 0) 66%
   );
   filter: blur(44px);
-  opacity: 0.55;
+  opacity: 0.6;
   animation: sm-orbit 120s linear infinite;
+  translate: calc(var(--gx, 0) * 6px) calc(var(--scroll, 0) * 0.02px + var(--gy, 0) * 6px);
   pointer-events: none;
 }
 
@@ -126,37 +137,41 @@ svg {
   position: absolute;
   border-radius: 50%;
   filter: blur(72px);
-  will-change: transform;
+  will-change: transform, translate;
 }
 
+/* 三团光斑各有一个景深：滚动时上移的量不同，页面的前后就分开了 */
 .sm-blob-1 {
-  top: -20vw;
-  left: -12vw;
-  width: 52vw;
-  height: 52vw;
+  top: -22vw;
+  left: -14vw;
+  width: 56vw;
+  height: 56vw;
   background: radial-gradient(circle at 36% 34%, #ffffff 0%, rgba(255, 255, 255, 0) 66%);
-  opacity: 0.9;
+  opacity: 0.95;
   animation: sm-drift-a 96s ease-in-out infinite alternate;
+  translate: calc(var(--gx, 0) * 20px) calc(var(--scroll, 0) * 0.03px + var(--gy, 0) * 20px);
 }
 
 .sm-blob-2 {
-  top: 10vw;
-  right: -18vw;
-  width: 54vw;
-  height: 54vw;
-  background: radial-gradient(circle at 50% 50%, #dcecff 0%, rgba(220, 236, 255, 0) 64%);
-  opacity: 0.8;
+  top: 4vw;
+  right: -20vw;
+  width: 60vw;
+  height: 60vw;
+  background: radial-gradient(circle at 50% 50%, #cfe5ff 0%, rgba(207, 229, 255, 0) 64%);
+  opacity: 0.85;
   animation: sm-drift-b 124s ease-in-out infinite alternate;
+  translate: calc(var(--gx, 0) * 28px) calc(var(--scroll, 0) * -0.06px + var(--gy, 0) * 28px);
 }
 
 .sm-blob-3 {
-  bottom: -22vw;
-  left: 16vw;
-  width: 60vw;
-  height: 60vw;
-  background: radial-gradient(circle at 50% 50%, #c9e0fa 0%, rgba(201, 224, 250, 0) 62%);
-  opacity: 0.6;
+  bottom: -24vw;
+  left: 10vw;
+  width: 66vw;
+  height: 66vw;
+  background: radial-gradient(circle at 50% 50%, #b9d7f8 0%, rgba(185, 215, 248, 0) 62%);
+  opacity: 0.72;
   animation: sm-drift-c 150s ease-in-out infinite alternate;
+  translate: calc(var(--gx, 0) * 36px) calc(var(--scroll, 0) * 0.085px + var(--gy, 0) * 36px);
 }
 
 @keyframes sm-drift-a {
@@ -186,25 +201,166 @@ svg {
   }
 }
 
+/* 一条横着走的蓝光带：52s 一趟，整页的光会慢慢从左上挪到右下 */
+.sm-bg-veil {
+  position: absolute;
+  inset: -28% -12%;
+  background: linear-gradient(
+    102deg,
+    rgba(190, 220, 252, 0) 10%,
+    rgba(190, 220, 252, 0.4) 32%,
+    rgba(255, 255, 255, 0.46) 50%,
+    rgba(190, 220, 252, 0.28) 68%,
+    rgba(190, 220, 252, 0) 88%
+  );
+  filter: blur(48px);
+  opacity: 0.55;
+  animation: sm-veil 52s ease-in-out infinite alternate;
+  translate: calc(var(--gx, 0) * 13px) calc(var(--scroll, 0) * 0.09px + var(--gy, 0) * 13px);
+  pointer-events: none;
+}
+
+@keyframes sm-veil {
+  from {
+    transform: translate3d(-4%, 0, 0) rotate(-2.5deg);
+  }
+  to {
+    transform: translate3d(6%, 0, 0) rotate(2.5deg);
+  }
+}
+
+/* 页底一池光：板子的落影落在这一层上，玻璃才有"浮着"的重量 */
+.sm-bg-floor {
+  position: absolute;
+  left: -12%;
+  right: -12%;
+  bottom: -24%;
+  height: 62%;
+  background: radial-gradient(
+    52% 62% at 50% 76%,
+    rgba(146, 190, 242, 0.5) 0%,
+    rgba(146, 190, 242, 0) 72%
+  );
+  filter: blur(44px);
+  opacity: 0.9;
+  animation: sm-floor 24s ease-in-out infinite alternate;
+  translate: calc(var(--gx, 0) * 7px) calc(var(--scroll, 0) * -0.02px + var(--gy, 0) * 7px);
+  pointer-events: none;
+}
+
+@keyframes sm-floor {
+  from {
+    transform: scale(0.98);
+    opacity: 0.78;
+  }
+  to {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+}
+
+/* 极淡的颗粒：把"网页渐变"压成"一面"，玻璃表面也就有了摩擦感 */
+.sm-bg-grain {
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.86' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23g)' opacity='0.05'/%3E%3C/svg%3E");
+  opacity: 0.7;
+  pointer-events: none;
+}
+
 /* ───────────────────────── 玻璃 ───────────────────────── */
 
+/* 一块玻璃 = 更蓝的板 + 白色镜面高光 + 有厚度的内壁 + 一圈更亮的边。
+   四层材质共用这套底子，只有半径、抬升、模糊不同。 */
+.sm-plane,
 .sm-sheet,
-.sm-probe {
+.sm-probe,
+.sm-tile {
   position: relative;
-  overflow: hidden;
+  isolation: isolate;
   border: 1px solid var(--glass-edge);
   border-right-color: rgba(255, 255, 255, 0.72);
   border-bottom-color: var(--glass-edge-cool);
-  border-radius: var(--r-3);
-  background: var(--glass);
-  box-shadow: var(--lift), var(--glass-hi), var(--glass-refract);
-  -webkit-backdrop-filter: blur(var(--blur)) saturate(160%) brightness(1.02);
-  backdrop-filter: blur(var(--blur)) saturate(160%) brightness(1.02);
-  transform: perspective(1500px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+  /* 身体是蓝的（底色），白色靠渐变与高光叠上去 */
+  background-color: var(--glass-tint);
+  background-image: var(--glass-plane);
+  box-shadow:
+    var(--lift-plane),
+    var(--glass-rim),
+    var(--glass-rim-lo),
+    var(--glass-wall);
+}
+
+/* plane：段落玻璃板——文字的家。半透、不做重模糊，底下的光能透上来 */
+.sm-plane {
+  border-radius: var(--r-4);
+}
+
+/* sheet：抬高一层的那块（交题板 / 追问卡 / 卡点卡） */
+.sm-sheet,
+.sm-probe {
+  overflow: hidden;
+  border-radius: var(--r-4);
+  background-image: var(--glass-sheet);
+  box-shadow:
+    var(--lift-sheet),
+    var(--glass-rim),
+    var(--glass-rim-lo),
+    var(--glass-wall);
+  -webkit-backdrop-filter: blur(var(--blur-sheet)) saturate(170%) brightness(1.03);
+  backdrop-filter: blur(var(--blur-sheet)) saturate(170%) brightness(1.03);
+  transform: perspective(1600px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
   transform-style: preserve-3d;
   transition:
-    transform var(--t-tilt) var(--ease-out),
-    box-shadow var(--t-base) var(--ease-out);
+    box-shadow var(--t-slow) var(--ease-glide),
+    border-color var(--t-base) linear;
+}
+
+/* tile：嵌在板上的玻璃砖——步、条目、问答行 */
+.sm-tile {
+  border-radius: var(--r-3);
+  background-image: var(--glass-tile);
+  box-shadow: var(--lift-tile), var(--glass-rim), var(--glass-rim-lo);
+  transition:
+    transform var(--t-base) var(--ease-glide),
+    box-shadow var(--t-base) var(--ease-glide),
+    border-color var(--t-base) linear,
+    background var(--t-base) linear;
+}
+
+/* chip：玻璃键——标签页签、选项、小按钮 */
+.sm-chip {
+  position: relative;
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-pill);
+  background: var(--glass-chip);
+  box-shadow: var(--lift-chip), var(--glass-rim);
+}
+
+/* 裁切层：玻璃里的光只在这块圆角里跑；板块本身不裁，标签页签才能探出边 */
+.sm-glass-clip {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* 板底下的一滩光：玻璃"浮起来"靠它，不靠加深底色 */
+.sm-plane-glow {
+  position: absolute;
+  inset: -8% -6% -14%;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(
+    56% 54% at 46% 62%,
+    rgba(146, 190, 242, 0.5) 0%,
+    rgba(146, 190, 242, 0) 72%
+  );
+  filter: blur(36px);
+  animation: sm-bed 18s ease-in-out infinite alternate;
+  pointer-events: none;
 }
 
 /* 玻璃里慢慢走的光：三层，速度不同，所以看着像液体里的折射，而不是一盏灯 */
@@ -284,7 +440,46 @@ svg {
   }
 }
 
+/* 一道斜着掠过的镜面光：26s 一趟。玻璃"在反光"最直接的证据 */
+.sm-glass-clip::after {
+  content: "";
+  position: absolute;
+  top: -60%;
+  left: -70%;
+  width: 54%;
+  height: 220%;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.72) 44%,
+    rgba(255, 255, 255, 0.22) 62%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  filter: blur(14px);
+  transform: translate3d(-40%, 0, 0) rotate(16deg);
+  animation: sm-streak 26s var(--ease-out) infinite;
+  pointer-events: none;
+}
+
+@keyframes sm-streak {
+  0% {
+    transform: translate3d(-40%, 0, 0) rotate(16deg);
+    opacity: 0;
+  }
+  6% {
+    opacity: 0.85;
+  }
+  38% {
+    opacity: 0;
+  }
+  100% {
+    transform: translate3d(330%, 0, 0) rotate(16deg);
+    opacity: 0;
+  }
+}
+
 /* 边框冷光：1px，跟着指针 */
+.sm-plane::before,
 .sm-sheet::before,
 .sm-probe::before {
   content: "";
@@ -294,9 +489,9 @@ svg {
   border-radius: inherit;
   padding: 1px;
   background: radial-gradient(
-    260px 260px at var(--mx, 50%) var(--my, -6%),
+    320px 320px at var(--mx, 50%) var(--my, -6%),
     rgba(255, 255, 255, 1) 0%,
-    rgba(255, 255, 255, 0.55) 40%,
+    rgba(255, 255, 255, 0.6) 38%,
     rgba(255, 255, 255, 0) 70%
   );
   -webkit-mask:
@@ -310,29 +505,39 @@ svg {
   pointer-events: none;
 }
 
-/* 表面：跟手的柔光 + 5.5% 颗粒 */
+/* 表面：跟手的柔光 + 颗粒。压在内容下面（z-index:-1），文字永远在它上面 */
+.sm-plane::after,
 .sm-sheet::after,
-.sm-probe::after {
+.sm-probe::after,
+.sm-tile::after {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: -1;
   border-radius: inherit;
   background-image:
     radial-gradient(
-      340px 280px at var(--lx, 26%) var(--ly, -4%),
-      rgba(255, 255, 255, 0.7) 0%,
-      rgba(255, 255, 255, 0.3) 32%,
+      380px 320px at var(--lx, 26%) var(--ly, -4%),
+      rgba(255, 255, 255, 0.78) 0%,
+      rgba(255, 255, 255, 0.32) 32%,
       rgba(255, 255, 255, 0) 66%
     ),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.055'/%3E%3C/svg%3E");
   pointer-events: none;
 }
 
-.sm-sheet-in {
+.sm-sheet-in,
+.sm-plane-in {
   position: relative;
   z-index: 1;
+}
+
+.sm-sheet-in {
   padding: var(--s5);
+}
+
+.sm-plane-in {
+  padding: var(--s7) var(--s6) calc(var(--s6) + var(--s2));
 }
 
 .sm-sheet-in-flush {
@@ -358,11 +563,18 @@ svg {
   position: sticky;
   top: 0;
   z-index: 30;
-  background: rgba(255, 255, 255, 0.52);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.9);
-  box-shadow: 0 10px 24px -26px rgba(46, 92, 158, 0.55);
-  -webkit-backdrop-filter: blur(20px) saturate(170%);
-  backdrop-filter: blur(20px) saturate(170%);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.84) 0%,
+    rgba(240, 248, 255, 0.64) 100%
+  );
+  border-bottom: 1px solid rgba(255, 255, 255, 0.92);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 0 rgba(63, 134, 224, 0.14),
+    0 18px 34px -30px rgba(30, 72, 132, 0.7);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  backdrop-filter: blur(22px) saturate(180%);
 }
 
 .sm-top-in {
@@ -516,17 +728,73 @@ svg {
 }
 
 .sm-page {
-  animation: sm-page-in var(--t-slow) var(--ease-out) both;
+  animation: sm-page-in var(--t-rise) var(--ease-glide) both;
 }
 
 @keyframes sm-page-in {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    translate: 0 14px;
+    filter: blur(4px);
+  }
+}
+
+/* ───────────────────────── 换页：一层水往下淌 ─────────────────────────
+ * 换页时先盖一层薄玻璃，再让它往下淌走——新页面从顶部被"揭开"。
+ * 只跑一次，不挡点击，跑完即隐藏。
+ */
+
+.sm-transit {
+  position: fixed;
+  inset: -1px 0 0;
+  z-index: 90;
+  pointer-events: none;
+  background:
+    radial-gradient(58% 40% at 22% 8%, #ffffff 0%, rgba(255, 255, 255, 0) 72%),
+    radial-gradient(60% 46% at 84% 96%, rgba(150, 190, 240, 0.5) 0%, rgba(150, 190, 240, 0) 70%),
+    linear-gradient(180deg, #f8fcff 0%, #e9f3fe 54%, #d8e8fc 100%);
+  /* 前缘：一道白线与一层很软的阴影，像水面推过去 */
+  box-shadow:
+    inset 0 -1px 0 rgba(255, 255, 255, 0.96),
+    inset 0 -12px 24px -18px rgba(31, 63, 107, 0.34),
+    0 26px 48px -26px rgba(31, 63, 107, 0.34);
+  animation: sm-transit 660ms var(--ease-glide) 60ms both;
+}
+
+/* 前缘上的一道斜光：让它看起来是"液体"而不是"纸片" */
+.sm-transit::after {
+  content: "";
+  position: absolute;
+  left: -10%;
+  right: -10%;
+  bottom: 0;
+  height: 42px;
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.85) 38%,
+    rgba(255, 255, 255, 0) 78%
+  );
+  mask-image: linear-gradient(180deg, transparent, #000 70%);
+  transform: translateX(-18%);
+  animation: sm-transit-sheen 660ms var(--ease-glide) 60ms both;
+}
+
+@keyframes sm-transit {
+  from {
+    transform: translateY(0);
   }
   to {
-    opacity: 1;
-    transform: none;
+    transform: translateY(101%);
+  }
+}
+
+@keyframes sm-transit-sheen {
+  from {
+    transform: translateX(-18%);
+  }
+  to {
+    transform: translateX(38%);
   }
 }
 
@@ -627,6 +895,15 @@ svg {
   letter-spacing: 0.2em;
 }
 
+/* 状态页/卡点页的那行小字：不是标题，是这一屏在干什么 */
+.sm-kicker {
+  margin: 0 0 var(--s3);
+  color: var(--azure-ink);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+}
+
 .sm-fine {
   max-width: 40em;
   margin: var(--s5) 0 0;
@@ -646,27 +923,58 @@ svg {
   color: var(--ink-3);
 }
 
-/* 一个段落的小标签：一个序号 + 一行小字 + 一条 2px 液面。不画线、不围框 */
+/* 段落标签：一片玻璃页签。放进玻璃板时探出板的上缘，像贴在玻璃边上的标签 */
 .sm-label {
   display: inline-flex;
-  justify-self: start;
-  align-items: baseline;
-  gap: 11px;
-  margin: 0 0 var(--s4);
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 var(--s5);
+  padding: 7px 16px 7px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.99);
+  border-bottom-color: rgba(140, 181, 232, 0.58);
+  border-radius: var(--r-pill);
+  background: var(--glass-chip);
+  box-shadow:
+    var(--lift-chip),
+    var(--glass-rim),
+    inset 0 -1px 0 rgba(108, 158, 222, 0.38);
   color: var(--azure-ink);
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.22em;
+  transition:
+    transform var(--t-base) var(--ease-glide),
+    box-shadow var(--t-base) var(--ease-glide),
+    border-color var(--t-base) linear;
+}
+
+/* 探出板边：页签一半压在玻璃上、一半悬空——深度就从这条边读出来 */
+.sm-plane .sm-label {
+  position: absolute;
+  top: 0;
+  left: 32px;
+  z-index: 3;
+  margin: 0;
+  transform: translateY(-54%);
+}
+
+.sm-plane .sm-label:hover {
+  transform: translateY(-62%);
+  box-shadow:
+    var(--lift-chip),
+    var(--glass-rim),
+    inset 0 -1px 0 rgba(108, 158, 222, 0.5),
+    0 10px 20px -12px rgba(30, 72, 132, 0.45);
 }
 
 .sm-label em {
   color: var(--azure);
-  font-size: 13px;
+  font-size: 12.5px;
   font-style: normal;
   font-weight: 600;
   letter-spacing: 0.04em;
   font-variant-numeric: tabular-nums;
-  opacity: 0.72;
+  opacity: 0.8;
 }
 
 .sm-label::before {
@@ -674,7 +982,7 @@ svg {
   width: 18px;
   height: 2px;
   border-radius: var(--r-pill);
-  background: linear-gradient(90deg, #a8cdf5, #4a8ce0);
+  background: linear-gradient(90deg, var(--azure-lite), var(--azure));
   flex: none;
   align-self: center;
 }
@@ -691,27 +999,45 @@ svg {
   text-wrap: pretty;
 }
 
-/* ───────────────────────── 首页：一条流 ───────────────────────── */
+/* ───────────────────────── 首页：四块玻璃，一条流 ───────────────────────── */
 
 .sm-hero {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 424px;
-  gap: 84px;
-  align-items: start;
-  padding-top: 10px;
+  grid-template-columns: minmax(0, 1fr) 418px;
+  gap: 44px;
+  /* 两块板一样高：右边交题板写长了，左边字标板跟着长，而不是把版面拉斜 */
+  align-items: stretch;
+  padding-top: 6px;
 }
 
+/* 左栏是一块玻璃板：字标不再直接压在底上 */
 .sm-hero-lead {
   position: relative;
+  display: flex;
   min-width: 0;
 }
 
+.sm-hero-lead > .sm-plane {
+  flex: 1;
+}
+
+.sm-hero-lead .sm-plane-in {
+  display: flex;
+  flex-direction: column;
+  padding: var(--s7) var(--s6) var(--s6);
+}
+
+/* 三行元信息钉在板底：板长高时，多出来的空白留在中间，版面不塌 */
+.sm-hero-lead .sm-meta-line {
+  margin-top: auto;
+}
+
+/* 交题板抬高一层、往下错 40px：两块板不在同一个平面上 */
 .sm-hero-side {
   position: relative;
   min-width: 0;
-  /* 板和字标错开 32px：不要对齐得像模板 */
-  margin-top: 32px;
+  margin-top: 40px;
 }
 
 /* 板子底下的一滩光：玻璃浮起来，靠的是它 */
@@ -722,13 +1048,14 @@ svg {
   right: -8%;
   top: 14%;
   bottom: -12%;
+  z-index: -1;
   border-radius: 50%;
   background: radial-gradient(
     58% 56% at 42% 62%,
-    rgba(150, 192, 240, 0.5) 0%,
+    rgba(150, 192, 240, 0.52) 0%,
     rgba(150, 192, 240, 0) 72%
   );
-  filter: blur(34px);
+  filter: blur(38px);
   pointer-events: none;
   animation: sm-bed 16s ease-in-out infinite alternate;
 }
@@ -742,6 +1069,24 @@ svg {
   to {
     transform: translate3d(1.5%, -1%, 0) scale(1.08);
     opacity: 1;
+  }
+}
+
+/* 交题板比左栏晚半拍浮上来：两块板不在同一秒到位，页面才是"叠"起来的 */
+.sm-hero-side > .sm-sheet {
+  animation: sm-float-in 900ms var(--ease-glide) 140ms backwards;
+}
+
+@keyframes sm-float-in {
+  from {
+    opacity: 0;
+    translate: 0 20px;
+    scale: 0.985;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+    scale: 1;
   }
 }
 
@@ -796,87 +1141,111 @@ svg {
   flex: none;
 }
 
-/* 段落：整页只有留白，没有色带与分栏线 */
-.sm-flow {
-  margin-top: var(--s9);
+/* 玻璃板的挂载点：板、板底的光、探出的页签都在这一层里排 */
+.sm-plane-wrap {
+  position: relative;
+  isolation: isolate;
 }
 
-/* 四步：一条会流的液面轨道，悬停哪段就填哪段 */
+/* 段落：每段一块玻璃板；板与板之间只有留白 */
+.sm-flow {
+  position: relative;
+  margin-top: var(--s8);
+}
+
+/* 三块板宽度与左右错位不同：是一条流，但不是一摞一样的盒子 */
+.sm-flow--right > .sm-plane-wrap {
+  max-width: 900px;
+  margin-left: auto;
+}
+
+.sm-flow--narrow > .sm-plane-wrap {
+  max-width: 960px;
+}
+
+.sm-flow--center > .sm-plane-wrap {
+  max-width: 840px;
+  margin: 0 auto;
+}
+
+/* 四步：板上四块玻璃砖 + 一条会流的液面轨道 */
 .sm-track {
   position: relative;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  column-gap: 0;
-  /* 管道：跑光从右边出去的时候被切掉，不要顶出页面 */
-  overflow: hidden;
+  gap: 14px;
+  margin-top: var(--s7);
+  padding-top: 34px;
 }
 
-/* 轨道上跑的一道光：7s 一趟，不停 */
-.sm-track::after {
+/* 管道：跑光从右边出去的时候被切掉，不顶出页面 */
+.sm-track-rail {
+  position: absolute;
+  top: 9px;
+  left: 2px;
+  right: 2px;
+  height: 2px;
+  z-index: 0;
+  overflow: hidden;
+  border-radius: var(--r-pill);
+}
+
+.sm-track-rail::before {
   content: "";
   position: absolute;
-  left: 0;
-  top: 6px;
-  width: 132px;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    rgba(63, 134, 224, 0.1) 0%,
+    rgba(63, 134, 224, 0.24) 38%,
+    rgba(63, 134, 224, 0.12) 100%
+  );
+}
+
+/* 轨道上跑的一道光：7.4s 一趟，不停 */
+.sm-track-rail::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -140px;
+  width: 140px;
   height: 2px;
   border-radius: var(--r-pill);
   background: linear-gradient(
     90deg,
     rgba(255, 255, 255, 0) 0%,
     rgba(255, 255, 255, 0.95) 42%,
-    rgba(168, 205, 245, 0.9) 58%,
-    rgba(168, 205, 245, 0) 100%
+    rgba(183, 215, 248, 0.95) 58%,
+    rgba(183, 215, 248, 0) 100%
   );
-  animation: sm-run 7s var(--ease-draw) infinite;
-  pointer-events: none;
+  animation: sm-run 7.4s var(--ease-draw) infinite;
 }
 
 @keyframes sm-run {
   from {
-    left: -132px;
+    left: -140px;
   }
   to {
     left: 100%;
   }
 }
 
+/* 一步 = 一块玻璃砖，悬停时抬起 2px */
 .sm-step {
   position: relative;
   min-width: 0;
-  padding: 30px 26px 0 0;
+  padding: 20px 20px 22px;
   cursor: default;
 }
 
-.sm-step:last-child {
-  padding-right: 0;
-}
-
-/* 轨道本身：四段拼成一条连续的液面 */
-.sm-step::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 6px;
-  right: 0;
-  height: 2px;
-  border-radius: var(--r-pill);
-  background: rgba(74, 140, 224, 0.14);
-}
-
-.sm-step::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 6px;
-  width: 0;
-  height: 2px;
-  border-radius: var(--r-pill);
-  background: linear-gradient(90deg, #a8cdf5, #4a8ce0);
-  transition: width 260ms var(--ease-out);
-}
-
-.sm-step:hover::after {
-  width: 100%;
+.sm-step:hover {
+  box-shadow:
+    var(--lift-plane),
+    var(--glass-rim),
+    var(--glass-rim-lo),
+    inset 0 -26px 36px -30px rgba(63, 134, 224, 0.42);
+  border-color: rgba(154, 190, 235, 0.9);
 }
 
 .sm-step-n {
@@ -888,29 +1257,29 @@ svg {
   letter-spacing: 0.16em;
 }
 
-/* 线上的那颗珠子：悬停时鼓一下 */
+/* 线上的那颗珠子：悬在砖的上方，悬停时鼓一下、亮一档 */
 .sm-step-dot {
   position: absolute;
-  left: 0;
-  top: 2px;
-  width: 8px;
-  height: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.95);
+  left: 20px;
+  top: -28px;
+  width: 9px;
+  height: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.98);
   border-radius: 50%;
-  background: linear-gradient(180deg, #cfe4fb, #8dbdf2);
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.6);
+  background: linear-gradient(180deg, #d7e8fc, #8dbdf2);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.7);
   transition:
-    background var(--t-fast) linear,
-    transform var(--t-fast) var(--ease-out),
-    box-shadow var(--t-base) linear;
+    background var(--t-base) linear,
+    transform var(--t-base) var(--ease-glide),
+    box-shadow var(--t-base) var(--ease-glide);
 }
 
 .sm-step:hover .sm-step-dot {
-  background: linear-gradient(180deg, #6fa9ea, #3574c6);
+  background: linear-gradient(180deg, #6fa9ea, var(--azure-deep));
   box-shadow:
-    0 0 0 3px rgba(255, 255, 255, 0.75),
-    0 0 12px var(--azure-glow);
-  transform: scale(1.25);
+    0 0 0 3px rgba(255, 255, 255, 0.85),
+    0 0 14px var(--azure-glow);
+  transform: scale(1.28);
 }
 
 .sm-step-h {
@@ -930,12 +1299,12 @@ svg {
   line-height: 1.72;
 }
 
-/* 界线：三个"悬挂标签"段落，连续读下来 */
-.sm-notes {
+/* 界线：三块玻璃砖，砖里是"标签 + 正文" */
+.sm-note-list {
   display: grid;
-  gap: var(--s4);
-  margin-top: var(--s8);
+  gap: 12px;
   max-width: 46em;
+  margin-top: var(--s5);
 }
 
 .sm-note-item {
@@ -943,6 +1312,12 @@ svg {
   grid-template-columns: 7.5em minmax(0, 1fr);
   gap: 18px;
   align-items: baseline;
+  padding: 15px 20px 16px;
+}
+
+.sm-note-item:hover {
+  border-color: rgba(154, 190, 235, 0.85);
+  box-shadow: var(--lift-plane), var(--glass-rim), var(--glass-rim-lo);
 }
 
 .sm-note-k {
@@ -983,11 +1358,25 @@ svg {
   line-height: 1.8;
 }
 
-/* 索引：一条引线把字段名连到它回答的问题，悬停时引线变亮、右端推 2px */
+/* 索引：一块凹进去的玻璃底板，四条引线把字段名连到它回答的问题 */
 .sm-index {
   display: grid;
   gap: 2px;
   max-width: 40em;
+  margin-top: var(--s5);
+  padding: 10px 18px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.86);
+  border-bottom-color: rgba(140, 181, 232, 0.5);
+  border-radius: var(--r-3);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.52) 0%,
+    rgba(214, 234, 253, 0.38) 100%
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 0 rgba(108, 158, 222, 0.3),
+    inset 0 10px 20px -16px rgba(31, 63, 107, 0.32);
 }
 
 .sm-index p {
@@ -996,7 +1385,13 @@ svg {
   gap: 12px;
   align-items: baseline;
   margin: 0;
-  padding: 5px 0;
+  padding: 8px 6px;
+  border-radius: var(--r-1);
+  transition: background var(--t-base) linear;
+}
+
+.sm-index p:hover {
+  background: rgba(255, 255, 255, 0.5);
 }
 
 .sm-index b {
@@ -1045,27 +1440,26 @@ svg {
   transform: translateX(2px);
 }
 
-/* 引文：没有上下线，只有留白和一条细蓝 */
+/* 引文：一块居中的玻璃板，左边一条细蓝 */
 .sm-quote {
-  position: relative;
-  max-width: 30em;
-  margin: var(--s9) 0 0;
-  padding-left: 28px;
-}
-
-.sm-quote::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0.32em;
-  bottom: 0.32em;
-  width: 2px;
-  border-radius: var(--r-pill);
-  background: linear-gradient(to bottom, #a8cdf5, #4a8ce0);
+  margin-top: var(--s9);
 }
 
 .sm-quote blockquote {
+  position: relative;
   margin: 0;
+  padding-left: 26px;
+}
+
+.sm-quote blockquote::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.3em;
+  bottom: 0.3em;
+  width: 2px;
+  border-radius: var(--r-pill);
+  background: linear-gradient(to bottom, var(--azure-lite), var(--azure));
 }
 
 .sm-quote p {
@@ -1144,22 +1538,28 @@ svg {
   }
 }
 
-/* 输入格：一块玻璃槽 + 聚焦时从左边画出的 1px 液面 */
+/* 输入格：玻璃板上凹进去的一道槽——比板暗一档，光从左边画到底边 */
 .sm-f {
   position: relative;
   display: grid;
   gap: 3px;
-  padding: 10px 15px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.9);
+  padding: 11px 16px 13px;
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  border-top-color: rgba(140, 181, 232, 0.45);
   border-radius: var(--r-2);
-  background: linear-gradient(165deg, rgba(255, 255, 255, 0.72), rgba(236, 245, 255, 0.5));
+  background: linear-gradient(
+    180deg,
+    rgba(212, 232, 252, 0.55) 0%,
+    rgba(255, 255, 255, 0.62) 100%
+  );
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 1),
-    inset 0 -10px 18px -18px rgba(46, 92, 158, 0.4);
+    inset 0 2px 5px -2px rgba(31, 63, 107, 0.2),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.9),
+    0 1px 0 rgba(255, 255, 255, 0.7);
   transition:
     background var(--t-base) linear,
     border-color var(--t-base) linear,
-    box-shadow var(--t-base) var(--ease-out);
+    box-shadow var(--t-base) var(--ease-glide);
 }
 
 .sm-f::after {
@@ -1185,10 +1585,15 @@ svg {
 }
 
 .sm-f:focus-within {
-  background: linear-gradient(165deg, rgba(255, 255, 255, 0.98), rgba(244, 249, 255, 0.82));
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.94) 0%,
+    rgba(244, 249, 255, 0.86) 100%
+  );
   border-color: var(--azure-line);
   box-shadow:
-    inset 0 1px 0 #ffffff,
+    inset 0 2px 5px -2px rgba(31, 63, 107, 0.14),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.95),
     0 0 0 3px var(--azure-soft);
 }
 
@@ -1230,6 +1635,24 @@ svg {
 .sm-f input::placeholder,
 .sm-f textarea::placeholder {
   color: var(--ink-4);
+}
+
+/* 到了高度上限就地内滚：细轨、不抢焦点环、底下留一点"还有"的暗示 */
+.sm-f textarea[data-clip="true"] {
+  overflow-y: auto;
+  padding-right: 6px;
+  scrollbar-color: rgba(63, 134, 224, 0.32) transparent;
+  scrollbar-width: thin;
+  mask-image: linear-gradient(180deg, #000 0, #000 calc(100% - 14px), rgba(0, 0, 0, 0.35) 100%);
+}
+
+.sm-f textarea::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sm-f textarea::-webkit-scrollbar-thumb {
+  border-radius: var(--r-pill);
+  background: rgba(63, 134, 224, 0.3);
 }
 
 .sm-more {
@@ -1373,14 +1796,14 @@ svg {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  padding: 12px 24px;
-  border: 1px solid rgba(255, 255, 255, 0.6);
+  padding: 13px 26px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
   border-radius: var(--r-pill);
-  background: linear-gradient(178deg, #5495e6 0%, #3574c6 100%);
+  background: linear-gradient(178deg, #5a9ae8 0%, var(--azure-deep) 100%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.6),
-    inset 0 -2px 6px rgba(24, 58, 108, 0.22),
-    0 16px 28px -18px rgba(53, 116, 198, 0.95);
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    inset 0 -4px 10px -4px rgba(20, 52, 100, 0.5),
+    0 18px 30px -18px rgba(42, 103, 189, 0.95);
   color: #ffffff;
   font-family: inherit;
   font-size: 14px;
@@ -1390,9 +1813,9 @@ svg {
   cursor: pointer;
   overflow: hidden;
   transition:
-    background var(--t-fast) linear,
-    box-shadow var(--t-base) var(--ease-out),
-    transform var(--t-fast) var(--ease-out);
+    background var(--t-base) linear,
+    box-shadow var(--t-base) var(--ease-glide),
+    transform var(--t-base) var(--ease-glide);
 }
 
 /* 按钮里也有一团跟着指针走的光 */
@@ -1414,12 +1837,36 @@ svg {
   opacity: 1;
 }
 
+/* 按键本身就是一小滴液体：底缘有一层白反光，悬停时铺开 */
+.sm-cta::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    72% 120% at 50% 118%,
+    rgba(255, 255, 255, 0.5) 0%,
+    rgba(255, 255, 255, 0) 72%
+  );
+  opacity: 0.5;
+  transform: scale(0.92);
+  transition:
+    opacity var(--t-base) linear,
+    transform var(--t-liquid) var(--ease-glide);
+  pointer-events: none;
+}
+
+.sm-cta:hover:not(:disabled)::after {
+  opacity: 0.9;
+  transform: scale(1.06);
+}
+
 .sm-cta:hover:not(:disabled) {
-  background: linear-gradient(178deg, #4c8ee0 0%, #2f6cbd 100%);
+  background: linear-gradient(178deg, #5091e3 0%, #235cae 100%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.65),
-    inset 0 -2px 6px rgba(24, 58, 108, 0.26),
-    0 20px 32px -18px rgba(53, 116, 198, 1);
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    inset 0 -4px 12px -4px rgba(20, 52, 100, 0.55),
+    0 22px 36px -18px rgba(42, 103, 189, 1);
 }
 
 .sm-cta:active:not(:disabled) {
@@ -1492,131 +1939,148 @@ svg {
   color: var(--warn);
 }
 
-/* ───────────────────────── 树突 ───────────────────────── */
+/* ───────────────────────── 进度柱 ─────────────────────────
+ * 一根玻璃管 + 液面 + 几颗珠。没有曲线、没有短须、没有随机位移。
+ * 22px 的宽度里只放得下两样东西，第三样就会糊。
+ */
 
-.sm-dendrite {
+.sm-col {
+  --col-gutter: 22px;
   position: relative;
   width: 100%;
 }
 
-.sm-dendrite svg {
-  display: block;
-  width: 44px;
-  overflow: visible;
-}
-
-.sm-d-seg {
-  fill: none;
-  stroke-width: 1.2;
-  stroke-linecap: round;
-  transition: stroke var(--t-base) var(--ease-out);
-}
-
-.sm-d-seg[data-state="done"] {
-  stroke: var(--azure-line);
-}
-
-.sm-d-seg[data-state="active"] {
-  stroke: var(--azure);
-  stroke-width: 1.5;
-}
-
-.sm-d-seg[data-state="todo"] {
-  stroke: var(--line-2);
-  stroke-dasharray: 2 5;
-}
-
-.sm-d-seg[data-state="stuck"] {
-  stroke: var(--azure-ink);
-  stroke-width: 1.5;
-}
-
-.sm-d-halo {
-  fill: none;
-  stroke: var(--azure-line);
-  stroke-width: 1;
-  transform-box: fill-box;
-  transform-origin: center;
-}
-
-.sm-d-node[data-state="active"] .sm-d-halo {
-  animation: sm-halo 3.2s var(--ease-out) infinite;
-}
-
-@keyframes sm-halo {
-  0% {
-    transform: scale(0.72);
-    opacity: 0.9;
-  }
-  70% {
-    transform: scale(1.45);
-    opacity: 0;
-  }
-  100% {
-    transform: scale(1.45);
-    opacity: 0;
-  }
-}
-
-.sm-d-dot {
-  fill: rgba(255, 255, 255, 0.95);
-  stroke: var(--line-3);
-  stroke-width: 1.2;
-  transition:
-    fill var(--t-base),
-    stroke var(--t-base);
-}
-
-.sm-d-node[data-state="done"] .sm-d-dot {
-  fill: var(--azure);
-  stroke: var(--azure);
-}
-
-.sm-d-node[data-state="active"] .sm-d-dot {
-  fill: #ffffff;
-  stroke: var(--azure);
-  filter: drop-shadow(0 0 6px var(--azure-glow));
-}
-
-.sm-d-node[data-state="stuck"] .sm-d-dot {
-  fill: var(--azure-ink);
-  stroke: var(--azure-ink);
-}
-
-.sm-d-spur {
-  fill: none;
-  stroke: var(--azure-ink);
-  stroke-width: 1.2;
-  stroke-linecap: round;
-}
-
-.sm-d-labels {
+/* 管：从第一颗珠的圆心到最后一颗的圆心 */
+.sm-col-tube {
   position: absolute;
-  inset: 0 0 0 44px;
+  top: calc(var(--col-step, 46px) / 2);
+  bottom: calc(var(--col-step, 46px) / 2);
+  left: calc(var(--col-gutter) / 2 - 1px);
+  width: 2px;
+  overflow: hidden;
+  border-radius: var(--r-pill);
+  background: linear-gradient(180deg, rgba(31, 63, 107, 0.11), rgba(31, 63, 107, 0.07));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+/* 液面：走过的部分被蓝填满，高度变化就是"进度在走" */
+.sm-col-tube i {
+  display: block;
+  width: 100%;
+  height: var(--col-fill, 0%);
+  border-radius: inherit;
+  background: linear-gradient(180deg, var(--azure-lite), var(--azure) 62%, var(--azure-deep));
+  box-shadow: 0 0 10px -2px var(--azure-glow);
+  transition: height var(--t-liquid) var(--ease-glide);
+}
+
+.sm-col-rows {
+  display: grid;
   margin: 0;
-  padding: 0 0 0 14px;
+  padding: 0;
   list-style: none;
 }
 
-.sm-d-label {
+.sm-col-row {
+  display: grid;
+  grid-template-columns: var(--col-gutter) minmax(0, 1fr);
+  align-items: center;
+  min-height: var(--col-step, 46px);
+  column-gap: 10px;
+}
+
+/* 珠：玻璃小圆点。所有状态靠"填色 + 环"区分，不靠大小抖动 */
+.sm-col-bead {
+  position: relative;
+  justify-self: center;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow:
+    0 0 0 1px var(--line-2),
+    0 1px 2px rgba(31, 63, 107, 0.12);
+  transition:
+    background var(--t-base) var(--ease-glide),
+    box-shadow var(--t-base) var(--ease-glide),
+    transform var(--t-base) var(--ease-glide);
+}
+
+.sm-col-row[data-state="done"] .sm-col-bead {
+  background: var(--azure);
+  box-shadow:
+    0 0 0 3px rgba(63, 134, 224, 0.14),
+    0 1px 2px rgba(31, 63, 107, 0.16);
+}
+
+.sm-col-row[data-state="active"] .sm-col-bead {
+  width: 9px;
+  height: 9px;
+  background: #ffffff;
+  box-shadow:
+    0 0 0 1.5px var(--azure),
+    0 0 10px var(--azure-glow);
+}
+
+/* 指到这一行时的呼吸圈：只有当前这一格会动 */
+.sm-col-row[data-state="active"] .sm-col-bead::after {
+  content: "";
   position: absolute;
+  inset: -5px;
+  border: 1px solid var(--azure-line);
+  border-radius: 50%;
+  animation: sm-col-ring 3.2s var(--ease-out) infinite;
+}
+
+@keyframes sm-col-ring {
+  0% {
+    transform: scale(0.7);
+    opacity: 0.85;
+  }
+  72% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+.sm-col-row[data-state="stuck"] .sm-col-bead {
+  width: 10px;
+  height: 10px;
+  background: var(--azure-ink);
+  box-shadow:
+    0 0 0 3px rgba(26, 74, 128, 0.12),
+    0 0 12px -2px rgba(26, 74, 128, 0.4);
+}
+
+.sm-col-row[data-hot="true"] .sm-col-bead {
+  background: var(--azure);
+  box-shadow:
+    0 0 0 3px rgba(63, 134, 224, 0.16),
+    0 0 10px -1px var(--azure-glow);
+}
+
+.sm-col-txt {
   display: grid;
   gap: 1px;
   min-width: 0;
-  transform: translateY(-50%);
-  transition: opacity var(--t-base);
 }
 
-.sm-d-label b {
+.sm-col-txt b {
+  overflow: hidden;
   color: var(--ink-2);
   font-size: var(--fs-meta);
   font-weight: 500;
   letter-spacing: 0.01em;
   white-space: nowrap;
+  text-overflow: ellipsis;
   transition: color var(--t-fast) linear;
 }
 
-.sm-d-label small {
+.sm-col-txt small {
   overflow: hidden;
   color: var(--ink-3);
   font-size: 11px;
@@ -1625,43 +2089,58 @@ svg {
   text-overflow: ellipsis;
 }
 
-.sm-d-label[data-state="active"] b {
+.sm-col-row[data-state="active"] .sm-col-txt b {
   color: var(--azure-ink);
   font-weight: 600;
 }
 
-.sm-d-label[data-state="todo"] b {
+.sm-col-row[data-state="todo"] .sm-col-txt b {
   color: var(--ink-3);
 }
 
-.sm-d-label[data-state="stuck"] b {
+.sm-col-row[data-state="stuck"] .sm-col-txt b {
   color: var(--ink);
   font-weight: 600;
 }
 
-.sm-d-label[data-hot="true"] b {
+.sm-col-row[data-hot="true"] .sm-col-txt b {
   color: var(--azure-ink);
 }
 
-.sm-d-node[data-hot="true"] .sm-d-dot {
-  fill: var(--azure);
-  stroke: var(--azure);
+/* "退一级"的提示：一个小字，不画线 */
+.sm-col-hint {
+  display: inline-block;
+  margin-right: 5px;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: rgba(63, 134, 224, 0.12);
+  color: var(--azure-ink);
+  font-size: 10px;
+  font-style: normal;
+  line-height: 1.5;
+  vertical-align: 1px;
 }
-
 /* ───────────────────────── 追问页 ───────────────────────── */
 
 .sm-session {
   display: grid;
-  grid-template-columns: 218px minmax(0, 1fr);
-  gap: var(--s7);
+  grid-template-columns: 250px minmax(0, 1fr);
+  gap: 40px;
   align-items: start;
 }
 
+/* 左轨：一块贴在左边的玻璃板，滚动时跟在视口里 */
 .sm-rail {
   position: sticky;
   top: 92px;
   display: grid;
   gap: var(--s5);
+  padding: var(--s5) var(--s4) var(--s6);
+}
+
+/* 舞台：第二块玻璃板，比左轨高一层 */
+.sm-stage {
+  padding: var(--s5) var(--s5) var(--s6);
 }
 
 .sm-rail-turn {
@@ -1765,7 +2244,7 @@ svg {
 
 .sm-stage {
   min-width: 0;
-  max-width: 660px;
+  max-width: 760px;
 }
 
 .sm-stage-head {
@@ -1792,6 +2271,7 @@ svg {
 
 /* ───────────────────────── 题面 ───────────────────────── */
 
+/* 题面：趴在舞台板上的一条玻璃，滚到顶就吸住 */
 .sm-brief {
   position: sticky;
   top: 64px;
@@ -1800,12 +2280,22 @@ svg {
   grid-template-columns: 48px minmax(0, 1fr) auto;
   column-gap: 18px;
   align-items: start;
-  margin: 0 -12px;
-  padding: var(--s4) 12px;
-  background: rgba(248, 252, 255, 0.78);
+  margin: 0 0 var(--s4);
+  padding: var(--s4) 18px;
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  border-bottom-color: rgba(140, 181, 232, 0.5);
+  border-radius: var(--r-3);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.92) 0%,
+    rgba(232, 244, 255, 0.74) 100%
+  );
   -webkit-backdrop-filter: blur(18px) saturate(170%);
   backdrop-filter: blur(18px) saturate(170%);
-  box-shadow: 0 16px 24px -26px rgba(46, 92, 158, 0.7);
+  box-shadow:
+    var(--lift-tile),
+    var(--glass-rim),
+    inset 0 -1px 0 rgba(108, 158, 222, 0.3);
 }
 
 .sm-brief-lab {
@@ -1860,21 +2350,41 @@ svg {
 .sm-tl {
   position: relative;
   display: grid;
-  gap: 6px;
-  margin: 0 0 var(--s4);
-  padding: 0;
-  animation: sm-row-in var(--t-slow) var(--ease-out) backwards;
-  animation-delay: calc(var(--i, 0) * 60ms);
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 16px 18px 17px;
+  border: 1px solid var(--glass-edge);
+  border-bottom-color: var(--glass-edge-cool);
+  border-radius: var(--r-3);
+  background: var(--glass-tile);
+  box-shadow: var(--lift-tile), var(--glass-rim), var(--glass-rim-lo);
+  animation: sm-row-in var(--t-slow) var(--ease-glide) backwards;
+  animation-delay: calc(var(--i, 0) * 80ms);
+  transition:
+    transform var(--t-base) var(--ease-glide),
+    box-shadow var(--t-base) var(--ease-glide),
+    border-color var(--t-base) linear;
+}
+
+.sm-tl:hover {
+  transform: translateY(-1px);
+  border-color: rgba(154, 190, 235, 0.88);
+  box-shadow:
+    var(--lift-plane),
+    var(--glass-rim),
+    var(--glass-rim-lo);
 }
 
 @keyframes sm-row-in {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    translate: 0 10px;
+    scale: 0.99;
   }
   to {
     opacity: 1;
-    transform: none;
+    translate: 0 0;
+    scale: 1;
   }
 }
 
@@ -1885,7 +2395,7 @@ svg {
 .sm-tl-n {
   position: absolute;
   left: -28px;
-  top: 7px;
+  top: 21px;
   width: 12px;
   height: 12px;
   border: 1px solid var(--line-3);
@@ -1913,15 +2423,20 @@ svg {
   line-height: 1.7;
 }
 
+/* 你答的那一句：砖里再凹一道，左边一条蓝——比砖暗一档，不是第二块玻璃 */
 .sm-tl-a {
   display: flex;
   gap: 10px;
   margin: 0;
-  padding: 7px 14px;
+  padding: 8px 14px 9px;
   border-left: 2px solid var(--azure-line);
   border-radius: 0 var(--r-1) var(--r-1) 0;
-  background: linear-gradient(160deg, rgba(255, 255, 255, 0.8), rgba(236, 245, 255, 0.5));
-  box-shadow: var(--glass-hi);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.58) 0%,
+    rgba(214, 234, 253, 0.36) 100%
+  );
+  box-shadow: inset 0 1px 3px -1px rgba(31, 63, 107, 0.16);
   color: var(--ink);
   font-size: var(--fs-body);
   line-height: 1.7;
@@ -2501,7 +3016,15 @@ svg {
   justify-content: space-between;
   gap: 20px;
   margin-bottom: var(--s4);
-  padding-bottom: var(--s3);
+  padding: 14px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  border-bottom-color: rgba(140, 181, 232, 0.5);
+  border-radius: var(--r-3);
+  background: var(--glass-chip);
+  box-shadow:
+    var(--lift-tile),
+    var(--glass-rim),
+    inset 0 -1px 0 rgba(108, 158, 222, 0.3);
 }
 
 .sm-dossier-tools {
@@ -2513,7 +3036,7 @@ svg {
 /* ───────────────────────── 状态页 ───────────────────────── */
 
 .sm-state {
-  max-width: 40em;
+  max-width: 46em;
   padding: var(--s7) 0;
 }
 
@@ -2525,53 +3048,78 @@ svg {
 
 /* ───────────────────────── 断点 ───────────────────────── */
 
-/* 段落入场：进视口才动，读过的段落不再动（`Reveal` 负责 data-in） */
+/* 段落入场：进视口才动，读过的段落不再动（`Reveal` 负责 data-in）。
+   不是"跳出来"：先虚、低 28px、带一点失焦，780ms 缓出到位。 */
 .sm-flow,
-.sm-notes,
 .sm-quote {
   transition:
-    opacity 480ms var(--ease-out),
-    transform 480ms var(--ease-out);
+    opacity 760ms var(--ease-glide),
+    translate 760ms var(--ease-glide),
+    filter 760ms linear;
 }
 
 .sm-flow[data-in="false"],
-.sm-notes[data-in="false"],
 .sm-quote[data-in="false"] {
   opacity: 0;
-  transform: translateY(18px);
+  translate: 0 28px;
+  filter: blur(5px);
 }
 
+/* 板到位之后，砖一块一块放上去——错层比整块淡入更像"叠起来" */
 .sm-flow[data-in="true"] .sm-statement,
 .sm-flow[data-in="true"] .sm-step,
-.sm-notes[data-in="true"] .sm-statement,
-.sm-notes[data-in="true"] .sm-index,
-.sm-notes[data-in="true"] .sm-note-item,
-.sm-quote[data-in="true"] p {
-  animation: sm-rise 520ms var(--ease-out) backwards;
+.sm-flow[data-in="true"] .sm-note-item,
+.sm-flow[data-in="true"] .sm-index,
+.sm-flow[data-in="true"] .sm-quote-in {
+  animation: sm-rise 820ms var(--ease-glide) backwards;
 }
 
-.sm-track .sm-step:nth-child(2),
-.sm-notes .sm-note-item:nth-of-type(2) {
-  animation-delay: 70ms;
+.sm-flow[data-in="true"] .sm-label {
+  animation: sm-fade 560ms var(--ease-out) 60ms backwards;
 }
 
-.sm-track .sm-step:nth-child(3),
-.sm-notes .sm-note-item:nth-of-type(3) {
-  animation-delay: 140ms;
+.sm-flow[data-in="true"] .sm-statement {
+  animation-delay: 100ms;
 }
 
-.sm-track .sm-step:nth-child(4) {
-  animation-delay: 210ms;
+.sm-flow[data-in="true"] .sm-index {
+  animation-delay: 180ms;
+}
+
+.sm-flow[data-in="true"] .sm-step:nth-of-type(1) {
+  animation-delay: 160ms;
+}
+
+.sm-flow[data-in="true"] .sm-step:nth-of-type(2) {
+  animation-delay: 240ms;
+}
+
+.sm-flow[data-in="true"] .sm-step:nth-of-type(3) {
+  animation-delay: 320ms;
+}
+
+.sm-flow[data-in="true"] .sm-step:nth-of-type(4) {
+  animation-delay: 400ms;
+}
+
+.sm-flow[data-in="true"] .sm-note-item:nth-of-type(2) {
+  animation-delay: 240ms;
+}
+
+.sm-flow[data-in="true"] .sm-note-item:nth-of-type(3) {
+  animation-delay: 320ms;
 }
 
 @keyframes sm-rise {
   from {
     opacity: 0;
-    transform: translateY(12px);
+    translate: 0 16px;
   }
-  to {
-    opacity: 1;
-    transform: none;
+}
+
+@keyframes sm-fade {
+  from {
+    opacity: 0;
   }
 }
 
@@ -2611,7 +3159,7 @@ svg {
     padding-bottom: var(--s3);
   }
 
-  .sm-rail .sm-dendrite {
+  .sm-rail .sm-col {
     display: none;
   }
 
@@ -2623,9 +3171,27 @@ svg {
     max-width: none;
   }
 
+  /* 轨道只在四列时成立：窄屏收起跑光，砖自己就是一个块 */
   .sm-track {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    row-gap: var(--s5);
+    row-gap: 14px;
+    padding-top: 0;
+  }
+
+  .sm-track-rail,
+  .sm-step-dot {
+    display: none;
+  }
+
+  .sm-flow--right > .sm-plane-wrap,
+  .sm-flow--narrow > .sm-plane-wrap,
+  .sm-flow--center > .sm-plane-wrap {
+    max-width: none;
+    margin-left: 0;
+  }
+
+  .sm-rail {
+    padding: var(--s4);
   }
 }
 
@@ -2670,9 +3236,31 @@ svg {
     gap: var(--s3);
   }
 
+  .sm-note-list {
+    gap: 10px;
+  }
+
   .sm-note-item {
     grid-template-columns: minmax(0, 1fr);
     gap: 4px;
+  }
+
+  /* 板上留白收一档，但页签仍然探出板边 */
+  .sm-flow {
+    margin-top: var(--s6);
+  }
+
+  .sm-plane-in,
+  .sm-hero-lead .sm-plane-in {
+    padding: var(--s6) var(--s4) var(--s4);
+  }
+
+  .sm-plane .sm-label {
+    left: 20px;
+  }
+
+  .sm-stage {
+    padding: var(--s4);
   }
 }
 
@@ -2700,6 +3288,32 @@ svg {
   .sm-track {
     grid-template-columns: minmax(0, 1fr);
     row-gap: var(--s4);
+  }
+
+  .sm-step {
+    padding: 16px 16px 18px;
+  }
+
+  .sm-plane,
+  .sm-plane-wrap > .sm-plane {
+    border-radius: 24px;
+  }
+
+  .sm-plane-in,
+  .sm-hero-lead .sm-plane-in {
+    padding: 46px 18px 24px;
+  }
+
+  .sm-plane .sm-label {
+    left: 16px;
+  }
+
+  .sm-note-item {
+    padding: 13px 16px 14px;
+  }
+
+  .sm-index {
+    padding: 8px 12px 10px;
   }
 
   .sm-plan {
@@ -2754,6 +3368,126 @@ svg {
 
 /* ───────────────────────── 打印 ───────────────────────── */
 
+
+/* ───────────────────────── 会翘的玻璃砖 ─────────────────────────
+ * 指针在砖上：砖朝指针方向倾一点点、白光跟手、阴影加深。
+ * 只给"砖"用，不给文字块和按钮用（文字块倾斜会晕）。
+ */
+
+[data-tilt] {
+  transform: perspective(760px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+  transition:
+    transform 320ms var(--ease-glide),
+    box-shadow 320ms var(--ease-glide),
+    border-color 320ms var(--ease-glide);
+  will-change: transform;
+}
+
+[data-tilt]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: radial-gradient(
+    130px 130px at var(--mx, 50%) var(--my, 0%),
+    rgba(255, 255, 255, 0.9),
+    rgba(255, 255, 255, 0) 72%
+  );
+  opacity: 0;
+  transition: opacity 240ms linear;
+  pointer-events: none;
+}
+
+[data-tilt][data-lit]::before {
+  opacity: 1;
+}
+
+/* ───────────────────────── 示例卡：板里唯一那张"纸" ─────────────────────────
+ * 整站都是玻璃，只有这一块是白纸，还故意歪着放；
+ * 指针压上去，纸自己摆正——这是全页唯一一处"会回应你"的静态物。
+ */
+
+.sm-cardmock {
+  position: relative;
+  margin-top: var(--s5);
+  padding: 20px 24px 22px;
+  border: 1px solid rgba(255, 255, 255, 0.98);
+  border-radius: var(--r-3);
+  background: linear-gradient(172deg, #ffffff 0%, #f6fbff 58%, #eaf3fd 100%);
+  box-shadow:
+    var(--lift-sheet),
+    inset 0 1px 0 #ffffff;
+  rotate: -0.55deg;
+  transform-origin: 50% 0;
+  transition: rotate 560ms var(--ease-glide);
+}
+
+.sm-cardmock:hover {
+  rotate: 0deg;
+}
+
+.sm-cardmock-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.sm-cardmock-tag {
+  padding: 2px 9px;
+  border-radius: var(--r-pill);
+  background: rgba(63, 134, 224, 0.1);
+  color: var(--azure-ink);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+}
+
+.sm-cardmock-head b {
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+
+.sm-cardmock-conf {
+  margin-left: auto;
+  color: var(--azure-ink);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sm-cardmock-rows {
+  display: grid;
+  gap: 13px;
+  margin: 16px 0 0;
+}
+
+.sm-cardmock-rows > div {
+  display: grid;
+  grid-template-columns: 7.2em minmax(0, 1fr);
+  gap: 12px;
+  align-items: baseline;
+}
+
+.sm-cardmock-rows dt {
+  color: var(--azure-ink);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.sm-cardmock-rows dd {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--fs-p);
+  line-height: 1.72;
+}
+
+.sm-cardmock-rows > div:first-child dd {
+  color: var(--ink);
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
 @media print {
   .sm-top,
   .sm-foot,
@@ -2768,7 +3502,11 @@ svg {
   }
 
   .sm-sheet,
-  .sm-probe {
+  .sm-probe,
+  .sm-plane,
+  .sm-tile,
+  .sm-tl,
+  .sm-brief {
     border: 1px solid #d5dde6;
     background: #fff;
     box-shadow: none;
@@ -2779,14 +3517,28 @@ svg {
 
   .sm-sheet::before,
   .sm-sheet::after,
+  .sm-plane::before,
+  .sm-plane::after,
+  .sm-tile::after,
   .sm-probe::before,
   .sm-probe::after,
-  .sm-sheen {
+  .sm-glass-clip,
+  .sm-plane-glow,
+  .sm-sheen,
+  .sm-track-rail {
     display: none;
   }
 
   .sm-dossier-bar .sm-dossier-tools {
     display: none;
+  }
+
+  .sm-transit {
+    display: none;
+  }
+
+  .sm-cardmock {
+    rotate: none;
   }
 }
 
@@ -2809,12 +3561,60 @@ svg {
   .sm-probe,
   .sm-opt,
   .sm-tl,
-  .sm-sheen {
+  .sm-sheen,
+  .sm-glass-clip::after,
+  .sm-plane-glow,
+  .sm-bg-veil,
+  .sm-bg-floor {
     animation: none;
+  }
+
+  /* 减少动效：入场不做位移与失焦，直接就位 */
+  .sm-flow[data-in="false"],
+  .sm-quote[data-in="false"] {
+    opacity: 1;
+    translate: none;
+    filter: none;
   }
 
   .sm-sheet,
   .sm-probe {
     transform: none;
+  }
+
+  /* 减少动效：不做换页的那层水，直接就位 */
+  .sm-transit {
+    display: none;
+  }
+
+  /* 减少动效：砖不翘、纸不歪 */
+  [data-tilt] {
+    transform: none;
+  }
+
+  [data-tilt]::before {
+    display: none;
+  }
+
+  .sm-cardmock {
+    rotate: none;
+  }
+}
+/* ───────────────────────── 窄屏：示例卡改成上下排 ───────────────────────── */
+
+@media (max-width: 620px) {
+  .sm-cardmock {
+    padding: 18px 18px 20px;
+    rotate: -0.3deg;
+  }
+
+  .sm-cardmock-rows > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 3px;
+  }
+
+  .sm-cardmock-rows > div + div {
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
   }
 }

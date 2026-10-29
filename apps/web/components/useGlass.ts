@@ -7,15 +7,19 @@ import { useCallback, useEffect, useMemo, useRef, type PointerEvent } from "reac
  *
  * - `--mx/--my`：边框冷光的位置
  * - `--lx/--ly`：玻璃表面那团柔光的位置
- * - `--rx/--ry`：最多 1–1.5 度的倾斜（物理上"光在弯的玻璃上走"）
+ * - `--rx/--ry`：最多 1.5° / 1.05° 的倾斜（物理上是"光在弯的玻璃上走"）
  *
- * 全部直接写 style，不走 React state：拖鼠标不触发重渲染。
- * 触屏和 reduce-motion 下完全不动。
+ * 和 v4 的区别：不再把指针位置**直接**写进去，而是每帧向目标追 18%（指数逼近）。
+ * 光是"滑"过去的，指针停住后自己收口——生硬感主要来自"瞬时到位"。
+ * 全部只写 style，不进 React state；触屏与 reduce-motion 下完全不跟手。
  */
-export function useGlass<T extends HTMLElement>() {
+export function useGlass<T extends HTMLElement>(options: { tilt?: number } = {}) {
+  const tilt = options.tilt ?? 1;
   const ref = useRef<T>(null);
   const frame = useRef(0);
-  const point = useRef({ x: 0.5, y: 0.5 });
+  const goal = useRef({ x: 0.5, y: 0.5 });
+  const shown = useRef({ x: 0.5, y: 0.5 });
+
   const still = useMemo(
     () =>
       typeof window !== "undefined" &&
@@ -23,18 +27,41 @@ export function useGlass<T extends HTMLElement>() {
     [],
   );
 
-  const apply = useCallback(() => {
-    frame.current = 0;
+  const write = useCallback(() => {
     const el = ref.current;
     if (!el) return;
-    const { x, y } = point.current;
-    el.style.setProperty("--mx", `${x * 100}%`);
-    el.style.setProperty("--my", `${y * 100}%`);
-    el.style.setProperty("--lx", `${14 + x * 72}%`);
-    el.style.setProperty("--ly", `${-6 + y * 88}%`);
-    el.style.setProperty("--ry", `${(x - 0.5) * 3}deg`);
-    el.style.setProperty("--rx", `${(0.5 - y) * 2.1}deg`);
-  }, []);
+    const { x, y } = shown.current;
+    el.style.setProperty("--mx", `${(x * 100).toFixed(2)}%`);
+    el.style.setProperty("--my", `${(y * 100).toFixed(2)}%`);
+    el.style.setProperty("--lx", `${(14 + x * 72).toFixed(2)}%`);
+    el.style.setProperty("--ly", `${(-6 + y * 88).toFixed(2)}%`);
+    el.style.setProperty("--ry", `${((x - 0.5) * 3 * tilt).toFixed(3)}deg`);
+    el.style.setProperty("--rx", `${((0.5 - y) * 2.1 * tilt).toFixed(3)}deg`);
+  }, [tilt]);
+
+  /* 一帧追 18%，差值小于 0.08% 就停：光不会无限抖动，也不会突然跳到位 */
+  const tick = useCallback(() => {
+    frame.current = 0;
+    const dx = goal.current.x - shown.current.x;
+    const dy = goal.current.y - shown.current.y;
+
+    if (Math.abs(dx) < 0.0008 && Math.abs(dy) < 0.0008) {
+      shown.current = { ...goal.current };
+      write();
+      return;
+    }
+
+    shown.current = {
+      x: shown.current.x + dx * 0.18,
+      y: shown.current.y + dy * 0.18,
+    };
+    write();
+    frame.current = requestAnimationFrame(tick);
+  }, [write]);
+
+  const schedule = useCallback(() => {
+    if (!frame.current) frame.current = requestAnimationFrame(tick);
+  }, [tick]);
 
   const onPointerMove = useCallback(
     (event: PointerEvent<T>) => {
@@ -43,23 +70,19 @@ export function useGlass<T extends HTMLElement>() {
       if (!el) return;
       const rect = el.getBoundingClientRect();
       if (!rect.width || !rect.height) return;
-      point.current = {
+      goal.current = {
         x: Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)),
         y: Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height)),
       };
-      if (!frame.current) frame.current = requestAnimationFrame(apply);
+      schedule();
     },
-    [apply, still],
+    [schedule, still],
   );
 
   const onPointerLeave = useCallback(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.setProperty("--rx", "0deg");
-    el.style.setProperty("--ry", "0deg");
-    el.style.setProperty("--lx", "26%");
-    el.style.setProperty("--ly", "0%");
-  }, []);
+    goal.current = { x: 0.5, y: 0.5 };
+    schedule();
+  }, [schedule]);
 
   useEffect(
     () => () => {

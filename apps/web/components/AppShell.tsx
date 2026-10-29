@@ -2,14 +2,18 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { Ground } from "@/components/Ground";
+import { PointerField } from "@/components/PointerField";
 import { ScrollRule } from "@/components/ScrollRule";
 import { TopBar } from "@/components/TopBar";
+import { Transit } from "@/components/Transit";
 
 export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="sm-app">
       <Ground />
+      <PointerField />
       <ScrollRule />
+      <Transit />
 
       <header className="sm-top">
         <div className="sm-shell sm-top-in">
@@ -34,7 +38,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               />
             </svg>
             <span>SynapseMind</span>
-            <span className="sm-brand-sub">突触智学 · 单题诊断</span>
+            <span className="sm-brand-sub">单题诊断</span>
           </Link>
 
           <TopBar />
@@ -47,7 +51,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <div className="sm-shell">
         <footer className="sm-foot">
-          <span>单题诊断 · 一次只定位一个卡点</span>
+          <span>目前只支持一道示例题：高中数学 · 函数与导数</span>
           <span>SynapseMind</span>
         </footer>
       </div>
