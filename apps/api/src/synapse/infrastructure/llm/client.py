@@ -44,7 +44,7 @@ class OpenAICompatibleClient:
                 {"role": "user", "content": request.user},
             ],
             "temperature": 0.0,
-            "max_tokens": MAX_TOKENS,
+            "max_tokens": request.max_tokens or MAX_TOKENS,
             "response_format": {"type": "json_object"},
         }
         started = time.perf_counter()

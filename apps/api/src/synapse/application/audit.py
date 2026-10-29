@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Literal, Protocol
 
-AuditKind = Literal["llm_call", "fallback", "shadow"]
+AuditKind = Literal["llm_call", "fallback", "shadow", "graph_build"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,6 +28,7 @@ class AuditEntry:
     probe_id: str = ""
     baseline: str = ""
     candidate: str = ""
+    graph_fingerprint: str = ""
 
     def as_dict(self) -> dict[str, object]:
         return asdict(self)

@@ -17,6 +17,7 @@
 ├─ specs/                 # 契约源：状态机 + JSON Schema
 ├─ eval/                  # 怎么证明诊断是准的
 │  ├─ golden/            # 双教师标注的黄金对话
+│  ├─ problems/          # 建图评测题（只有题干，没有答案）
 │  └─ redteam/           # 诱导、边界、泄漏测试
 ├─ infra/                 # Compose / Nginx / 可观测性配置（M1 落）
 ├─ tools/                 # 文档生成与图，不是运行时依赖
@@ -24,7 +25,7 @@
 ├─ docs/
 │  ├─ adr/               # 架构决策记录（为什么这样选）
 │  ├─ design/
-│  │  ├─ chapters/       # 第 0–12 章，唯一手写源
+│  │  ├─ chapters/       # 第 0–13 章，唯一手写源
 │  │  └─ assets/         # 3 张设计图，由脚本生成
 │  └─ reference/         # 能力清单等原始参考
 ├─ .github/workflows/     # CI
@@ -51,12 +52,13 @@ docs/design/release/      # 合并 MD / DOCX / PDF；生成物，不进 Git
 | `apps/worker/` | 部署入口与任务说明；与 api 同镜像、不同 command | 第二份领域代码、第二套模型 | `README.md`；M2 起任务 |
 | `specs/` | 状态机转移表、输入/解法图/诊断卡 JSON Schema | 生成的 TS 类型、运行时代码、草稿 | 1 个状态机文档 + 3 个 schema |
 | `eval/golden/` | 黄金对话、双教师标注、评分 rubric | 真实学生隐私数据、生产日志 | `README.md`；完整 100 条本地/私有 |
+| `eval/problems/` | 建图评测题：题干 + 主题标签，不含答案与解法图 | 学生作答、人工解法图 | 20 条未见题 + `README.md` |
 | `eval/redteam/` | 诱导、越界、答案泄漏、提示注入用例 | 普通单元测试 | `README.md` |
 | `infra/` | `compose.yaml`、Dockerfile、Nginx、OTel 配置 | 业务代码、前端组件 | `README.md`；M2 起容器文件 |
 | `tools/` | `diagrams.py`、`merge_markdown.py`、`generate_docx.py`、TOC/PDF 脚本 | 运行时依赖、业务逻辑 | 5 个脚本 + `requirements.txt` |
-| `scripts/` | 按职责分组：`dev/` 启动、`contracts/` 契约、`checks/` 检查、`release/` 可选导出 | 应用入口、部署脚本 | 4 组脚本 + `README.md` |
+| `scripts/` | 按职责分组：`dev/` 启动、`contracts/` 契约、`checks/` 检查、`eval/` 评测、`release/` 可选导出 | 应用入口、部署脚本 | 5 组脚本 + `README.md` |
 | `docs/adr/` | 一个决策一个文件：背景、选项、评分、后果、改选条件 | 教程、会议记录、未决讨论 | `0001` 语言与代码架构 |
-| `docs/design/chapters/` | 第 0–12 章 Markdown，按编号排序 | DOCX/PDF、合并稿、图片 | 13 个章节源文件 |
+| `docs/design/chapters/` | 第 0–13 章 Markdown，按编号排序 | DOCX/PDF、合并稿、图片 | 14 个章节源文件 |
 | `docs/design/assets/` | 由 `tools/diagrams.py` 生成的 3 张 PNG | 手工改图、截图堆 | 3 张图 |
 | `docs/reference/` | 原始能力清单、外部资料摘要 | 正式设计正文 | `skill.txt` |
 | `.github/workflows/` | CI：链接、JSON、skill 映射检查 | 本地脚本 | `ci.yml` |

@@ -24,6 +24,9 @@ class LLMRequest:
     user: str
     schema_name: str
     json_schema: Mapping[str, object] | None = None
+    # A graph is an order of magnitude longer than a rewritten question; the
+    # budget belongs to the request, not to the client.
+    max_tokens: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

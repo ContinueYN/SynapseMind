@@ -21,7 +21,13 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Literal, Protocol
 
-from synapse.domain.problem.models import Probe, Problem, SolutionGraph, SolutionNode
+from synapse.domain.problem.models import (
+    Probe,
+    Problem,
+    ProblemDraft,
+    SolutionGraph,
+    SolutionNode,
+)
 
 
 class VerifiabilityLevel(StrEnum):
@@ -81,7 +87,9 @@ class SubjectPlugin(Protocol):
         """Recognise a problem this plugin can serve; ``None`` means "not mine"."""
         ...
 
-    def build_graph(self, problem: Problem) -> SolutionGraph: ...
+    def build_graph(self, problem: Problem | ProblemDraft) -> SolutionGraph:
+        """Return an annotated graph, or generate one for a draft (S4)."""
+        ...
 
     def probes_for(self, node: SolutionNode) -> tuple[Probe, ...]: ...
 

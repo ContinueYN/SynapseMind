@@ -1,0 +1,20 @@
+{"id": "P_DERIV_002", "subject": "math", "grade": "high_school", "topic": "导数与单调性", "text": "已知函数 f(x)=x^3-3x^2+2，求 f(x) 的单调区间与极值。"}
+{"id": "P_DERIV_003", "subject": "math", "grade": "high_school", "topic": "恒成立与参数范围", "text": "已知函数 f(x)=e^x-a x，a∈R。若 f(x)≥0 对任意 x∈R 恒成立，求 a 的取值范围。"}
+{"id": "P_DERIV_004", "subject": "math", "grade": "high_school", "topic": "零点个数与参数", "text": "已知函数 f(x)=ln x - a x（a∈R）有两个零点，求 a 的取值范围。"}
+{"id": "P_DERIV_005", "subject": "math", "grade": "high_school", "topic": "导数与切线", "text": "已知曲线 y=x^3+a x 在点 (1,1+a) 处的切线与直线 y=2x 平行，求 a 的值及该切线方程。"}
+{"id": "P_DERIV_006", "subject": "math", "grade": "high_school", "topic": "闭区间最值", "text": "已知函数 f(x)=x^2-2a x+1 在区间 [1,3] 上的最小值为 -2，求实数 a 的值。"}
+{"id": "P_DERIV_007", "subject": "math", "grade": "high_school", "topic": "不等式证明", "text": "证明：当 x>0 时，e^x > 1 + x + x^2/2。"}
+{"id": "P_SEQ_001", "subject": "math", "grade": "high_school", "topic": "等差数列", "text": "已知等差数列 {a_n} 的前 n 项和为 S_n，a_1=2，S_5=30，求通项公式 a_n 及 S_n 的最小值。"}
+{"id": "P_SEQ_002", "subject": "math", "grade": "high_school", "topic": "等比数列", "text": "已知等比数列 {a_n} 中，a_2=6，a_5=48，求通项公式 a_n 与前 n 项和 S_n。"}
+{"id": "P_TRIG_001", "subject": "math", "grade": "high_school", "topic": "三角方程", "text": "已知 sin(2x+π/6)=1/2，x∈[0,π]，求 x 的取值集合。"}
+{"id": "P_TRIG_002", "subject": "math", "grade": "high_school", "topic": "解三角形", "text": "在△ABC 中，a=3，b=4，C=60°，求边 c 与△ABC 的面积。"}
+{"id": "P_GEOM_001", "subject": "math", "grade": "high_school", "topic": "立体几何与空间向量", "text": "在棱长为 2 的正方体 ABCD-A1B1C1D1 中，求直线 A1B 与平面 ABCD 所成角的正弦值。"}
+{"id": "P_GEO_001", "subject": "math", "grade": "high_school", "topic": "解析几何与位置关系", "text": "已知椭圆 x^2/4+y^2=1 与直线 y=x+m 有两个不同的交点，求 m 的取值范围。"}
+{"id": "P_PROB_001", "subject": "math", "grade": "high_school", "topic": "条件概率", "text": "袋中有 3 个红球、2 个白球，不放回地依次取出 2 个球，求在第一次取到红球的条件下，第二次也取到红球的概率。"}
+{"id": "P_PROB_002", "subject": "math", "grade": "high_school", "topic": "二项分布", "text": "某射手每次射击命中目标的概率为 0.8，各次射击相互独立，求射击 5 次命中次数 X 的分布列与数学期望。"}
+{"id": "P_VEC_001", "subject": "math", "grade": "high_school", "topic": "平面向量", "text": "已知向量 a=(1,2)，b=(x,1)，若 a 与 b 的夹角为锐角，求 x 的取值范围。"}
+{"id": "P_CPLX_001", "subject": "math", "grade": "high_school", "topic": "复数", "text": "已知复数 z 满足 (1+i)z=2i，求 |z| 与 z 的共轭复数。"}
+{"id": "P_LOG_001", "subject": "math", "grade": "high_school", "topic": "对数方程", "text": "已知 log_2(x+1)+log_2(x-1)=3，求 x 的值。"}
+{"id": "P_INT_001", "subject": "math", "grade": "high_school", "topic": "定积分与面积", "text": "求由曲线 y=x^2 与直线 y=2x 所围成的平面图形的面积。"}
+{"id": "P_FUNC_001", "subject": "math", "grade": "high_school", "topic": "绝对值函数", "text": "已知函数 f(x)=|x-1|+|x+2|，求 f(x) 的最小值及取得最小值时 x 的取值范围。"}
+{"id": "P_INEQ_001", "subject": "math", "grade": "high_school", "topic": "基本不等式", "text": "已知 x>0，y>0，且 x+2y=1，求 1/x+1/y 的最小值。"}

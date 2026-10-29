@@ -3,12 +3,17 @@
 S3 scope: identification is no longer keyword matching. A submission is only
 served when it actually contains the annotated problem; everything else is
 refused so the wrong graph is never used to explain a student's work.
+
+S4 scope: ``build_graph`` also accepts a draft with no annotated graph and
+delegates to the LLM generator. The generator is optional so tests and the
+``off`` baseline keep the M1 behaviour of wrapping the seed graph.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 
+from synapse.application.graph import GraphBuildFailed, GraphGenerator
 from synapse.application.subject import (
     EvidenceModel,
     ProblemIdentifier,
@@ -19,7 +24,13 @@ from synapse.application.subject import (
 )
 from synapse.domain.diagnosis.hypotheses import EVIDENCE
 from synapse.domain.problem.identification import TextProblemIdentifier
-from synapse.domain.problem.models import Probe, Problem, SolutionGraph, SolutionNode
+from synapse.domain.problem.models import (
+    Probe,
+    Problem,
+    ProblemDraft,
+    SolutionGraph,
+    SolutionNode,
+)
 
 SUBJECT = "math"
 
@@ -33,9 +44,11 @@ class MathPlugin:
         catalog: Mapping[str, Problem],
         *,
         identifier: ProblemIdentifier | None = None,
+        generator: GraphGenerator | None = None,
     ) -> None:
         self._catalog = dict(catalog)
         self._identifier = identifier or TextProblemIdentifier(self._catalog)
+        self._generator = generator
 
     def identify(self, text: str) -> ProblemRef | None:
         problem_id = self._identifier.identify(text)
@@ -44,10 +57,19 @@ class MathPlugin:
             return None
         return ProblemRef(problem_id=problem.id, subject=self.subject)
 
-    def build_graph(self, problem: Problem) -> SolutionGraph:
-        # The seed graph is hand-written; S4 will generate it and validate
-        # against specs/solution-graph.schema.json before returning.
-        return problem.graph
+    def build_graph(self, problem: Problem | ProblemDraft) -> SolutionGraph:
+        if isinstance(problem, Problem):
+            # Annotated graphs (the seed today, cached generated graphs later)
+            # are returned as-is; regeneration is an explicit cache decision.
+            return problem.graph
+        if self._generator is None:
+            raise GraphBuildFailed(
+                "disabled",
+                detail="当前插件没有接建图器；任意题建图需要 LLMGraphGenerator",
+            )
+        # S5 wires the generated graph into ALIGN/PROBE; until then the draft
+        # path is used by the S4 evaluation harness.
+        return self._generator.generate(problem).graph
 
     def probes_for(self, node: SolutionNode) -> tuple[Probe, ...]:
         return node.probes

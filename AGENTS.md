@@ -10,13 +10,15 @@
 
 **M2（窄口径）已落地**：`infrastructure/llm` + `LLMProbeComposer` + 校验/重试/降级 + `shadow` 双跑 + 10 条 golden 回放与退出判定报告。默认 `SYNAPSE_LLM_MODE=off`，部署形态与 M1 相同（内存仓储、无队列）。
 
+**M2.5 S4 已落地（2026-10-29）**：解法图可由模型生成，但必须过结构规则与 `specs/solution-graph.schema.json`，失败只重试一次并显式报错。20 道未见题：结构 20/20，人工抽查 19/20（95%，门槛 80%）；0 重试 0 修复。**尚未接入 HTTP 主链路**——生成的图还没有证据模型（S5），入口仍只收种子题。
+
 **未实现**（不要以为已经有）：
 
 | 能力 | 状态 |
 |---|---|
 | LLM 追问 | **有**：`infrastructure/llm/`（DeepSeek，默认 `off`）；T5「LLM 辅助对齐」未做且默认不做 |
 | `shadow` 真实对照 | **已跑（2026-10-29，真实 key）**：10/10 不变，24/24 JSON 合法，p95 1.10s，0 重试 0 降级；细节见 `eval/reports/m2-exit-v0.1-shadow.md` 与 ADR-0002 §5.1 |
-| 学科插件 / 解法图生成 | **骨架有**：`SubjectPlugin` 端口 + `MathPlugin` 包装种子图（M2.5 S1–S3）；识别已改为严格匹配（不同题一律 422）。图仍手写，**生成属 S4**，第二学科属 S6 |
+| 学科插件 / 解法图生成 | `SubjectPlugin` + `MathPlugin` 包装种子图（S1–S3）；识别为严格匹配（不同题 422）。**S4 有生成器**：`LLMGraphGenerator`（prompt → JSON → 机械修复 → 结构规则 → schema → 一次重试），20 题结构 20/20、抽查 19/20；尚未接入请求主链路，第二学科属 S6 |
 | RAG / 向量检索 | 无 |
 | PostgreSQL / Redis / Alembic | 无；`InMemorySessionRepository` |
 | OCR | 无；`image_url` 仅在 DTO 预留 |
@@ -24,7 +26,7 @@
 | worker 实际任务 | 无；`apps/worker` 只有说明 |
 | 24h 迁移验证 / 教师复核 | 无 |
 
-**已知硬边界**：只支持一道种子题（函数与导数），换题返回 **422** —— 这是显式设计，不是 bug。证据表 `EVIDENCE` 只覆盖三个探针，实测只有 `H_L2` 能越过 `0.80 + 0.25`；`L1`/`L4` 案例按「低置信不硬判」收束（见 `eval/reports/m2-exit-v0.1.md`）。
+**已知硬边界**：HTTP 入口只支持一道种子题（函数与导数），换题返回 **422** —— 这是显式设计，不是 bug；建图器已能处理任意题干，但接进入口要等 S5 的证据模型。证据表 `EVIDENCE` 只覆盖三个探针，实测只有 `H_L2` 能越过 `0.80 + 0.25`；`L1`/`L4` 案例按「低置信不硬判」收束（见 `eval/reports/m2-exit-v0.1.md`）。
 
 ---
 
@@ -51,11 +53,11 @@
    - 实测口径：JSON 合法 24/24、p95 1.10s、0 降级（ADR-0002 §5.1）；
    - `on:10` 灰度前仍需确认的是**首问整体** P95（现在是单次改写延迟，不含检索/状态推进）；
    - 请求 `deepseek-chat` 实际服务 id 是 `deepseek-flash`，冻结基线看审计里的 `model` 字段。
-2. **M2.5**：第 13 章 S1–S7。S1/S2/S3 已完成（枚举扩到 `math`/`physics` + 三学段；`SubjectPlugin` + `MathPlugin`；识别从关键字换成「归一化包含」严格匹配，不同题返回 422）。下一步：
-   - **S4 题源已定（2026-10-29）**：20 道题**先由模型建图，再人工抽查修订**；抽查不通过的题不计入成功率，验收口径仍是「20 道未见题 ≥80%」。
-   - **S4** 建图生成 + schema 校验 + 修复重试（20 道未见题 ≥80%）——这是真正的门槛，之前的三步只是把插槽挖好；
-   - **S5** 证据表由插件提供，补上 `p_union` 缺权重与「平均 2.4 轮饱和」两处标定问题；
-   - **S6** 接第二个学科（状态机零改动）。
+2. **M2.5**：第 13 章 S1–S7。S1/S2/S3 已完成（枚举扩到 `math`/`physics` + 三学段；`SubjectPlugin` + `MathPlugin`；识别从关键字换成「归一化包含」严格匹配，不同题返回 422）。
+   - **S4 已完成（2026-10-29）**：`application/graph.py`（端口）+ `domain/problem/graph_structure.py`（结构规则/机械修复）+ `infrastructure/llm/graph.py`（生成 + spec 校验 + 一次重试 + 进程内缓存 + 指纹审计）。20 道未见题结构 20/20、人工抽查 19/20（95%）；0 重试 0 修复；p50 3.65s / p95 4.54s。报告：`eval/reports/m2.5-s4-graph-build.md`、`eval/reports/m2.5-s4-graph-review.md`。
+   - **S4 暴露的两件事**：① 抽查唯一失败是 P_DERIV_003 漏 `a=0` 边界——**prompt 守不住数学边界**，S5 的验证器/反例必须补；② `temperature=0` 仍不可重复（同题两次 7/8 节点、指纹不同），缓存只保进程内，回归比对记录指纹。
+   - **S5（下一步）**：`evidence_model()` 由图生成证据权重，替换硬编码 `EVIDENCE`；把生成的图接进 ALIGN/PROBE（现在只被评测脚本使用）；补 `p_union` 缺权重与「平均 2.4 轮饱和」；SymPy 验证器给出可证伪反例。
+   - **S6**：接第二个学科（物理），状态机零改动。
 3. **待收口的既有问题**：前端无自动化测试（只有手工 smoke）；`docs/design/plan/` 未入库；评测集有 10 条、`eval/golden/README` 的 100 条配额未达（需 M2.5 扩题）。
 
 ---
@@ -90,6 +92,9 @@ cd apps/api
 # 真实模型双跑（key 放仓库根 .env，或导出 DEEPSEEK_API_KEY；结果不变，只多一份差异报告）
 .\.venv\Scripts\python.exe ..\..\scripts\eval\m2_exit.py --live-shadow
 
+# M2.5 S4 建图（20 道未见题；需真实 key；产出 eval/reports/m2.5-s4-graph-build.md）
+.\.venv\Scripts\python.exe ..\..\scripts\eval\s4_graph_build.py
+
 # 仓库一致性（CI 第一个 job）
 python scripts/checks/check_repo.py
 
@@ -112,7 +117,8 @@ python tools/merge_markdown.py
 | `release/` 产物需手动重建 | 改了章节不重建，DOCX/PDF 就是旧的（曾差一天） |
 | Git 远端走 HTTPS + GCM | SSH 22/443 均不通；`git push` 无需交互 |
 | `seed.py` 只有一道题 | 换题 422 是刻意边界，扩题属 M2.5 |
-| `lint-imports.exe` 静默 exit 1 | venv 里没有 editable 安装的 `synapse`，先 `$env:PYTHONPATH="src"`（或 `pip install -e .`）再跑；契约通过时应打印「Contracts: 1 kept」 |
+| `lint-imports.exe` 静默 exit 1 | 本机 exe 即使 `PYTHONPATH` 正确也可能静默失败（无输出）。先 `$env:PYTHONPATH=(Resolve-Path src).Path`，再 `.\.venv\Scripts\python.exe -c "from importlinter.cli import lint_imports_command; lint_imports_command()"`；通过时打印「Contracts: 1 kept」。CI 用 editable 安装，不受影响 |
+| 新增 Python 依赖要重装 venv | `pyproject.toml` 加了 `jsonschema`（运行时）与 `types-jsonschema`（dev）；旧 venv 没有时会 ImportError。`pip install -e ".[dev]"` 一次补齐 |
 | 根目录 `eval/` 在 `.gitignore` | 只忽略**根目录**的私有评测材料；`scripts/eval/` 是工具、必须入库（早先写成不带锚点的 `eval/`，把 `m2_exit.py` 一起吞了）。golden 数据仍需 `git add -f eval/golden/golden-v0.1.jsonl`，`eval/reports/` 是产物不入库 |
 | CI 跑 `ruff format --check` | 只跑 `ruff check` 会在 CI 挂（format 与 check 是两套规则）；写完先 `ruff format src tests`。文件末尾缺换行也算未格式化 |
 
@@ -142,7 +148,8 @@ specs/                       机器可验证契约（JSON Schema + 状态机）
 apps/api/                    后端：domain / application / infrastructure / api 分层
 apps/web/                    前端：Next.js 15
 eval/golden/                 M2 金标准 10 条（入库，需 `git add -f`）
-eval/reports/                退出判定报告（产物，不入库）
+eval/problems/               M2.5 S4 建图题 20 条（入库，需 `git add -f`）
+eval/reports/                评测报告与生成图（产物，不入库）
 ```
 
 ---

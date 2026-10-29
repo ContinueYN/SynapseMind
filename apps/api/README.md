@@ -123,10 +123,10 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 
 `SubjectPlugin` 是「对话内核不认识学科」的接缝：插件只提供**内容**（识别、图、探针、证据权重、验证结论），状态机仍决定状态。契约见第 13 章，端口在 [`application/subject.py`](src/synapse/application/subject.py)，当前唯一实现在 [`infrastructure/subjects/math.py`](src/synapse/infrastructure/subjects/math.py)。
 
-| 方法 | 现在（S2） | 后续 |
+| 方法 | 现在（S2–S4） | 后续 |
 |---|---|---|
-| `identify()` | 归一化后「包含」已标注题；不同题一律拒绝，不再用关键字 | S4 换成生成式识别；S6 给 `physics` 补 handler |
-| `build_graph()` | 直接返回手写种子图 | S4 生成 + schema 校验 + 修复重试 |
+| `identify()` | 归一化后「包含」已标注题；不同题一律拒绝，不再用关键字 | 生成式识别（未排期）；S6 给 `physics` 补 handler |
+| `build_graph()` | `Problem` 返回手写种子图；`ProblemDraft` 走 `LLMGraphGenerator`：生成 → 机械修复 → 结构规则 → `solution-graph.schema.json` → 失败重试一次 | S5 把生成的图接进 ALIGN/PROBE；未接主链路前只用于评测 |
 | `probes_for()` | 返回节点自带探针 | 接口不变 |
 | `evidence_model()` | 过滤 `EVIDENCE`（只有 3 个探针有权重） | S5 按图生成，补 `p_union` 等缺口 |
 | `verify()` | 恒返回 `unknown` | S5 接 SymPy；STRONG 档才允许 `diagnose` |

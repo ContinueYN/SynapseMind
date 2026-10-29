@@ -64,6 +64,22 @@ class Problem:
 
 
 @dataclass(frozen=True, slots=True)
+class ProblemDraft:
+    """A submitted problem that has no annotated graph yet (M2.5 S4).
+
+    Kept separate from ``Problem`` on purpose: a ``Problem`` always owns a
+    graph, while a draft is exactly the input the model is asked to decompose.
+    Until S5 wires generated graphs into the request path, drafts only flow
+    through the graph generator and the S4 evaluation harness.
+    """
+
+    id: str
+    text: str
+    subject: str = "math"
+    grade: str = "high_school"
+
+
+@dataclass(frozen=True, slots=True)
 class StudentAttempt:
     answer: str
     work: str = ""
