@@ -1,40 +1,39 @@
-interface ProgressRailProps {
-  turn: number;
-  maxTurns: number;
-  confidence: number;
-  topHypothesis: string;
-}
+const PHASES = ["交题", "拆题", "追问", "定位"] as const;
 
-export function ProgressRail({
-  turn,
-  maxTurns,
-  confidence,
-  topHypothesis,
-}: ProgressRailProps) {
-  const percent = Math.round(confidence * 100);
+const PHASE_BY_STATE: Record<string, number> = {
+  INGEST: 0,
+  PARSE: 0,
+  NEED_INPUT: 0,
+  ALIGN: 1,
+  PROBE: 2,
+  DIAGNOSE: 3,
+  INTERVENE: 3,
+  VERIFY: 3,
+  STOP: 3,
+  CLOSED: 3,
+};
+
+/**
+ * 四段通路：显示诊断走到哪一段。
+ * 注意这不是"这题分几步"——解法图数据没有暴露给前端，不能编。
+ */
+export function ProgressRail({ state }: { state: string }) {
+  const active = PHASE_BY_STATE[state] ?? 0;
+
   return (
-    <section className="progress-rail" aria-label="诊断进度">
-      <div className="progress-copy">
-        <span>
-          <span className="progress-kicker">SESSION</span>
-          第 {Math.min(turn + 1, maxTurns)} / {maxTurns} 轮
-        </span>
-        <span className="muted">当前假设 · {topHypothesis}</span>
-      </div>
-      <div
-        className="progress-track"
-        role="progressbar"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={percent}
-        aria-label="当前假设置信度"
-      >
-        <span style={{ width: `${Math.max(4, percent)}%` }} />
-      </div>
-      <span className="progress-value">
-        {percent}
-        <small>%</small>
-      </span>
-    </section>
+    <ol aria-label="诊断进度" className="sm-steps">
+      {PHASES.map((label, index) => (
+        <li
+          className="sm-step"
+          data-state={index < active ? "done" : index === active ? "active" : undefined}
+          key={label}
+        >
+          <span aria-hidden="true" className="sm-step-n">
+            {index + 1}
+          </span>
+          <span>{label}</span>
+        </li>
+      ))}
+    </ol>
   );
 }

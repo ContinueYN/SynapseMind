@@ -4,7 +4,7 @@
 
 ```text
 design/
-├─ chapters/     # 第 0–12 章，唯一手写源
+├─ chapters/     # 第 0–13 章，唯一手写源
 ├─ release/      # 本地生成：合并 MD + DOCX + PDF（.gitignore）
 └─ assets/       # 3 张设计图
 ```

@@ -1,25 +1,72 @@
-﻿/* Design tokens: colors, type, surfaces, shadows. */
+/* 视觉 token —— 琉璃：冰蓝渐变白 / 透明液态 / 一层光学
+ * 字号字距是按光学尺寸分别定的，别全站一个值。
+ */
 
 :root {
-  --bg: #030712;
-  --bg-soft: #07101f;
-  --surface: rgba(10, 18, 34, 0.78);
-  --surface-strong: #0b1324;
-  --surface-soft: rgba(15, 23, 42, 0.55);
-  --text: #f8fafc;
-  --text-soft: #cbd5e1;
-  --muted: #94a3b8;
-  --dim: #64748b;
-  --accent: #5eead4;
-  --accent-strong: #2dd4bf;
-  --indigo: #a5b4fc;
-  --violet: #c084fc;
-  --amber: #fbbf24;
-  --danger: #fda4af;
-  --line: rgba(148, 163, 184, 0.16);
-  --line-strong: rgba(148, 163, 184, 0.28);
-  --shadow: 0 28px 80px rgba(0, 0, 0, 0.42);
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
-    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-  --font-mono: "SFMono-Regular", "Cascadia Code", "Roboto Mono", Consolas, monospace;
+  /* 冰蓝一族：只有明度差别，没有第二种颜色 */
+  --ice-000: #ffffff;
+  --ice-050: #f7fbfe;
+  --ice-100: #eaf4fc;
+  --ice-200: #d3eaf8;
+  --ice-300: #a9d2ea;
+  --blue-500: #5c9dc6;
+  --blue-600: #4e93be;
+  --blue-700: #2f6e93;
+
+  /* 墨：冷调深色，不用纯黑 */
+  --ink: #0f2a37;
+  --ink-2: #44646f;
+  --ink-3: #89a5b2;
+
+  /* 玻璃 */
+  --glass-fill: linear-gradient(
+    158deg,
+    rgba(255, 255, 255, 0.56) 0%,
+    rgba(255, 255, 255, 0.28) 52%,
+    rgba(255, 255, 255, 0.44) 100%
+  );
+  --glass-shadow: 0 28px 68px -32px rgba(34, 86, 120, 0.48),
+    0 6px 18px -10px rgba(34, 86, 120, 0.2);
+
+  /* 线 */
+  --line-hair: rgba(120, 170, 200, 0.18);
+  --line-soft: rgba(120, 170, 200, 0.3);
+  --line-strong: rgba(78, 147, 190, 0.45);
+
+  /* 字体：全部系统栈，不引外部字体 */
+  --sans: -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", system-ui, sans-serif;
+
+  /* 圆角：只有三档 */
+  --r-lg: 26px;
+  --r-md: 18px;
+  --r-sm: 14px;
+  --r-pill: 99px;
+
+  /* 运动 */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-pop: cubic-bezier(0.3, 1.35, 0.4, 1);
+
+  --measure: 1080px;
+
+  /* 旧变量名保留为别名：纸上系统已被琉璃替换，但别让残留样式一次性改爆 */
+  --bg: var(--ice-050);
+  --paper: var(--ice-050);
+  --text: var(--ink);
+  --text-soft: var(--ink-2);
+  --ink-soft: var(--ink-2);
+  --muted: var(--ink-3);
+  --dim: var(--ink-3);
+  --accent: var(--blue-700);
+  --accent-strong: var(--blue-700);
+  --accent-faint: rgba(78, 147, 190, 0.1);
+  --surface: rgba(255, 255, 255, 0.5);
+  --surface-strong: rgba(255, 255, 255, 0.72);
+  --line: var(--line-hair);
+  --hair: var(--line-hair);
+  --rule: var(--line-soft);
+  --warn: #a8412f;
+  --danger: #a8412f;
+  --shadow: none;
+  --font-sans: var(--sans);
 }
