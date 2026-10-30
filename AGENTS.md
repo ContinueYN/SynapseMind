@@ -4,7 +4,7 @@
 
 ---
 
-## 一、当前状态（2026-10-30）
+## 一、当前状态（2026-10-31）
 
 > 下面各段里的 `pytest` 数字是**写成当时的快照**（307 → 308 → 327 → 334 → 339，随每轮新增测试递增），
 > 不是互相矛盾的三个值；当前值以实跑为准。判断一条能力有没有落地，看它有没有自己的
@@ -17,7 +17,7 @@
 | M1 walking skeleton | 落地 | 交题 → 对齐 → 2 轮探针 → L2 卡点卡；规则版，内存仓储 |
 | M2 窄口径 | 落地 | LLM 追问 + 校验/重试/降级 + 10 条 golden；默认 `SYNAPSE_LLM_MODE=off` |
 | M2.5 S4–S8 | 落地 | 生成图进主链路；物理 PARTIAL、语文 NONE；首问 p50 4.2s / p95 4.6s（预算 8s） |
-| S5 ⑥ 等式链校验 | **落地（默认关）** | `start()` 查首问过程并进卡面；`POST /sessions/{id}/steps` 单步验证；`SYNAPSE_EQUALITY_CHECK` 默认 `off` |
+| S5 ⑥ 等式链校验 | **落地（默认关）** | `start()` 查首问过程并进卡面；`POST /sessions/{id}/steps` 单步验证；数学诊断页有折叠式「交步骤」入口；`SYNAPSE_EQUALITY_CHECK` 默认 `off` |
 | 题集 / 复盘 / 探针 | 落地 | 100 题带 `expected_answer`、4 条真实学生原话、构造真值的缺口探针 |
 | 包装层（门面、论文引用区） | **未开始** | 首页没有 CHC／突触／引用任何一处 |
 
@@ -82,12 +82,12 @@
    - **S6 已完成（2026-10-30）：物理接入，PARTIAL 档。** `PhysicsPlugin`（`subject="physics"`、`level=PARTIAL`）通过同一个 `LLMGraphGenerator` 生成图，prompt 为 `graph-v6-physics`；物理图不写 claim（v1 SymPy 验证器只覆盖数学参数范围），写了就丢弃并记 `claim_dropped_unsupported`；探针 targets 仍复用 H_L1/H_L2/H_L4，但 `hypothesis_labels` 换成物理词表，评分/先验/门槛完全不动。`api/deps.py` 同时注册数学与物理插件，`domain/dialogue/` 一行未改。真实 6 题：建会话 6/6、出卡 6/6、卡点节点 6/6 在图内、卡面 6/6 物理词表；27 探针 / 170 权重，max|w|=0.90，|w|≥0.8 的 95 条；p50 5.77s / p95 6.66s。报告：`eval/reports/m2.5-s6-physics.md`。**S6 后续已验证器**：`PhysicsPlugin.verify()` 读取 `StudentStep.data`，量纲错误/数值矛盾返回 `fail`，缺数据/未知单位/未知符号/畸形输入返回 `unknown`；纯文本和数学路径仍 `unknown`。`domain/dialogue/` 与数学 SymPy 验证器未改。物理暂无标注题集/真实学生作答，6/6 是接线结果不是诊断准确率。
    - **S7 已完成（2026-10-30）：NONE 档承诺降级，语文接入。** `ChinesePlugin`（`subject="chinese"`、`level=NONE`）与数学/物理共用同一个 `SessionService`、状态机和 `CompositeAligner`；`application/commitment.py` 的能力表是唯一开关，NONE 在 ALIGN 之后直接收束到 `STOP → CLOSED`，不调用探针规划器、不生成卡点卡。输出换成另一张契约（`specs/structure-hint.schema.json` / `domain/diagnosis/hint.py`）：`one_line` + `steps[{node_id,text,status}]` + `focus_node_id` + `next_step` + 固定 disclaimer，没有 layer/confidence/next_action/verify；提示由对齐结果派生，每次 `get()` 重建。语文 prompt `graph-v6-chinese` 只要求步骤，探针/claim 若被写出会被丢弃（`probes_dropped_unsupported` / `claim_dropped_unsupported`），`review(require_probes=False)` 允许无探针图。真实 6 题 × 2 段过程：建会话 12/12、结构提示 12/12、schema 合规 12/12、出卡 0/12、探针 0/12；同题复用同一张图 6/6，覆盖数 full ≥ partial 6/6、focus 后移 4/6；p50 2.3s / p95 3.2s。报告：`eval/reports/m2.5-s7-none-tier.md`。**已知低估**：整句 3-gram 覆盖率对多分句语文节点偏严，覆盖计数偏低（partial 1.0/8、full 1.7/8）；**S7 之后**该补的是分句级匹配或对齐器端口（S8 候选），不是调低门槛。物理 PARTIAL 验证器的量纲/数值回代已落地（需要 `StudentStep.data`）；矢量、微积分、不确定度与自然语言抽取仍未做。
    - **S8 已完成（2026-10-30）：对齐策略插件化 + 分句级匹配，契约 v0.2。** `SubjectPlugin.aligner_for(problem) -> StepAligner`；`SessionFactory` 先问插件，`CompositeAligner` 改按 `problem.annotated` 分发，`api/deps.py` 只留无插件回退。数学标注→`RuleBasedAligner`、生成→`TypeCueAligner`，物理 `TypeCueAligner`，语文 `ClauseCueAligner`（小句 ≥4 字、公共段 ≥4 字、覆盖 ≥75% 为 `covered` / ≥15% 为 `partial`）。`AlignmentResult` 加 `partial_node_ids`；`structure-hint.schema.json` 升 v0.2，`HintOut` 加 `partial`，前端计数「有写到的步数（含部分）」。6 题 × 3 段过程：建会话 18/18、schema 18/18、服务=直接调用 18/18、0 卡/0 探针、CLOSED 18/18；同一张图旧 full covered 均值 1.7 → 新 covered 1.7 + partial 2.3（加权 2.8），full≥partial 6/6、新≥旧 6/6、blank 全 missing 6/6。报告：`eval/reports/m2.5-s8-clause-alignment.md`。**边界**：字面重合不是语义匹配；`partial` 不是写错；数学/物理没有 opt-in；`domain/dialogue/` 未改。**S8 之后**仍没有语文标注题集/真实学生作答，18/18 是接线验收，不是诊断准确率。
-3. **待收口的既有问题**：`docs/design/plan/` 未入库；M2.5 题集已扩到 100 道数学（带 `expected_answer`）+ 6 物理 + 6 语文，但 `eval/golden/` 仍是 10 条，`eval/golden/README` 的 100 条配额未达（golden 是模拟对话，不是题集）。前端组件测试已补，但仍是组件级，不含浏览器端到端。
-4. **等式链校验已接出孤岛（2026-10-30 深夜完成，方案 A + B；默认关）。**
+3. **待收口的既有问题**：`docs/design/plan/` 未入库；M2.5 题集已扩到 100 道数学（带 `expected_answer`）+ 6 物理 + 6 语文，但 `eval/golden/` 仍是 10 条，`eval/golden/README` 的 100 条配额未达（golden 是模拟对话，不是题集）。前端有组件测试与一次手工浏览器 smoke（单步检查 fail/unknown + 390px），但还没有自动化浏览器端到端。
+4. **等式链校验已接出孤岛（2026-10-30 深夜完成方案 A + B，2026-10-31 补前端入口；默认关）。**
    - **已落地**：`SessionService.start()` 在 `factory.create()`（对齐）之前对 `command.work` 跑 `check_work`；finding 存进 `DialogueSession.work_findings`，`card_builder` 在标注/生成两张卡上把第一条 finding 写成「一句话结论」、公式与数值放进「依据」。端口是 `application/work_check.EqualityChecker`，实现是 `infrastructure/verification/equalities.SympyEqualityChecker`（缺 SymPy 时返回空，不抛异常）；开关 `SYNAPSE_EQUALITY_CHECK`（`infrastructure/features.py`，默认 `off`），也可用 `build_container(..., features=FeatureFlags(equality_check=True))` 显式打开。
    - **验收（实跑）**：`public-attempts-v0.1.jsonl` 的 `P_PUB_002` 卡面出现「你写的「(sin(x)/(x+sin(x)/cos(x))) = (sin(x)/x+cos(x))」这一步等号不成立：x→0 时左边极限 0.5、右边 2。」；同批 4 条只命中这 1 条（`P_PUB_001/003/004` 无误报），报告 `eval/reports/m2.5-s5-student-review-public-equality.md`。开关关闭时 10 条 golden 卡面逐字节不变（`.tmp/golden-cards-before.json` 对照）、`m2_exit.py` **10/10**；`pytest` **334 全绿**；`ruff format --check`、`ruff check`、`mypy src`、import-linter 全过。
-   - **方案 B 已完成（2026-10-30 深夜）**：新增 `POST /api/v1/sessions/{session_id}/steps`（请求 `StepRequest`：`text` 必填，`node_id`/`data` 可选；响应 `StepVerdictOut`：`version`/`status`/`detail`）并登记 `specs/step-verification.schema.json`。`SessionService.verify_step()` 只查会话所属学科的插件，**不推进状态、不写仓储、不出卡**；未知会话 404。`MathPlugin.verify()` 不再占位：开关打开时调 `EqualityChecker.findings(step.text)`，有可证伪的等号就返回 `fail` 并带学生原句与反例（多条最多列 3 条、detail 截到 900 字），没找到、读不懂或开关关闭一律 `unknown`——**它从不返回 `pass`**，因为「没找到反例」不等于「这步正确」。物理仍走结构化 `data`（量纲/数值回代），纯文本 `unknown`。前端只加了 `verifyStep()` 客户端函数与生成类型，**页面还没有入口**。验收：`pytest` **339 全绿**（新增 5 条：端点默认关、带 flag 的反例、极限链反例、无发现不判对、404；反例用例同时断言会话状态未变）；`ruff check`、`ruff format --check`、`mypy src`、import-linter、`check_repo.py` 全过；开关关闭时 10 条 golden 卡面仍逐字节不变，`m2_exit.py` **10/10**；`npm run typecheck`/`lint`/`test` 通过。
-   - **仍未做**：前端「交步骤」输入区与结果展示；数学仍只查等号（赋值、定义、读不懂的式子跳过），物理前端没有结构化 `data` 表单；单步验证没有审计/限流，也没有把结果回写会话历史。措辞仍只写「这个等号不成立」＋具体反例。
+   - **方案 B 已完成（2026-10-30 深夜）**：新增 `POST /api/v1/sessions/{session_id}/steps`（请求 `StepRequest`：`text` 必填，`node_id`/`data` 可选；响应 `StepVerdictOut`：`version`/`status`/`detail`）并登记 `specs/step-verification.schema.json`。`SessionService.verify_step()` 只查会话所属学科的插件，**不推进状态、不写仓储、不出卡**；未知会话 404。`MathPlugin.verify()` 不再占位：开关打开时调 `EqualityChecker.findings(step.text)`，有可证伪的等号就返回 `fail` 并带学生原句与反例（多条最多列 3 条、detail 截到 900 字），没找到、读不懂或开关关闭一律 `unknown`——**它从不返回 `pass`**，因为「没找到反例」不等于「这步正确」。物理仍走结构化 `data`（量纲/数值回代），纯文本 `unknown`。**前端入口已完成（2026-10-31）**：`SessionOut` 新增 `subject`，数学诊断页多一个折叠式「有一步拿不准？」的 `StepCheck`（`apps/web/components/StepCheck.tsx`），贴一行式子即调 `verifyStep()`；结果按 `fail`/`unknown` 分色显示，`fail` 去掉接口重复的标题前缀，`unknown` 明确写「没判出来不等于这一步正确」。语文、物理不显示该入口（语文没有可判真值，物理需要结构化载荷，摆出来是空承诺）。验收：`pytest` **339 全绿**（新增 5 条：端点默认关、带 flag 的反例、极限链反例、无发现不判对、404；反例用例同时断言会话状态未变）；`ruff check`、`ruff format --check`、`mypy src`、import-linter、`check_repo.py` 全过；开关关闭时 10 条 golden 卡面仍逐字节不变，`m2_exit.py` **10/10**；前端 `npm run typecheck`/`lint`/`test`（3 文件 13 测试）/`build` 通过，并用浏览器 smoke 跑通 `fail` 与 `unknown` 两条路径、390px 无横向溢出。
+   - **仍未做**：数学仍只查等号（赋值、定义、读不懂的式子跳过），物理前端没有结构化 `data` 表单；单步验证没有审计/限流，也没有把结果回写会话历史。措辞仍只写「这个等号不成立」＋具体反例。
 
 ---
 

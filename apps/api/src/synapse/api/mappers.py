@@ -98,7 +98,12 @@ def hint_out(hint: StructureHint) -> HintOut:
     )
 
 
-def session_out(view: SessionView, problem_title: str, problem_text: str) -> SessionOut:
+def session_out(
+    view: SessionView,
+    problem_title: str,
+    problem_text: str,
+    subject: str,
+) -> SessionOut:
     session = view.session
     return SessionOut(
         session_id=session.session_id,
@@ -106,6 +111,7 @@ def session_out(view: SessionView, problem_title: str, problem_text: str) -> Ses
         problem_id=session.problem_id,
         problem_title=problem_title,
         problem_text=problem_text,
+        subject=subject,
         mode=session.mode,
         turn=session.turn,
         max_turns=session.max_turns,

@@ -139,6 +139,7 @@ class SessionOut(StrictModel):
     problem_id: str = Field(pattern=r"^P_[A-Z0-9_]+$")
     problem_title: str
     problem_text: str
+    subject: str = Field(min_length=1, max_length=32)
     mode: str
     turn: int = Field(ge=0)
     max_turns: int = Field(ge=1)

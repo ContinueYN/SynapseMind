@@ -54,6 +54,7 @@ def create_session(
         view,
         service.problem_title(view.session.problem_id),
         service.problem_text(view.session.problem_id),
+        service.problem_subject(view.session.problem_id),
     )
 
 
@@ -70,6 +71,7 @@ def get_session(
         view,
         service.problem_title(view.session.problem_id),
         service.problem_text(view.session.problem_id),
+        service.problem_subject(view.session.problem_id),
     )
 
 
@@ -116,6 +118,7 @@ def submit_turn(
         view,
         service.problem_title(view.session.problem_id),
         service.problem_text(view.session.problem_id),
+        service.problem_subject(view.session.problem_id),
     )
 
 
@@ -132,4 +135,5 @@ def exit_session(
         view,
         service.problem_title(view.session.problem_id),
         service.problem_text(view.session.problem_id),
+        service.problem_subject(view.session.problem_id),
     )

@@ -129,6 +129,7 @@ def test_step_endpoint_returns_a_counterexample_with_the_flag_on(
     on_client = TestClient(create_app(build_container(features=FeatureFlags(equality_check=True))))
     session_id = _start(on_client, sample_payload)
     before = on_client.get(f"/api/v1/sessions/{session_id}").json()
+    assert before["subject"] == "math"
 
     response = on_client.post(
         f"/api/v1/sessions/{session_id}/steps",

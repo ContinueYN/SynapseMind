@@ -3066,6 +3066,137 @@ html[data-read="done"] .sm-orb-fill {
   padding-top: var(--s4);
 }
 
+/* ───────────────────────── 单步检查 ───────────────────────── */
+
+.sm-stepcheck {
+  margin-top: var(--s5);
+}
+
+.sm-stepcheck-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 13px 18px;
+  border: 1px dashed rgba(63, 134, 224, 0.28);
+  border-radius: var(--r-2);
+  background: rgba(255, 255, 255, 0.34);
+  color: var(--ink-3);
+  font-family: inherit;
+  font-size: var(--fs-small);
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--t-fast) linear,
+    background var(--t-fast) linear;
+}
+
+.sm-stepcheck-toggle:hover {
+  border-color: var(--azure-line);
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.sm-stepcheck-toggle > span {
+  display: grid;
+  gap: 2px;
+}
+
+.sm-stepcheck-toggle small {
+  color: var(--ink-4);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+}
+
+.sm-stepcheck-toggle i {
+  flex: none;
+  color: var(--azure-ink);
+  font-size: 11px;
+  font-style: normal;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.sm-stepcheck-panel {
+  margin-top: var(--s3);
+  animation: sm-probe-in var(--t-slow) var(--ease-out) backwards;
+}
+
+.sm-stepcheck-panel .sm-p {
+  max-width: 42em;
+}
+
+.sm-stepcheck-panel form {
+  margin-top: var(--s4);
+}
+
+.sm-stepcheck-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 16px 0 4px;
+}
+
+.sm-stepcheck-aside {
+  max-width: 34em;
+  color: var(--ink-4);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.sm-stepcheck-result {
+  margin-top: var(--s4);
+  padding: 15px 18px;
+  border-left: 2px solid var(--azure-line);
+  border-radius: 0 var(--r-1) var(--r-1) 0;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.sm-stepcheck-result[data-status="fail"] {
+  border-left-color: var(--warn);
+  background: rgba(255, 247, 238, 0.68);
+}
+
+.sm-stepcheck-result-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sm-stepcheck-result-head b {
+  color: var(--ink);
+  font-size: var(--fs-p);
+  font-weight: 600;
+}
+
+.sm-stepcheck-result[data-status="fail"] .sm-stepcheck-result-head b {
+  color: var(--warn);
+}
+
+.sm-stepcheck-result-head span {
+  flex: none;
+  color: var(--ink-4);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+}
+
+.sm-stepcheck-result p {
+  margin: 8px 0 0;
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+
+.sm-stepcheck-caveat {
+  padding-top: 8px;
+  border-top: 1px solid rgba(74, 140, 224, 0.14);
+  color: var(--ink-3) !important;
+}
+
 /* ───────────────────────── 结构提示（NONE 档） ───────────────────────── */
 
 /* 没有把握尺：这里能数的只有“几步被提到”，所以给的是计数，不是百分比 */
@@ -3531,6 +3662,16 @@ html[data-read="done"] .sm-orb-fill {
   .sm-sheet-in,
   .sm-probe {
     padding: var(--s3);
+  }
+
+  .sm-stepcheck-toggle {
+    align-items: flex-start;
+    padding: 12px 14px;
+  }
+
+  .sm-stepcheck-actions .sm-cta {
+    width: 100%;
+    justify-content: center;
   }
 }
 

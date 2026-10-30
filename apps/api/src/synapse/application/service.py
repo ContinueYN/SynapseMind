@@ -443,6 +443,10 @@ class SessionService:
         """题面全文。追问时前端要能随时回看整道题——只给题面，不给答案。"""
         return self._problem(problem_id).text
 
+    def problem_subject(self, problem_id: str) -> str:
+        """Whose plugin owns this problem; the UI uses it to gate step checks."""
+        return self._problem(problem_id).subject
+
     def _stop_without_card(self, session: DialogueSession, notice: str) -> SessionView:
         if session.state is not DialogueState.STOP:
             session.advance(DialogueEvent.ABORT)

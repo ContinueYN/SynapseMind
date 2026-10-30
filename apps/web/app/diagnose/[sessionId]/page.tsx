@@ -8,6 +8,7 @@ import { Dendrite, type DendriteStop } from "@/components/Dendrite";
 import { DiagnosisCardView } from "@/components/DiagnosisCardView";
 import { Plane } from "@/components/Plane";
 import { ProblemBrief } from "@/components/ProblemBrief";
+import { StepCheck } from "@/components/StepCheck";
 import { StructureHintView } from "@/components/StructureHintView";
 import { Surface } from "@/components/Surface";
 import { ProbeCard } from "@/components/ProbeCard";
@@ -289,6 +290,8 @@ export default function DiagnosePage() {
               </Surface>
             )}
           </div>
+
+          {session.subject === "math" ? <StepCheck sessionId={sessionId} /> : null}
 
           {error ? (
             <p className="sm-alert" role="alert" style={{ marginTop: 18 }}>

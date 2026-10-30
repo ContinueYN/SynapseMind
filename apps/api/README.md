@@ -103,6 +103,7 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 - 一次只返回一个 `prompt.question`；最多 6 轮。
 - 后验 `≥0.80` 且领先 `≥0.25` 才出卡；到轮次上限仍 `<0.55` 明确不出确定卡点。
 - `/steps` 只验证提交的这一步（`specs/step-verification.schema.json`）：不推进状态、不出卡；`unknown` 表示未启用/读不懂/没有可判的断言，不是“这步正确”。
+- `SessionOut.subject` 是会话所属学科；前端只在 `math` 会话显示单步检查入口，语文/物理不摆这个空承诺。
 
 ## LLM 追问（M2）
 

@@ -358,6 +358,8 @@ export interface components {
             problem_title: string;
             /** Problem Text */
             problem_text: string;
+            /** Subject */
+            subject: string;
             /** Mode */
             mode: string;
             /** Turn */
