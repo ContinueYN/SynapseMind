@@ -71,7 +71,7 @@ class LLMSettings:
     prompt_version: str = "probe-v1"
     # Graph building is a longer generation than a probe rewrite: its prompt and
     # its per-call budget are versioned and configured separately.
-    graph_prompt_version: str = "graph-v3"
+    graph_prompt_version: str = "graph-v6"
     graph_timeout_s: float = 60.0
     canary_percent: int = 0
     audit_path: str = "var/audit/llm.jsonl"
@@ -93,7 +93,7 @@ class LLMSettings:
             shadow_timeout_s=float(source.get("SYNAPSE_LLM_SHADOW_TIMEOUT_S", 2.0)),
             max_attempts=int(source.get("SYNAPSE_LLM_MAX_ATTEMPTS", 2)),
             prompt_version=source.get("SYNAPSE_LLM_PROMPT_VERSION", "probe-v1").strip(),
-            graph_prompt_version=source.get("SYNAPSE_GRAPH_PROMPT_VERSION", "graph-v3").strip(),
+            graph_prompt_version=source.get("SYNAPSE_GRAPH_PROMPT_VERSION", "graph-v6").strip(),
             graph_timeout_s=float(source.get("SYNAPSE_GRAPH_TIMEOUT_S", 60.0)),
             canary_percent=canary,
             audit_path=source.get("SYNAPSE_LLM_AUDIT_PATH", "var/audit/llm.jsonl").strip(),

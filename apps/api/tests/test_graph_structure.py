@@ -235,6 +235,102 @@ def test_complete_evidence_passes_review() -> None:
     assert check.graph.node("n1").probes[0].evidence["A"]["H_L2"] == -0.40
 
 
+def test_weak_evidence_is_calibrated_to_the_ceiling() -> None:
+    graph = _graph(
+        (
+            _node(
+                "n1",
+                probes=(
+                    _probe(
+                        "p1",
+                        evidence={
+                            "A": {"H_L2": -0.40, "H_L1": 0.20},
+                            "B": {"H_L2": 0.45, "H_L1": -0.10},
+                        },
+                    ),
+                ),
+            ),
+            _node("n2", node_type="COMPUTE"),
+            _node("n3", node_type="CHECK"),
+        ),
+        (("n1", "n2"), ("n2", "n3")),
+    )
+
+    check = review(
+        graph,
+        allowed_targets=TARGETS,
+        require_evidence=True,
+        calibrate_evidence=True,
+    )
+
+    assert check.ok
+    assert "evidence_calibrated" in check.repairs
+    evidence = check.graph.node("n1").probes[0].evidence
+    # 0.45 is the graph peak; doubling it reaches 0.90 and keeps the ratios.
+    assert evidence["B"]["H_L2"] == 0.9
+    assert evidence["A"]["H_L2"] == -0.8
+    assert evidence["A"]["H_L1"] == 0.4
+
+
+def test_calibration_never_weakens_full_scale_evidence() -> None:
+    graph = _graph(
+        (
+            _node(
+                "n1",
+                probes=(
+                    _probe(
+                        "p1",
+                        evidence={
+                            "A": {"H_L2": -0.95, "H_L1": 0.20},
+                            "B": {"H_L2": 0.80, "H_L1": -0.10},
+                        },
+                    ),
+                ),
+            ),
+            _node("n2", node_type="COMPUTE"),
+            _node("n3", node_type="CHECK"),
+        ),
+        (("n1", "n2"), ("n2", "n3")),
+    )
+
+    check = review(
+        graph,
+        allowed_targets=TARGETS,
+        require_evidence=True,
+        calibrate_evidence=True,
+    )
+
+    assert "evidence_calibrated" not in check.repairs
+    assert check.graph.node("n1").probes[0].evidence["A"]["H_L2"] == -0.95
+
+
+def test_calibration_is_opt_in() -> None:
+    graph = _graph(
+        (
+            _node(
+                "n1",
+                probes=(
+                    _probe(
+                        "p1",
+                        evidence={
+                            "A": {"H_L2": -0.40, "H_L1": 0.20},
+                            "B": {"H_L2": 0.45, "H_L1": -0.10},
+                        },
+                    ),
+                ),
+            ),
+            _node("n2", node_type="COMPUTE"),
+            _node("n3", node_type="CHECK"),
+        ),
+        (("n1", "n2"), ("n2", "n3")),
+    )
+
+    check = review(graph, allowed_targets=TARGETS, require_evidence=True)
+
+    assert "evidence_calibrated" not in check.repairs
+    assert check.graph.node("n1").probes[0].evidence["B"]["H_L2"] == 0.45
+
+
 def test_every_option_needs_weights() -> None:
     graph = _graph(
         (

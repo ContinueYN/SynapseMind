@@ -28,12 +28,14 @@ import argparse
 import json
 import sys
 import time
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "apps" / "api" / "src"))
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # Windows GBK consoles
 
 from synapse.api.deps import build_container
 from synapse.application.commands import StartSessionCommand, SubmitAnswerCommand
@@ -287,16 +289,20 @@ def main() -> int:
     turns_total = sum(row.turns for row in rows)
     ratio = created / len(rows)
     stats = probe_stats(container, rows)
+    card_rate = len(with_card) / created if created else 0.0
+    card_layers = Counter(str(row.card.get("layer", "-")) for row in with_card)
 
     lines: list[str] = [
-        "# M2.5 S5 ② 请求链路报告（未见题 → ALIGN → PROBE → 卡点卡）",
+        "# M2.5 S5 ②/③ 请求链路报告（未见题 → ALIGN → PROBE → 卡点卡）",
         "",
         f"- 生成时间：{time.strftime('%Y-%m-%dT%H:%M:%S%z')}",
         f"- 模型：`{settings.model}`；prompt：`{settings.graph_prompt_version}`；模式：`{settings.mode}`",
         f"- 数据集：`{Path(args.problems).name}`（{len(rows)} 题）；作答策略：`{args.policy}`",
         f"- 建会话成功：{created}/{len(rows)}（{pct(created, len(rows))}，门槛 ≥{PASS_BAR:.0%}）",
         f"- 其中标注库命中：{annotated}（其余为现场生成，`annotated=False`）",
-        f"- 出卡：{len(with_card)}/{created}；卡点节点属于该图：{node_ok}/{len(with_card)}",
+        f"- 出卡：{len(with_card)}/{created}（{pct(len(with_card), created)}）；"
+        f"卡点节点属于该图：{node_ok}/{len(with_card)}",
+        f"- 卡点层分布：{dict(card_layers) or '-'}",
         (
             f"- 图提供的证据：{stats['probes']} 个探针（每题 {stats['probes_min']}–"
             f"{stats['probes_max']} 个，均值 {stats['probes_mean']:.1f}），"
@@ -336,24 +342,47 @@ def main() -> int:
             )
         )
 
-    lines += [
+    reading: list[str] = [
         "",
-        "## 出卡率为什么不高（读这张表之前先看这段）",
+        "## 出卡率怎么读",
         "",
         (
-            f"卡点卡的门槛是后验 ≥0.80 且领先第二名 ≥0.25，这与 M2 的种子题完全相同。"
-            f"生成图每题只给 {stats['probes_min']}–{stats['probes_max']} 个探针、"
-            f"权重最大 {stats['max_weight']:.2f}（|w|≥0.8 的 {stats['bold_weights']} 条），"
-            "而探针的 `targets` 分散在不同假设对上（L1/L2、L1/L4、L4/L2…）。"
-            "结果是：即使作答方向与对齐结论一致，后验也常常在几轮里被来回推动、攒不出领先 0.25 的差距，"
-            "最后按设计收束为「低置信、不硬判卡点」。"
+            f"卡点卡的门槛是后验 ≥0.80 且领先第二名 ≥0.25，与 M2 的种子题完全相同。"
+            f"本轮图提供 {stats['probes']} 个探针、{stats['weights']} 条权重，"
+            f"max|w|={stats['max_weight']:.2f}，|w|≥0.8 的有 {stats['bold_weights']} 条。"
         ),
+    ]
+    if card_rate < 0.5:
+        reading += [
+            "",
+            (
+                "出卡率偏低说明探针/权重还不够强：即使作答方向与对齐结论一致，"
+                "后验也会在几轮里被来回推动、攒不出领先 0.25 的差距，最后按设计收束为"
+                "「低置信、不硬判卡点」。这属于 S5 ③ 的校准问题，不是链路问题——"
+                "建会话与「卡点节点属于该图」两项才是接线判据。"
+            ),
+        ]
+    else:
+        reading += [
+            "",
+            (
+                f"出卡率 {pct(len(with_card), created)} 说明 S5 ③ 的权重校准生效："
+                "prompt v4 要求每个探针至少有一个权重达到 ±0.8~1.0，同一假设在不同选项上"
+                "拉开 ≥1.0 的差距；图构建器还会在模型写得偏弱时按全图统一系数放大到 0.90，"
+                "不改符号也不改相对强弱。"
+            ),
+        ]
+    if card_layers:
+        layers = "、".join(f"{layer} {count}" for layer, count in card_layers.most_common())
+        reading.append(
+            f"卡点层分布：{layers}。`aligned` 策略在会话开始时把目标层固定为对齐缺口所在层，"
+            "所以这一列只说明探针把后验推到了哪个方向，不是「这批题都该诊断成同一层」。"
+        )
+    reading += [
         "",
         (
-            "**所以本表的出卡率说明的是图的探针/权重校准程度，不是链路是否通**："
-            "建会话 20/20（含现场建图）与「卡点节点属于该图」两项才是接线成功的判据；"
-            "提高出卡率属于 S5 ③——要么让 prompt 给出更强的权重与更集中的 targets，"
-            "要么给未见题单独标定门槛，而不是悄悄调低 0.80/0.25。"
+            "**出卡率不是诊断准确率**：`aligned` 策略是构造出来的学生（按「与对齐结论一致」作答），"
+            "它回答的是「生成图在理想作答下能不能走到卡点卡」；真实学生作答的准确率需要单独评测集。"
         ),
         "",
         "## 口径与已知边界",
@@ -377,6 +406,7 @@ def main() -> int:
             "用于对照，它经常停在低置信收束，说明阈值没有被绕开。"
         ),
     ]
+    lines += reading
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)

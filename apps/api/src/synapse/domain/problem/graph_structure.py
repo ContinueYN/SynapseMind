@@ -59,6 +59,12 @@ HINT_LEVELS = (0, 1, 2, 3)
 OPTION_LETTERS = "ABCD"
 EVIDENCE_MIN = -1.0
 EVIDENCE_MAX = 1.0
+# Generated graphs are the only place this floor applies (S5 ③). The model is
+# asked for full-scale log-odds, but observed runs stayed at |w|≤0.6; a probe
+# that can only move the posterior by 0.4 cannot clear the 0.80+0.25 card gate
+# in six turns. Scaling the whole graph preserves every relative weight and
+# only fixes the arbitrary unit the model chose.
+EVIDENCE_CALIBRATION_CEILING = 0.9
 CLAIM_KINDS = ("parameter_range",)
 CLAIM_RELATIONS = ("<=", ">=", "<", ">")
 MAX_CLAIM_INTERVALS = 6
@@ -88,6 +94,7 @@ def review(
     allowed_targets: Collection[str] | None = None,
     min_targets: int = MIN_PROBE_TARGETS,
     require_evidence: bool = False,
+    calibrate_evidence: bool = False,
 ) -> GraphCheck:
     """Repair what is mechanical and report what is not.
 
@@ -99,6 +106,11 @@ def review(
     weight for at least one of the probe's targets, or the turn would update
     nothing. Hand-written seed graphs predate the field and stay valid without
     it; they get their weights from ``EVIDENCE``.
+
+    ``calibrate_evidence`` rescales the whole graph's weights so the strongest
+    magnitude reaches ``EVIDENCE_CALIBRATION_CEILING`` when the model wrote
+    everything too timidly (S5 ③). It never changes a sign or a relative weight,
+    never scales down, and is reported as a repair.
     """
     codes: set[str] = set()
     issues: list[str] = []
@@ -173,6 +185,8 @@ def review(
             issues.extend(_probe_evidence_issues(probe, require_evidence=require_evidence))
     if total_probes == 0:
         issues.append("no_probes: 解法图至少要有一个探针")
+    if calibrate_evidence and total_probes:
+        nodes = _calibrate_evidence(nodes, codes)
 
     claim = _repair_claim(graph.claim, codes) if graph.claim is not None else None
     if claim is not None:
@@ -386,6 +400,53 @@ def _probe_evidence_issues(probe: Probe, *, require_evidence: bool) -> list[str]
     ):
         issues.append(f"probe_evidence_no_contrast: {probe.id} 的权重没有正负对比，无法区分假设")
     return issues
+
+
+def _calibrate_evidence(
+    nodes: tuple[SolutionNode, ...],
+    codes: set[str],
+) -> tuple[SolutionNode, ...]:
+    """Scale a generated graph's evidence up to the calibration ceiling.
+
+    A graph-wide factor (not per-probe) keeps the model's relative judgement:
+    a probe it considered weaker stays weaker than the graph's decisive one.
+    The factor is only applied when the graph is below the ceiling, so a model
+    that already writes full-scale weights is left alone.
+    """
+    peak = max(
+        (
+            abs(weight)
+            for node in nodes
+            for probe in node.probes
+            for weights in probe.evidence.values()
+            for weight in weights.values()
+        ),
+        default=0.0,
+    )
+    if peak <= 0.0 or peak >= EVIDENCE_CALIBRATION_CEILING:
+        return nodes
+
+    factor = EVIDENCE_CALIBRATION_CEILING / peak
+    codes.add("evidence_calibrated")
+    return tuple(
+        replace(
+            node,
+            probes=tuple(
+                replace(
+                    probe,
+                    evidence={
+                        option: {
+                            hypothesis: round(weight * factor, 3)
+                            for hypothesis, weight in weights.items()
+                        }
+                        for option, weights in probe.evidence.items()
+                    },
+                )
+                for probe in node.probes
+            ),
+        )
+        for node in nodes
+    )
 
 
 def _repair_claim(claim: VerificationClaim, codes: set[str]) -> VerificationClaim | None:

@@ -176,7 +176,7 @@ def test_valid_graph_is_built_and_audited() -> None:
     result = _generator(client, auditor).generate(DRAFT)
 
     assert result.attempts == 1
-    assert result.repairs == ()
+    assert result.repairs == ("evidence_calibrated",)
     assert result.cached is False
     assert result.graph.problem_id == DRAFT.id
     assert result.graph.version == "g1"
@@ -192,7 +192,7 @@ def test_valid_graph_is_built_and_audited() -> None:
     assert entry.schema_ok is True
     assert entry.retried is False
     assert entry.model == "fake-1"
-    assert entry.prompt_version == "graph-v3"
+    assert entry.prompt_version == "graph-v6"
     assert entry.graph_fingerprint == result.fingerprint
     # No claim in the reply: the build is fine, the answer is just unverified.
     assert entry.verification_status == "unknown"
@@ -348,11 +348,32 @@ def test_evidence_is_serialised_for_each_option() -> None:
 
     payload = to_payload(result.graph)
     probe = payload["nodes"][2]["probes"][0]
+    # The model wrote |w|≤0.45, so graph-wide calibration doubles every weight:
+    # signs and ratios are preserved, the strongest one reaches 0.90.
     assert probe["evidence"] == {
-        "A": {"H_L2": -0.40, "H_L1": 0.20},
-        "B": {"H_L2": 0.45, "H_L1": -0.10},
-        "C": {"H_L1": 0.30},
+        "A": {"H_L2": -0.8, "H_L1": 0.4},
+        "B": {"H_L2": 0.9, "H_L1": -0.2},
+        "C": {"H_L1": 0.6},
     }
+    second = payload["nodes"][3]["probes"][0]
+    assert second["evidence"]["B"] == {"H_L4": 0.8, "H_L2": -0.3}
+
+
+def test_prompt_asks_for_full_scale_evidence() -> None:
+    client = FakeClient(VALID)
+
+    _generator(client).generate(DRAFT)
+
+    assert "±0.8~1.0" in client.calls[0].system
+
+
+def test_full_scale_evidence_is_left_alone() -> None:
+    payload = copy.deepcopy(_VALID)
+    payload["nodes"][2]["probes"][0]["evidence"]["B"]["H_L2"] = 0.95
+    result = _generator(FakeClient(json.dumps(payload, ensure_ascii=False))).generate(DRAFT)
+
+    assert "evidence_calibrated" not in result.repairs
+    assert result.graph.probes()[0].evidence["B"]["H_L2"] == 0.95
 
 
 def test_missing_evidence_is_retried_with_feedback() -> None:
@@ -426,8 +447,8 @@ def test_plugin_uses_the_generated_evidence_not_the_seed_table() -> None:
     model = plugin.evidence_model(graph)
 
     assert set(model.probe_ids) == {"p1", "p2"}
-    assert model.for_probe("p1")["A"] == {"H_L2": -0.40, "H_L1": 0.20}
-    assert model.for_probe("p2")["B"] == {"H_L4": 0.40, "H_L2": -0.15}
+    assert model.for_probe("p1")["A"] == {"H_L2": -0.8, "H_L1": 0.4}
+    assert model.for_probe("p2")["B"] == {"H_L4": 0.8, "H_L2": -0.3}
 
 
 def test_a_generated_graph_without_evidence_gets_no_seed_weights() -> None:
