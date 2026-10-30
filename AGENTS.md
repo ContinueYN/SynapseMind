@@ -62,7 +62,7 @@
 
 1. **M2 收尾**（T1–T4 + T6–T7 已完成，真实 shadow 已跑）：
    - 实测口径：JSON 合法 24/24、p95 1.10s、0 降级（ADR-0002 §5.1）；
-   - `on:10` 灰度前仍需确认的是**首问整体** P95（现在是单次改写延迟，不含检索/状态推进）；
+   - **首问整体门禁已独立测量（2026-10-30，连跑两次）**：`scripts/eval/m2_first_question.py` 对 20 道未见题只测 `SessionService.start()`（含现场建图/对齐/探针规划）。第一轮 p50 **6405ms** / p95 **9304ms**、19/20 建会话（1 次 `bad_json`）；第二轮 p50 **6391ms** / p95 **11856ms**、20/20 建会话，但 2 题触发 `schema_invalid` 重试，单题到 11.8s。预算 8s，**两轮都未过**。`on:10` 灰度前不能把 S5 的 9.3s 当作已解决；尾延迟的主因是建图 schema 失败后的一次重试，其次是模型本身 p50 已 6.4s。要么把生成题路径单独定预算，要么先做延迟治理（报告：`eval/reports/m2-first-question.md`、`m2-first-question-run2.md`）。
    - 请求 `deepseek-chat` 实际服务 id 是 `deepseek-flash`，冻结基线看审计里的 `model` 字段。
 2. **M2.5**：第 13 章 S1–S8。S1/S2/S3 已完成（枚举扩到 `math`/`physics` + 三学段；`SubjectPlugin` + `MathPlugin`；识别从关键字换成「归一化包含」严格匹配，不同题返回 422）。
    - **S4 已完成（2026-10-29）**：`application/graph.py`（端口）+ `domain/problem/graph_structure.py`（结构规则/机械修复）+ `infrastructure/llm/graph.py`（生成 + spec 校验 + 一次重试 + 进程内缓存 + 指纹审计）。20 道未见题结构 20/20、人工抽查 19/20（95%）；0 重试 0 修复；p50 3.65s / p95 4.54s。报告：`eval/reports/m2.5-s4-graph-build.md`、`eval/reports/m2.5-s4-graph-review.md`。
@@ -110,6 +110,9 @@ cd apps/api
 .\.venv\Scripts\python.exe ..\..\scripts\eval\m2_exit.py
 # 真实模型双跑（key 放仓库根 .env，或导出 DEEPSEEK_API_KEY；结果不变，只多一份差异报告）
 .\.venv\Scripts\python.exe ..\..\scripts\eval\m2_exit.py --live-shadow
+
+# M2 首问整体 P95 门禁（20 道未见题，含现场建图；预算 8s，失败退出码 1）
+.\.venv\Scripts\python.exe ..\..\scripts\eval\m2_first_question.py
 
 # M2.5 S4 建图（20 道未见题；需真实 key；产出 eval/reports/m2.5-s4-graph-build.md）
 .\.venv\Scripts\python.exe ..\..\scripts\eval\s4_graph_build.py

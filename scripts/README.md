@@ -14,6 +14,7 @@ scripts/
 │  └─ check_repo.py      # 文件、链接、JSON、skill 映射检查
 ├─ eval/
 │  ├─ m2_exit.py         # M2 退出判定（10 条 golden 回放）
+│  ├─ m2_first_question.py # M2 首问整体 P95 门禁（20 题，含现场建图）
 │  ├─ s4_graph_build.py  # M2.5 S4 建图评测（20 道未见题）
 │  ├─ s5_verify.py       # M2.5 S5 建图 + claim 反例验证
 │  ├─ s5_session.py      # M2.5 S5 请求链路（建图 → 探针 → 卡点卡）
@@ -32,6 +33,9 @@ cd apps/api
 # 规则基线；--live-shadow 需要仓库根 .env 里的 DEEPSEEK_API_KEY
 .\.venv\Scripts\python.exe ..\..\scripts\eval\m2_exit.py
 .\.venv\Scripts\python.exe ..\..\scripts\eval\m2_exit.py --live-shadow
+
+# 首问整体 P95（20 道未见题，含现场建图；预算 8s，失败退出码 1）
+.\.venv\Scripts\python.exe ..\..\scripts\eval\m2_first_question.py
 
 # 20 道未见题建图，需真实 key；报告写入 eval/reports/
 .\.venv\Scripts\python.exe ..\..\scripts\eval\s4_graph_build.py
