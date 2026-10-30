@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Literal
 
 from synapse.domain.diagnosis.models import (
@@ -134,6 +134,7 @@ class HypothesisSet:
         *,
         evidence: EvidenceWeights | None = None,
         focus: str | None = None,
+        labels: Mapping[HypothesisId, str] | None = None,
     ) -> HypothesisSet:
         """Seed the priors from where the process first diverges.
 
@@ -142,6 +143,11 @@ class HypothesisSet:
         carry no hand-tuned meaning. Without it the mapping falls back to the
         seed's node ids — kept as-is so the annotated catalog behaves exactly
         as it did before S5 ② (and the golden baseline stays comparable).
+
+        ``labels`` lets a subject plugin rename the same three hypothesis ids
+        in its own vocabulary (S6). Scoring, priors and the state machine are
+        untouched: only the human-readable label changes, so a physics card
+        never says "恒成立与最值".
         """
 
         priors = dict(DEFAULT_PRIORS)
@@ -159,6 +165,8 @@ class HypothesisSet:
         total = sum(priors.values())
         states: dict[HypothesisId, HypothesisState] = {}
         for hypothesis_id, hypothesis in HYPOTHESES.items():
+            if labels and hypothesis_id in labels:
+                hypothesis = replace(hypothesis, label=labels[hypothesis_id])
             prior = priors[hypothesis_id] / total
             states[hypothesis_id] = HypothesisState(
                 hypothesis=hypothesis,

@@ -32,7 +32,7 @@ export type SessionState =
 export interface CreateSessionInput {
   problem: {
     text: string;
-    subject?: "math";
+    subject?: "math" | "physics";
     grade?: "high_school";
   };
   attempt: {

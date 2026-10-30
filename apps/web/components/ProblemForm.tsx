@@ -6,8 +6,10 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import type { CreateSessionInput } from "@/src/lib/api/types";
 
 export type SelfReport = NonNullable<CreateSessionInput["attempt"]["self_report"]>;
+export type Subject = NonNullable<CreateSessionInput["problem"]["subject"]>;
 
 export interface Draft {
+  subject: Subject;
   problem: string;
   answer: string;
   work: string;
@@ -16,6 +18,7 @@ export interface Draft {
 }
 
 export const EMPTY_DRAFT: Draft = {
+  subject: "math",
   problem: "",
   answer: "",
   work: "",
@@ -43,6 +46,11 @@ const SELF_REPORTS: { value: SelfReport; label: string }[] = [
   { value: "unsure", label: "不确定" },
   { value: "correct_but_guessed", label: "对了但有点蒙" },
   { value: "no_idea", label: "完全不会" },
+];
+
+const SUBJECTS: { value: Subject; label: string }[] = [
+  { value: "math", label: "数学" },
+  { value: "physics", label: "物理" },
 ];
 
 /** 文本框跟着内容长高：中文换行多，固定 rows 会一直出现内滚动条 */
@@ -97,6 +105,7 @@ export function ProblemForm({
 
   function fillSample() {
     onChange({
+      subject: "math",
       problem: SAMPLE_PROBLEM,
       answer: "a≥1/e",
       work: SAMPLE_WORK,
@@ -121,7 +130,7 @@ export function ProblemForm({
     }
 
     await onSubmit({
-      problem: { text: value.problem.trim() },
+      problem: { text: value.problem.trim(), subject: value.subject },
       attempt: {
         answer: value.answer.trim(),
         work: value.work.trim(),
@@ -144,6 +153,26 @@ export function ProblemForm({
           </i>
           线索 <b>{clueCount}</b> / 3
         </span>
+      </div>
+
+      <div>
+        <div className="sm-f-label" style={{ marginBottom: 8 }}>
+          学科
+        </div>
+        <div aria-label="学科" className="sm-picks" role="radiogroup">
+          {SUBJECTS.map((item) => (
+            <label className="sm-pick" key={item.value}>
+              <input
+                checked={value.subject === item.value}
+                name="subject"
+                onChange={() => patch({ subject: item.value })}
+                type="radio"
+                value={item.value}
+              />
+              <span>{item.label}</span>
+            </label>
+          ))}
+        </div>
       </div>
 
       <label className="sm-f">
@@ -276,7 +305,7 @@ export function ProblemForm({
       ) : null}
 
       <p className="sm-fine" style={{ marginTop: 0 }}>
-        当前只支持高中数学「函数与导数」的示例题。前 3 轮不给最终答案。
+        数学走已标注的种子题，物理题现场建图；物理需要服务端配置模型 key。前 3 轮不给最终答案。
       </p>
     </form>
   );

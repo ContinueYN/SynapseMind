@@ -27,7 +27,7 @@ from synapse.application.subject import (
     Verdict,
     VerifiabilityLevel,
 )
-from synapse.domain.diagnosis.hypotheses import EVIDENCE
+from synapse.domain.diagnosis.hypotheses import EVIDENCE, HYPOTHESES
 from synapse.domain.problem.identification import TextProblemIdentifier
 from synapse.domain.problem.models import (
     Probe,
@@ -39,10 +39,16 @@ from synapse.domain.problem.models import (
 
 SUBJECT = "math"
 
+# Same three hypothesis ids, in the vocabulary the seed's cards already use.
+MATH_HYPOTHESIS_LABELS: Mapping[str, str] = {
+    hypothesis_id: hypothesis.label for hypothesis_id, hypothesis in HYPOTHESES.items()
+}
+
 
 class MathPlugin:
     subject = SUBJECT
     level = VerifiabilityLevel.STRONG
+    hypothesis_labels = MATH_HYPOTHESIS_LABELS
 
     def __init__(
         self,

@@ -49,6 +49,7 @@ from synapse.infrastructure.llm.composer import LLMProbeComposer
 from synapse.infrastructure.llm.graph import LLMGraphGenerator
 from synapse.infrastructure.llm.settings import LLMSettings
 from synapse.infrastructure.subjects.math import MathPlugin
+from synapse.infrastructure.subjects.physics import PhysicsPlugin
 from synapse.infrastructure.system import SystemClock, UuidSessionIdGenerator
 
 
@@ -78,7 +79,12 @@ def build_container(
     # The plugin owns the generator; the repository owns the store, so a
     # generated problem can be served again on later turns (M2.5 S5 ②).
     problems.set_plugins(
-        SubjectRegistry((MathPlugin(problems.catalog, generator=graph_generator),))
+        SubjectRegistry(
+            (
+                MathPlugin(problems.catalog, generator=graph_generator),
+                PhysicsPlugin(generator=graph_generator),
+            )
+        )
     )
     aligner = CompositeAligner(
         annotated=RuleBasedAligner(),

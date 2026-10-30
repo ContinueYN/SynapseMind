@@ -1,0 +1,6 @@
+{"id": "P_PHYS_001", "subject": "physics", "grade": "high_school", "topic": "斜面运动与机械能", "text": "质量 m=2 kg 的物块从倾角 30° 的光滑斜面顶端由静止下滑，斜面长 4 m，g 取 10 m/s²，求物块到达底端的速度大小。"}
+{"id": "P_PHYS_002", "subject": "physics", "grade": "high_school", "topic": "平抛运动", "text": "小球以 5 m/s 的速度水平抛出，抛出点距地面 20 m，g 取 10 m/s²，不计空气阻力，求小球落地时的水平位移。"}
+{"id": "P_PHYS_003", "subject": "physics", "grade": "high_school", "topic": "竖直圆周运动临界", "text": "长 L=0.5 m 的轻绳一端固定，另一端系质量 m=0.2 kg 的小球，在竖直平面内做圆周运动，g 取 10 m/s²，求小球通过最高点的最小速度。"}
+{"id": "P_PHYS_004", "subject": "physics", "grade": "high_school", "topic": "匀强电场中的运动", "text": "电荷量 q=2×10^-6 C 的粒子在匀强电场中从静止开始沿电场方向运动，电场强度 E=5×10^3 N/C，质量 m=1×10^-3 kg，求粒子的加速度大小。"}
+{"id": "P_PHYS_005", "subject": "physics", "grade": "high_school", "topic": "闭合电路欧姆定律", "text": "电源电动势 6 V、内阻 1 Ω，外接一个 5 Ω 的定值电阻，求电路中的电流和路端电压。"}
+{"id": "P_PHYS_006", "subject": "physics", "grade": "high_school", "topic": "凸透镜成像", "text": "焦距 10 cm 的凸透镜，物体放在距透镜 15 cm 处，求像距并说明像的性质。"}

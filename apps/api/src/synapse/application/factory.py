@@ -6,6 +6,8 @@ alignment strategy. The service never constructs a session by hand.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from synapse.application.commands import StartSessionCommand
 from synapse.application.errors import ProblemNotSupported, UnsupportedMode
 from synapse.application.ports import (
@@ -76,6 +78,24 @@ class SessionFactory:
             return None
         return plugin.evidence_model(graph).weights
 
+    def _labels_for(self, subject: str) -> Mapping[str, str] | None:
+        """Subject-specific names for the shared hypothesis ids (S6).
+
+        The scoring vocabulary stays H_L1/H_L2/H_L4; only the card wording is
+        replaced. A plugin that does not supply labels keeps the math ones, so
+        the annotated baseline is unchanged.
+        """
+
+        if self._subjects is None:
+            return None
+        plugin = self._subjects.for_subject(subject)
+        if plugin is None:
+            return None
+        labels = getattr(plugin, "hypothesis_labels", None)
+        if isinstance(labels, Mapping):
+            return {str(key): str(value) for key, value in labels.items()}
+        return None
+
     def create(self, command: StartSessionCommand) -> DialogueSession:
         if command.mode != "learning":
             raise UnsupportedMode(command.mode)
@@ -100,6 +120,7 @@ class SessionFactory:
                 alignment,
                 evidence=self._evidence_for(problem.subject, problem.graph),
                 focus=focus,
+                labels=self._labels_for(problem.subject),
             ),
             max_turns=6,
             created_at=self._clock.now(),

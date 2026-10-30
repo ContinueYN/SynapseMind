@@ -367,6 +367,38 @@ def test_prompt_asks_for_full_scale_evidence() -> None:
     assert "±0.8~1.0" in client.calls[0].system
 
 
+PHYSICS_DRAFT = ProblemDraft(
+    id="P_PHYS_001",
+    text="质量为 2 kg 的物块在水平面上受 10 N 拉力，动摩擦因数 0.2，求加速度。",
+    subject="physics",
+)
+
+
+def test_physics_uses_its_own_prompt_and_audit_version() -> None:
+    auditor = InMemoryCallAuditor()
+    client = FakeClient(VALID)
+
+    result = _generator(client, auditor).generate(PHYSICS_DRAFT)
+
+    assert "高中物理解法图" in client.calls[0].system
+    assert "不要输出 claim" in client.calls[0].system
+    assert "恒成立" not in client.calls[0].system
+    assert result.graph.claim is None
+    (entry,) = auditor.entries
+    assert entry.prompt_version == "graph-v6-physics"
+
+
+def test_physics_claim_is_dropped_instead_of_certified() -> None:
+    payload = copy.deepcopy(_VALID)
+    payload["claim"] = {"kind": "parameter_range"}
+    result = _generator(FakeClient(json.dumps(payload, ensure_ascii=False))).generate(PHYSICS_DRAFT)
+
+    assert result.graph.claim is None
+    assert "claim_dropped_unsupported" in result.repairs
+    assert result.verification is not None
+    assert result.verification.status == "unknown"
+
+
 def test_full_scale_evidence_is_left_alone() -> None:
     payload = copy.deepcopy(_VALID)
     payload["nodes"][2]["probes"][0]["evidence"]["B"]["H_L2"] = 0.95

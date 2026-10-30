@@ -43,13 +43,17 @@ from synapse.application.errors import ProblemNotSupported
 from synapse.infrastructure.llm.settings import LLMSettings, load_dotenv
 
 PASS_BAR = 0.80
-SAMPLE_WORK = "先确认题目的条件，再按参数分类讨论。"
+SAMPLE_WORK = {
+    "math": "先确认题目的条件，再按参数分类讨论。",
+    "physics": "先读题，标出已知量和单位，再选择物理模型。",
+}
 
 
 @dataclass(frozen=True, slots=True)
 class Case:
     text: str
     topic: str
+    subject: str = "math"
 
 
 @dataclass
@@ -68,9 +72,7 @@ class Row:
 
 def load_cases(path: Path) -> list[Case]:
     cases: list[Case] = []
-    for line_number, raw in enumerate(
-        path.read_text(encoding="utf-8").splitlines(), start=1
-    ):
+    for line_number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
         line = raw.strip()
         if not line:
             continue
@@ -78,7 +80,11 @@ def load_cases(path: Path) -> list[Case]:
         if not isinstance(payload, dict):
             raise TypeError(f"{path}:{line_number}: 每一行必须是 JSON 对象")
         cases.append(
-            Case(text=str(payload["text"]), topic=str(payload.get("topic", "")))
+            Case(
+                text=str(payload["text"]),
+                topic=str(payload.get("topic", "")),
+                subject=str(payload.get("subject", "math")),
+            )
         )
     return cases
 
@@ -124,7 +130,12 @@ def run_case(container: Any, case: Case, *, policy: str) -> Row:
     service = container.service
     try:
         view = service.start(
-            StartSessionCommand(problem_text=case.text, answer="", work=SAMPLE_WORK)
+            StartSessionCommand(
+                problem_text=case.text,
+                answer="",
+                work=SAMPLE_WORK.get(case.subject, SAMPLE_WORK["math"]),
+                subject=case.subject,
+            )
         )
     except ProblemNotSupported as exc:
         row.elapsed_ms = int((time.perf_counter() - started) * 1000)
@@ -155,11 +166,7 @@ def run_case(container: Any, case: Case, *, policy: str) -> Row:
                 target_layer,
             )
         index = "ABCDEFGH".find(option_id)
-        answer = (
-            prompt.options[index]
-            if 0 <= index < len(prompt.options)
-            else prompt.options[0]
-        )
+        answer = prompt.options[index] if 0 <= index < len(prompt.options) else prompt.options[0]
         try:
             view = service.submit(
                 view.session.session_id,
@@ -411,9 +418,7 @@ def main() -> int:
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(
-        f"\n建会话 {created}/{len(rows)}，出卡 {len(with_card)}，节点在图内 {node_ok}"
-    )
+    print(f"\n建会话 {created}/{len(rows)}，出卡 {len(with_card)}，节点在图内 {node_ok}")
     print(f"报告：{out}")
     return 0 if ratio >= PASS_BAR else 1
 

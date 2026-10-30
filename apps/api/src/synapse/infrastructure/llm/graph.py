@@ -147,6 +147,70 @@ GRAPH_SYSTEM_PROMPT = """你是高中数学解法图标注器。输入一道高�
 12. 探针属于某个节点：写在那个节点的 "probes" 里。把探针放到顶层、或写成节点数组之外，
     整张图会被判为无效。"""
 
+
+PHYSICS_SYSTEM_PROMPT = """你是高中物理解法图标注器。输入一道高中物理题，输出一张“解法图”JSON。
+解法图描述解这道题需要完成的认知步骤，不是完整演算稿。物理题的重点是：
+读题与单位 → 选研究对象/物理模型 → 受力或过程分析 → 列方程 → 求解 → 单位/量级/边界检验。
+硬性要求：
+1. 只输出一个 JSON 对象，不要 markdown、代码块或解释。顶层只有 nodes / edges，
+   探针必须写在**所属节点内部的 probes 数组**里，不要放到顶层：
+   {"nodes": [
+      {"id": "n1", "type": "READ", "text": "...", "demand": {"V": 0.2},
+       "probes": [
+         {"id": "p1", "question": "...", "options": ["...", "...", "..."],
+          "targets": ["H_L1", "H_L2"],
+          "evidence": {"A": {"H_L1": -0.9, "H_L2": 0.4},
+                       "B": {"H_L1": 0.9, "H_L2": -0.3},
+                       "C": {"H_L2": 0.8, "H_L1": -0.2}}}
+       ]}
+    ],
+    "edges": [["n1", "n2"]]}
+2. nodes 为 3–10 个（硬上限 20）；id 从 n1 连续编号；text 不超过 60 字，
+   写这一步做什么，不写最终数值答案。
+3. type 只能是 READ / CONCEPT / CONDITION / STRATEGY / TRANSFORM / COMPUTE / CHECK 之一。
+   物理建议：READ 读题与单位，CONCEPT 选定律/公式，CONDITION 受力/过程条件，
+   STRATEGY 分段/正方向/参考系，TRANSFORM 列方程或分解，COMPUTE 代入求解，CHECK 检验。
+4. demand 只填与这一步相关的维度，取值 0–1：
+   V 符号识别、Gf 推理、Gv 空间、WM 工作记忆、Gs 加工速度、LTS 长时记忆、M 元认知。
+5. edges 的每一项是 [前置节点, 后继节点]，必须无环；第一个节点是 READ，最后一个节点是 CHECK；
+   每个节点至少与另一个节点相连。
+6. 关键节点挂 1–2 个探针，整张图至少 2 个探针（建议 3–5 个）；探针一次只问一个小问题，
+   选项 2–4 个，不给最终答案或数值。
+7. 每个探针的 targets 至少写 2 个假设 id，只能从 H_L1、H_L2、H_L4 中选：
+   H_L1=概念/公式条件不清（定律适用条件、研究对象或参考系选错）；
+   H_L2=物理模型/条件转译（过程阶段、正方向、守恒/临界条件没转成方程）；
+   H_L4=执行/计算错误（代入、单位换算、矢量分解、代数）。
+   整张图的探针合起来必须覆盖三个假设：H_L1、H_L2、H_L4 每个都至少出现在一个探针的 targets 里。
+8. 不要复述题目，不要输出答案或最终数值。
+9. 每个探针的每个选项都必须有 evidence；键 A/B/C/D 依次对应 options 的第 1/2/3/4 个。
+   evidence 的值是 log-odds 权重，范围 -1~1：正数表示选这个选项支持该假设，
+   负数表示反对；0 等于没写，不要用。
+   权重必须用满量程：每个探针至少有一个选项的某个权重达到 ±0.8~1.0，不要都写成 ±0.3~0.6。
+10. evidence 里只能出现该探针 targets 中的假设；每个 target 至少要在一个选项上有非零权重；
+    同一探针要让至少两个假设拿到方向相反的权重，否则这个探针没有区分度，不要设。
+    同一个假设在不同选项上的权重必须拉开：差值至少 1.0。
+    选项代表“这一层没问题”时给该层接近 -1 的权重，代表“卡在这一层”时给接近 +1 的权重。
+11. **物理图不要输出 claim。** v1 的 SymPy 验证器只覆盖数学参数范围，物理答案带单位、矢量
+    或实验条件，硬套会给出错误的“已核对”。把检验写进 CHECK 节点的 text（单位、量级、
+    边界/极限、极端情况），不要写 claim 字段。
+12. 探针属于某个节点：写在那个节点的 "probes" 里。把探针放到顶层、或写成节点数组之外，
+    整张图会被判为无效。"""
+
+
+def _system_prompt(subject: str) -> str:
+    if subject == "physics":
+        return PHYSICS_SYSTEM_PROMPT
+    return GRAPH_SYSTEM_PROMPT
+
+
+def _prompt_version(settings: LLMSettings, subject: str) -> str:
+    """Audit label: one base version, a suffix for non-math prompts."""
+
+    if subject == "math":
+        return settings.graph_prompt_version
+    return f"{settings.graph_prompt_version}-{subject}"
+
+
 _ISSUE_HINTS = {
     "bad_json": "只输出一个合法 JSON 对象",
     "not_object": "只输出一个 JSON 对象",
@@ -241,7 +305,7 @@ def build_request(draft: ProblemDraft, *, issues: Sequence[str] = ()) -> LLMRequ
         user += f"\n\n上一次输出未通过校验，必须修正以下问题后重新输出完整 JSON：\n{feedback}"
     return LLMRequest(
         purpose="graph_build",
-        system=GRAPH_SYSTEM_PROMPT,
+        system=_system_prompt(draft.subject),
         user=user,
         schema_name="solution_graph",
         json_schema=None,
@@ -355,6 +419,7 @@ class LLMGraphGenerator:
             )
 
         cache_key = _cache_key(draft, self._settings)
+        audit_version = _prompt_version(self._settings, draft.subject)
         cached = self._cache.get(cache_key)
         if cached is not None:
             return replace(cached, cached=True)
@@ -373,14 +438,26 @@ class LLMGraphGenerator:
             except LLMTimeout as exc:
                 # A timeout is not a schema failure: retrying it is how the
                 # first-question budget gets blown (chapter 12 §12.8).
-                self._audit(None, schema_ok=False, retried=attempt > 0, reason="timeout")
+                self._audit(
+                    None,
+                    schema_ok=False,
+                    retried=attempt > 0,
+                    reason="timeout",
+                    prompt_version=audit_version,
+                )
                 raise GraphBuildFailed(
                     "timeout",
                     detail=str(exc),
                     attempts=attempt + 1,
                 ) from exc
             except LLMCallFailed as exc:
-                self._audit(None, schema_ok=False, retried=attempt > 0, reason="transport")
+                self._audit(
+                    None,
+                    schema_ok=False,
+                    retried=attempt > 0,
+                    reason="transport",
+                    prompt_version=audit_version,
+                )
                 raise GraphBuildFailed(
                     "transport",
                     detail=str(exc),
@@ -397,6 +474,7 @@ class LLMGraphGenerator:
                     schema_ok=False,
                     retried=attempt > 0,
                     reason=exc.reason,
+                    prompt_version=audit_version,
                 )
                 continue
 
@@ -411,6 +489,7 @@ class LLMGraphGenerator:
                     retried=attempt > 0,
                     reason=verification.reason,
                     verification_status=verification.status,
+                    prompt_version=audit_version,
                 )
                 if attempt + 1 < attempts:
                     continue
@@ -427,6 +506,7 @@ class LLMGraphGenerator:
                     fingerprint=digest,
                     reason=verification.reason,
                     verification_status=verification.status,
+                    prompt_version=audit_version,
                 )
                 result = GraphBuildResult(
                     graph=graph,
@@ -446,6 +526,7 @@ class LLMGraphGenerator:
                 retried=attempt > 0,
                 fingerprint=digest,
                 verification_status=verification.status,
+                prompt_version=audit_version,
             )
             result = GraphBuildResult(
                 graph=check.graph,
@@ -481,6 +562,7 @@ class LLMGraphGenerator:
         reason: str | None = None,
         fingerprint: str = "",
         verification_status: str = "",
+        prompt_version: str = "",
     ) -> None:
         if self._auditor is None:
             return
@@ -491,7 +573,7 @@ class LLMGraphGenerator:
                 session_id=context.session_id if context else "",
                 turn=context.turn if context else 0,
                 model=response.model if response else self._settings.model,
-                prompt_version=self._settings.graph_prompt_version,
+                prompt_version=prompt_version or self._settings.graph_prompt_version,
                 latency_ms=response.latency_ms if response else 0,
                 prompt_tokens=response.prompt_tokens if response else 0,
                 completion_tokens=response.completion_tokens if response else 0,
@@ -540,7 +622,10 @@ def _build_graph(draft: ProblemDraft, text: str) -> GraphCheck:
         stem=draft.text,
         nodes=nodes,
         edges=tuple(edges),
-        claim=_claim(raw.get("claim")),
+        # v1's claim verifier is a math parameter-range tool. A physics answer
+        # carries units/vectors, so a claim-shaped block here is never trusted;
+        # the CHECK node is where the model is told to put unit/magnitude checks.
+        claim=None if draft.subject == "physics" else _claim(raw.get("claim")),
     )
     check = review(
         graph,
@@ -550,6 +635,11 @@ def _build_graph(draft: ProblemDraft, text: str) -> GraphCheck:
     )
     if not check.ok:
         raise _Rejected(_classify(check.issues), check.issues)
+    if draft.subject == "physics" and raw.get("claim") is not None:
+        check = replace(
+            check,
+            repairs=tuple(sorted({*check.repairs, "claim_dropped_unsupported"})),
+        )
 
     spec_errors = validate_payload(to_payload(check.graph))
     if spec_errors:
@@ -704,7 +794,7 @@ def _cache_key(draft: ProblemDraft, settings: LLMSettings) -> str:
             draft.subject,
             draft.grade,
             settings.model,
-            settings.graph_prompt_version,
+            _prompt_version(settings, draft.subject),
             draft.text.strip(),
         )
     )
