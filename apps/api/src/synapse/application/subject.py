@@ -65,9 +65,52 @@ class EvidenceModel:
 
 @dataclass(frozen=True, slots=True)
 class StudentStep:
+    """One step of a student's work, optionally with structured evidence.
+
+    ``data`` is a subject-owned payload. The dialogue kernel never reads it:
+    ``ScoreEngine``/state transitions only look at ``node_id``/``text``; a
+    plugin may use it in ``verify()``. Keys are deliberately not typed here so
+    a new subject does not have to change the shared port. A plugin must
+    document the keys it understands, and any ``unknown`` it returns must say
+    what was missing.
+
+    Physics (``PhysicsPlugin``) reserves:
+
+    ``equation``
+        One scalar equation with exactly one ``=``, e.g.
+        ``"F*cos(theta) - mu*N = m*a"``. Only ``+ - * / **``,
+        parentheses, numbers, declared symbols and the whitelisted functions
+        ``sin/cos/tan/asin/acos/atan/sqrt/exp/log/ln/abs`` plus ``pi`` are
+        accepted. No ``eval``/``exec``; implicit multiplication is rejected.
+    ``expression``
+        Alternative to ``equation`` when the student wrote a quantity without
+        ``=``. Requires ``unit``.
+    ``unit``
+        Declared result unit. Required with ``expression``; optional with
+        ``equation``, where it is checked against the right-hand side.
+    ``units``
+        ``symbol -> unit expression`` for every symbol in the equation/
+        expression. The empty string means dimensionless (e.g. ``mu``).
+        Examples: ``"N"``, ``"m/s^2"``, ``"kg*m/s^2"``, ``"deg"``.
+    ``values``
+        ``symbol -> number`` in the symbol's declared unit. Values are
+        converted to SI before evaluation. Numeric replay runs only when every
+        free symbol has a value.
+    ``expected``
+        Optional ``{"value": number, "unit": unit-expression}`` for the
+        student's declared result. It is compared with the equation's
+        right-hand side (or with ``expression`` when there is no equation).
+    ``tolerance``
+        Optional number, or ``{"relative": float, "absolute": float}``. The
+        defaults are ``relative=1e-6`` and ``absolute=1e-9``.
+
+    Math ignores ``data`` and keeps its existing claim verifier.
+    """
+
     node_id: str
     text: str
     turn: int = 0
+    data: Mapping[str, object] | None = None
 
 
 VerdictStatus = Literal["pass", "fail", "unknown"]

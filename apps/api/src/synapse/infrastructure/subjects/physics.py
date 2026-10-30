@@ -9,8 +9,8 @@ Why PARTIAL:
 
 * a solution graph can be generated and probed exactly like math;
 * a *student's step* can be checked by units/dimensional analysis or numeric
-  substitution, but ``StudentStep`` currently carries free text only, so
-  ``verify()`` returns ``unknown`` instead of pretending;
+  substitution when the step carries structured ``data``; without it the
+  verdict stays ``unknown`` instead of guessing from prose;
 * the math parameter-range claim verifier is deliberately not used here — a
   physics answer carries units, and running the math verifier on it would
   certify something it cannot see.
@@ -36,6 +36,7 @@ from synapse.domain.problem.models import (
     SolutionGraph,
     SolutionNode,
 )
+from synapse.infrastructure.verification.physics_units import verify_step
 
 SUBJECT = "physics"
 
@@ -101,11 +102,12 @@ class PhysicsPlugin:
         return EvidenceModel(weights={})
 
     def verify(self, step: StudentStep) -> Verdict:
-        del step
-        return Verdict(
-            status="unknown",
-            detail=(
-                "物理按 PARTIAL 档接入：量纲/单位与数值回代需要结构化步骤，"
-                "当前 StudentStep 只有文本，暂不判对错"
-            ),
-        )
+        """PARTIAL check: dimensions first, numeric replay when values exist.
+
+        The dialogue kernel never calls this directly; it is exposed only
+        through the plugin port. A pure-text step remains ``unknown`` because
+        guessing units from prose is exactly the kind of false certainty the
+        PARTIAL tier must avoid.
+        """
+
+        return verify_step(step)
