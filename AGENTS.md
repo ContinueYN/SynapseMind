@@ -103,7 +103,7 @@ cd apps/api
 pytest
 ruff check src tests
 ruff format --check src tests          # CI 会跑，别只跑 check
-mypy src
+.\.venv\Scripts\python.exe -m mypy src # 本机 mypy.exe 会静默 exit 1，见环境陷阱
 .\.venv\Scripts\lint-imports.exe         # 分层契约，CI 强制
 
 # 前端
@@ -184,6 +184,7 @@ python tools/merge_markdown.py
 | Git 远端走 HTTPS + GCM | SSH 22/443 均不通；`git push` 无需交互 |
 | `seed.py` 只有一道题 | 换题 422 是刻意边界，扩题属 M2.5 |
 | `lint-imports.exe` 静默 exit 1 | 本机 exe 即使 `PYTHONPATH` 正确也可能静默失败（无输出）。先 `$env:PYTHONPATH=(Resolve-Path src).Path`，再 `.\.venv\Scripts\python.exe -c "from importlinter.cli import lint_imports_command; lint_imports_command()"`；通过时打印「Contracts: 1 kept」。CI 用 editable 安装，不受影响 |
+| `.venv\Scripts\mypy.exe` 静默 exit 1 | 本机 `mypy.exe --version` 都返回 1 且无输出，但 `.\.venv\Scripts\python.exe -m mypy src` 正常（70 files, no issues）。用模块方式跑，别把静默失败当成类型错误；CI 的 `mypy src` 不受影响 |
 | 8000 端口可能被别的 Docker 项目占着 | 本机 `cs-web-ai-backend-1` 容器发布 `0.0.0.0:8000`，此时 uvicorn 绑 127.0.0.1:8000 会 `winerror 10013`。改用 `--port 8100`，并在 `apps/web/.env.local` 写 `NEXT_PUBLIC_API_BASE=http://localhost:8100`（该文件被 `*.local` 忽略），然后重启 `npm run dev`——`NEXT_PUBLIC_*` 在 dev 启动时就内联了，热更新换不掉 |
 | 新增 Python 依赖要重装 venv | `pyproject.toml` 加了 `jsonschema`（运行时）与 `types-jsonschema`（dev）；旧 venv 没有时会 ImportError。`pip install -e ".[dev]"` 一次补齐 |
 | 根目录 `eval/` 在 `.gitignore` | 只忽略**根目录**的私有评测材料；`scripts/eval/` 是工具、必须入库（早先写成不带锚点的 `eval/`，把 `m2_exit.py` 一起吞了）。golden 数据仍需 `git add -f eval/golden/golden-v0.1.jsonl`，`eval/reports/` 是产物不入库 |
