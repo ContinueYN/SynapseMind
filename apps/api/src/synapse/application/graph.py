@@ -38,11 +38,11 @@ class GraphBuildResult:
     notes: tuple[str, ...] = ()
     cached: bool = False
     # ``pass`` (no counterexample found), ``unknown`` (nothing to check / could
-    # not decide) or ``fail``. A ``fail`` never fails the build: the answer is
-    # retried once with the counterexample as feedback, and a claim that is
-    # still refuted is dropped (``claim_dropped_refuted``) so ``graph.claim``
-    # stays ``None`` and nothing downstream can read a refuted range as
-    # checked. The counterexample itself is kept here.
+    # not decide) or ``fail``. A ``fail`` never fails the build: the interval is
+    # repaired by a claim-only call (the graph is not regenerated), and a claim
+    # that is still refuted is dropped (``claim_dropped_refuted``) so
+    # ``graph.claim`` stays ``None`` and nothing downstream can read a refuted
+    # range as checked. The counterexample itself is kept here.
     verification: VerificationResult | None = None
 
 

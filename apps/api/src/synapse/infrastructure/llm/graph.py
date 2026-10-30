@@ -20,6 +20,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from functools import lru_cache
@@ -43,7 +44,11 @@ from synapse.application.llm import (
     LLMResponse,
     LLMTimeout,
 )
-from synapse.application.verification import GraphVerifier
+from synapse.application.verification import (
+    GraphVerifier,
+    VerificationResult,
+    describe_claim,
+)
 from synapse.domain.diagnosis.hypotheses import HYPOTHESES
 from synapse.domain.problem.graph_structure import (
     GraphCheck,
@@ -65,6 +70,13 @@ from synapse.infrastructure.verification import default_verifier
 GRAPH_MAX_TOKENS = 4096
 GRAPH_CACHE_SIZE = 128
 PROBLEM_ID_PATTERN = re.compile(r"^P_[A-Z0-9_]+$")
+
+# A claim repair returns a handful of interval endpoints, not a graph: its
+# completion is bounded separately and it never re-emits nodes/probes. The
+# minimum budget is the point below which starting the call can only produce a
+# timeout, so the builder drops the claim instead (ADR-0004 §5.4).
+CLAIM_REPAIR_MAX_TOKENS = 400
+CLAIM_REPAIR_MIN_BUDGET_S = 1.0
 
 # The diagnosis layer is still the M1 one (H_L1/L2/L4), so a generated probe
 # must separate two of those hypotheses. S5 replaces the vocabulary together
@@ -88,15 +100,19 @@ GRAPH_SYSTEM_PROMPT = """你是高中数学解法图标注器。输入一道高�
     ],
     "edges": [["n1", "n2"]],
     "claim": {...}}
-2. nodes 为 3–10 个（硬上限 20）；id 从 n1 连续编号；
-   text 不超过 60 字，写这一步做什么，不写最终答案。
+2. nodes 为 5–7 个（硬上限 20）；id 从 n1 连续编号；
+   text 不超过 40 字，写这一步做什么，不写最终答案。
 3. type 只能是 READ / CONCEPT / CONDITION / STRATEGY / TRANSFORM / COMPUTE / CHECK 之一。
 4. demand 只填与这一步相关的维度，取值 0–1：
    V 符号识别、Gf 推理、Gv 空间、WM 工作记忆、Gs 加工速度、LTS 长时记忆、M 元认知。
 5. edges 的每一项是 [前置节点, 后继节点]，必须无环；
    第一个节点是 READ，最后一个节点是 CHECK；每个节点至少与另一个节点相连。
-6. 关键节点挂 1–2 个探针，整张图至少 2 个探针（建议 3–5 个）；探针一次只问一个小问题，
-   选项 2–4 个，不给答案。
+6. 整张图**5 个**探针（4–5 个，不要超过 5 个）：只挂在真正能区分假设的 3–4 个节点上，
+   其余节点不要写 probes。探针一次只问一个小问题，选项**恰好 3 个**，不给答案。
+   每个探针的问题和选项都要短（选项不超过 15 字），整张图越短越好，
+   这是一次同步调用，输出长度直接等于学生等待的时间。
+   同一个假设在选项上必须既有正的权重也有负的权重：只有一边的话，这个探针
+   要么只能抬高它、要么只能压低它，学生答了也攒不出领先差距。
 7. 每个探针的 targets 至少写 2 个假设 id，只能从 H_L1、H_L2、H_L4 中选：
    H_L1=概念不清（定义、定理条件）；H_L2=条件转译/参数分类；H_L4=执行/计算错误。
    整张图的探针合起来必须覆盖三个假设：H_L1、H_L2、H_L4 每个都至少出现在一个探针的 targets 里。
@@ -148,6 +164,52 @@ GRAPH_SYSTEM_PROMPT = """你是高中数学解法图标注器。输入一道高�
     整张图会被判为无效。"""
 
 
+_CLAIM_CHECKLIST = (
+    "检查清单：\n"
+    "- 反例的含义：参数落在答案内却违反约束 → 这一段偏宽，必须收紧或删掉；"
+    "参数落在答案外却满足约束 → 区间偏窄，必须补上。\n"
+    "- 写区间前逐个检查：parameter=0、parameter<0（先看 variable→−∞ 与 variable→+∞ 的极限）、"
+    "每个端点代回约束。端点拿不准就代回去，不要靠印象。\n"
+    "- 负参数分支不能省略，也不能用参数为正时的最值结论覆盖它。"
+)
+
+# A refuted claim only needs its interval rewritten. Asking for a whole graph
+# again costs a full completion and is what pushed the slow tail to ≈7.6 s; a
+# claim-only reply is a few dozen tokens (ADR-0004 §5.4). The formalisation is
+# pinned by the caller: the response may not move the goalposts by editing f(x).
+CLAIM_REPAIR_SYSTEM_PROMPT = (
+    "你是高中数学答案校验器。你已经为一道题写好了形式化断言，但答案区间被反例推翻。\n"
+    "现在只重写参数区间：不要重新解题，不要改动表达式、关系、参数与定义域。\n"
+    "输出只有一个 JSON 对象，不要 markdown、代码块或解释：\n"
+    '{"answer":[{"lower":"0","upper":"E","lower_inclusive":true,"upper_inclusive":true}]}\n'
+    "要求：\n"
+    '- answer 是非空的区间数组；端点是数学表达式字符串（如 "0"、"1/E"、"E"），'
+    "无界的一端写 null；含端点写 true，不含写 false。\n"
+    "- 区间从小到大排列，互不重叠。\n"
+    '- 如果你判断不存在满足条件的参数区间，输出 {"answer":null}。\n' + _CLAIM_CHECKLIST
+)
+
+# ``verification_malformed`` means the verifier could not even read the claim
+# (unknown symbol, empty endpoint, unparsable expression). Pinning the
+# expression would pin the defect, so this variant allows rewriting the whole
+# claim — still without touching the graph.
+CLAIM_REWRITE_SYSTEM_PROMPT = (
+    "你是高中数学答案校验器。你已经为一道题写好了形式化断言，但验证器读不懂它。\n"
+    "现在重写整个 claim：不要重新解题，也不要改变题目的含义。\n"
+    "输出只有一个 JSON 对象，不要 markdown、代码块或解释：\n"
+    '{"claim":{"kind":"parameter_range","parameter":"a","variable":"x",'
+    '"variable_domain":"(-inf,+inf)",'
+    '"constraint":{"expression":"x^2-a*x+1","relation":">"},'
+    '"answer":[{"lower":"-2","upper":"2","lower_inclusive":false,"upper_inclusive":false}]}}\n'
+    "要求：\n"
+    "- kind 只能是 parameter_range；relation 只能是 <=、>=、<、>；"
+    "expression 只用题目变量、参数与 exp/log/sqrt/Abs/sin/cos 与 + - * / ^。\n"
+    "- variable_domain 用区间写法；写无穷的一端必须用圆括号。\n"
+    "- answer 的端点是常数表达式字符串；无界写 null；含端点写 true。\n"
+    '- 如果你判断这道题没有可验证的参数区间，输出 {"claim":null}。\n' + _CLAIM_CHECKLIST
+)
+
+
 PHYSICS_SYSTEM_PROMPT = """你是高中物理解法图标注器。输入一道高中物理题，输出一张“解法图”JSON。
 解法图描述解这道题需要完成的认知步骤，不是完整演算稿。物理题的重点是：
 读题与单位 → 选研究对象/物理模型 → 受力或过程分析 → 列方程 → 求解 → 单位/量级/边界检验。
@@ -165,7 +227,7 @@ PHYSICS_SYSTEM_PROMPT = """你是高中物理解法图标注器。输入一道�
        ]}
     ],
     "edges": [["n1", "n2"]]}
-2. nodes 为 3–10 个（硬上限 20）；id 从 n1 连续编号；text 不超过 60 字，
+2. nodes 为 5–7 个（硬上限 20）；id 从 n1 连续编号；text 不超过 40 字，
    写这一步做什么，不写最终数值答案。
 3. type 只能是 READ / CONCEPT / CONDITION / STRATEGY / TRANSFORM / COMPUTE / CHECK 之一。
    物理建议：READ 读题与单位，CONCEPT 选定律/公式，CONDITION 受力/过程条件，
@@ -174,8 +236,10 @@ PHYSICS_SYSTEM_PROMPT = """你是高中物理解法图标注器。输入一道�
    V 符号识别、Gf 推理、Gv 空间、WM 工作记忆、Gs 加工速度、LTS 长时记忆、M 元认知。
 5. edges 的每一项是 [前置节点, 后继节点]，必须无环；第一个节点是 READ，最后一个节点是 CHECK；
    每个节点至少与另一个节点相连。
-6. 关键节点挂 1–2 个探针，整张图至少 2 个探针（建议 3–5 个）；探针一次只问一个小问题，
-   选项 2–4 个，不给最终答案或数值。
+6. 整张图**5 个**探针（4–5 个，不要超过 5 个）：只挂在真正能区分假设的 3–4 个节点上，
+   其余节点不要写 probes。探针一次只问一个小问题，选项**恰好 3 个**，不给最终答案或数值。
+   问题和选项都要短（选项不超过 15 字），输出长度直接等于学生等待的时间。
+   同一个假设在选项上必须既有正的权重也有负的权重，否则这个探针只能单向移动它。
 7. 每个探针的 targets 至少写 2 个假设 id，只能从 H_L1、H_L2、H_L4 中选：
    H_L1=概念/公式条件不清（定律适用条件、研究对象或参考系选错）；
    H_L2=物理模型/条件转译（过程阶段、正方向、守恒/临界条件没转成方程）；
@@ -237,17 +301,27 @@ class _GraphProfile:
     subject never asks a probe and has no verifier, so its graph is generated
     without either; asking the model for them would cost tokens and imply a
     promise the product does not make.
+
+    ``version`` is the audit/cache label of *this* prompt. A subject whose
+    prompt text did not change keeps its old label when the math prompt is
+    revised; otherwise an audit row would claim a prompt revision that never
+    happened. Empty means "use ``settings.graph_prompt_version``" (math).
     """
 
     system: str
     probes: bool
     claim: bool
+    version: str = ""
 
 
 _PROFILES: dict[str, _GraphProfile] = {
     "math": _GraphProfile(GRAPH_SYSTEM_PROMPT, probes=True, claim=True),
-    "physics": _GraphProfile(PHYSICS_SYSTEM_PROMPT, probes=True, claim=False),
-    "chinese": _GraphProfile(CHINESE_SYSTEM_PROMPT, probes=False, claim=False),
+    "physics": _GraphProfile(
+        PHYSICS_SYSTEM_PROMPT, probes=True, claim=False, version="graph-v9-physics"
+    ),
+    "chinese": _GraphProfile(
+        CHINESE_SYSTEM_PROMPT, probes=False, claim=False, version="graph-v6-chinese"
+    ),
 }
 
 
@@ -263,11 +337,10 @@ def _system_prompt(subject: str) -> str:
 
 
 def _prompt_version(settings: LLMSettings, subject: str) -> str:
-    """Audit label: one base version, a suffix for non-math prompts."""
+    """Audit label; math still follows the environment override."""
 
-    if subject == "math":
-        return settings.graph_prompt_version
-    return f"{settings.graph_prompt_version}-{subject}"
+    profile = _profile(subject)
+    return profile.version or settings.graph_prompt_version
 
 
 _ISSUE_HINTS = {
@@ -325,6 +398,21 @@ class _Rejected(Exception):
         self.issues = tuple(issues)
 
 
+@dataclass(frozen=True, slots=True)
+class _ClaimRepair:
+    """Outcome of the claim-only repair call.
+
+    ``attempted`` distinguishes "the budget said no" from "the call ran and was
+    not accepted"; the builder turns those into ``retry_skipped_budget`` versus
+    ``claim_retry_*`` repair codes.
+    """
+
+    attempted: bool
+    claim: VerificationClaim | None = None
+    verification: VerificationResult | None = None
+    codes: tuple[str, ...] = ()
+
+
 class _ProbePayload(BaseModel):
     model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
     id: str
@@ -361,7 +449,15 @@ def build_request(draft: ProblemDraft, *, issues: Sequence[str] = ()) -> LLMRequ
     )
     feedback = _feedback(issues)
     if feedback:
-        user += f"\n\n上一次输出未通过校验，必须修正以下问题后重新输出完整 JSON：\n{feedback}"
+        # The retry is the second half of the first-question budget: a minimal
+        # graph that passes the rules is worth more than a rich one that costs
+        # another four seconds of generation (chapter 12 §12.8).
+        user += (
+            "\n\n上一次输出未通过校验，必须修正以下问题后重新输出完整 JSON：\n"
+            f"{feedback}\n\n"
+            "这次请输出**最小可用图**：5 个节点、3 个探针，宁短勿长；"
+            "结构规则与证据规则一条都不能少。"
+        )
     return LLMRequest(
         purpose="graph_build",
         system=_system_prompt(draft.subject),
@@ -369,6 +465,61 @@ def build_request(draft: ProblemDraft, *, issues: Sequence[str] = ()) -> LLMRequ
         schema_name="solution_graph",
         json_schema=None,
         max_tokens=GRAPH_MAX_TOKENS,
+    )
+
+
+def build_claim_repair_request(
+    draft: ProblemDraft,
+    claim: VerificationClaim,
+    verification: VerificationResult,
+) -> LLMRequest:
+    """The second call after a refuted claim: intervals only, no graph.
+
+    The problem and the pinned formalisation are repeated so the model repairs
+    the same statement it wrote; the counterexample is the only new evidence.
+    """
+    malformed = verification.reason == "malformed"
+    lines = [
+        f"学科：{draft.subject}",
+        f"学段：{draft.grade}",
+        "题目：",
+        draft.text.strip(),
+        "",
+        f"原来的形式化断言：{describe_claim(claim)}",
+        f"表达式：{claim.expression}",
+        f"关系：{claim.relation}",
+        f"参数：{claim.parameter}",
+        f"变量：{claim.variable}",
+        f"定义域：{claim.variable_domain}",
+        f"上次验证结论：{verification.status}/{verification.reason}",
+    ]
+    counter = verification.counterexample
+    if counter is not None:
+        witness = f"，{counter.variable}={counter.variable_value}" if counter.variable_value else ""
+        lines.append(f"反例：{counter.parameter}={counter.parameter_value}{witness}")
+    if verification.detail:
+        lines.append(f"说明：{verification.detail}")
+    lines.append(f"验证问题：{verification.as_issue()}")
+    if malformed:
+        lines += [
+            "",
+            "上面的形式化无法被验证器解析。请重写整个 claim，只输出：",
+            '{"claim":{...}}；如果这道题没有可验证的参数区间，输出 {"claim":null}。',
+        ]
+    else:
+        lines += [
+            "",
+            "只重写 answer（参数区间），只输出：",
+            '{"answer":[...]}；如果不存在满足条件的参数区间，输出 {"answer":null}。',
+            "不要改动表达式、关系、参数与定义域。",
+        ]
+    return LLMRequest(
+        purpose="graph_claim_repair",
+        system=CLAIM_REWRITE_SYSTEM_PROMPT if malformed else CLAIM_REPAIR_SYSTEM_PROMPT,
+        user="\n".join(lines),
+        schema_name="claim_answer",
+        json_schema=None,
+        max_tokens=CLAIM_REPAIR_MAX_TOKENS,
     )
 
 
@@ -465,6 +616,16 @@ class LLMGraphGenerator:
         self._cache: dict[str, GraphBuildResult] = {}
         self._cache_size = max(0, cache_size)
 
+    def warm(self) -> None:
+        """Let the verifier pay its import before a learner waits for it.
+
+        Optional on the port: a verifier without ``warm`` (the tests' fakes)
+        is simply left alone.
+        """
+        warm = getattr(self._verifier, "warm", None)
+        if callable(warm):
+            warm()
+
     def generate(self, draft: ProblemDraft) -> GraphBuildResult:
         if not self._settings.llm_enabled:
             raise GraphBuildFailed(
@@ -483,10 +644,95 @@ class LLMGraphGenerator:
         if cached is not None:
             return replace(cached, cached=True)
 
+        started_at = time.perf_counter()
+        check, response, graph_calls = self._generate_graph(draft, audit_version)
+        verification = self._verifier.verify(check.graph)
+
+        if verification.status != "fail":
+            digest = fingerprint(check.graph)
+            self._audit(
+                response,
+                schema_ok=True,
+                retried=graph_calls > 1,
+                fingerprint=digest,
+                verification_status=verification.status,
+                prompt_version=audit_version,
+            )
+            result = GraphBuildResult(
+                graph=check.graph,
+                fingerprint=digest,
+                attempts=graph_calls,
+                repairs=check.repairs,
+                notes=quality_notes(check.graph),
+                verification=verification,
+            )
+            self._store(cache_key, result)
+            return result
+
+        # The graph is usable; only its answer range is wrong. A refuted claim
+        # is repaired by rewriting the interval, not the whole graph: the graph
+        # already passed every structural rule, and regenerating it is what used
+        # to push the tail to ≈7.6s (ADR-0004 §5.4).
+        self._audit(
+            response,
+            schema_ok=False,
+            retried=graph_calls > 1,
+            reason=verification.reason,
+            verification_status=verification.status,
+            prompt_version=audit_version,
+        )
+        repair = self._repair_claim(
+            draft,
+            check.graph,
+            verification,
+            started_at=started_at,
+            prompt_version=audit_version,
+        )
+        calls = graph_calls + (1 if repair.attempted else 0)
+
+        if repair.claim is not None:
+            graph = replace(check.graph, claim=repair.claim)
+            digest = fingerprint(graph)
+            result = GraphBuildResult(
+                graph=graph,
+                fingerprint=digest,
+                attempts=calls,
+                repairs=tuple(sorted({*check.repairs, "claim_repaired"})),
+                notes=quality_notes(graph),
+                verification=repair.verification,
+            )
+            self._store(cache_key, result)
+            return result
+
+        # Keep the graph (its probes are what the dialogue uses) but refuse to
+        # certify the answer; the counterexample stays in ``verification``.
+        graph = replace(check.graph, claim=None)
+        digest = fingerprint(graph)
+        repairs = {*check.repairs, "claim_dropped_refuted", *repair.codes}
+        if not repair.attempted:
+            repairs.add("retry_skipped_budget")
+        result = GraphBuildResult(
+            graph=graph,
+            fingerprint=digest,
+            attempts=calls,
+            repairs=tuple(sorted(repairs)),
+            notes=quality_notes(graph),
+            verification=repair.verification or verification,
+        )
+        self._store(cache_key, result)
+        return result
+
+    def _generate_graph(
+        self, draft: ProblemDraft, prompt_version: str
+    ) -> tuple[GraphCheck, LLMResponse, int]:
+        """Generate the graph itself, with one schema-driven retry.
+
+        ``max_attempts`` counts graph calls only; a later claim repair is a
+        separate, cheaper call and is not bounded by it.
+        """
         attempts = max(1, self._settings.max_attempts)
         issues: tuple[str, ...] = ()
         reason: GraphFailureReason = "schema_invalid"
-
         for attempt in range(attempts):
             request = build_request(draft, issues=issues)
             try:
@@ -502,7 +748,7 @@ class LLMGraphGenerator:
                     schema_ok=False,
                     retried=attempt > 0,
                     reason="timeout",
-                    prompt_version=audit_version,
+                    prompt_version=prompt_version,
                 )
                 raise GraphBuildFailed(
                     "timeout",
@@ -515,7 +761,7 @@ class LLMGraphGenerator:
                     schema_ok=False,
                     retried=attempt > 0,
                     reason="transport",
-                    prompt_version=audit_version,
+                    prompt_version=prompt_version,
                 )
                 raise GraphBuildFailed(
                     "transport",
@@ -533,76 +779,112 @@ class LLMGraphGenerator:
                     schema_ok=False,
                     retried=attempt > 0,
                     reason=exc.reason,
-                    prompt_version=audit_version,
+                    prompt_version=prompt_version,
                 )
                 continue
-
-            verification = self._verifier.verify(check.graph)
-            if verification.status == "fail":
-                # A wrong answer range is retried exactly like a schema error:
-                # the counterexample goes back to the model as feedback.
-                issues = (verification.as_issue(),)
-                self._audit(
-                    response,
-                    schema_ok=False,
-                    retried=attempt > 0,
-                    reason=verification.reason,
-                    verification_status=verification.status,
-                    prompt_version=audit_version,
-                )
-                if attempt + 1 < attempts:
-                    continue
-                # Out of attempts: keep the graph (its probes are what the
-                # dialogue uses) but refuse to certify the answer. The claim is
-                # dropped so nothing downstream can read a refuted range as
-                # checked; the counterexample stays in ``verification``.
-                graph = replace(check.graph, claim=None)
-                digest = fingerprint(graph)
-                self._audit(
-                    response,
-                    schema_ok=True,
-                    retried=attempt > 0,
-                    fingerprint=digest,
-                    reason=verification.reason,
-                    verification_status=verification.status,
-                    prompt_version=audit_version,
-                )
-                result = GraphBuildResult(
-                    graph=graph,
-                    fingerprint=digest,
-                    attempts=attempt + 1,
-                    repairs=tuple(sorted({*check.repairs, "claim_dropped_refuted"})),
-                    notes=quality_notes(graph),
-                    verification=verification,
-                )
-                self._store(cache_key, result)
-                return result
-
-            digest = fingerprint(check.graph)
-            self._audit(
-                response,
-                schema_ok=True,
-                retried=attempt > 0,
-                fingerprint=digest,
-                verification_status=verification.status,
-                prompt_version=audit_version,
-            )
-            result = GraphBuildResult(
-                graph=check.graph,
-                fingerprint=digest,
-                attempts=attempt + 1,
-                repairs=check.repairs,
-                notes=quality_notes(check.graph),
-                verification=verification,
-            )
-            self._store(cache_key, result)
-            return result
+            return check, response, attempt + 1
 
         raise GraphBuildFailed(
             reason,
             detail="; ".join(issues[:5]),
             attempts=attempts,
         )
+
+    def _repair_claim(
+        self,
+        draft: ProblemDraft,
+        graph: SolutionGraph,
+        verification: VerificationResult,
+        *,
+        started_at: float,
+        prompt_version: str,
+    ) -> _ClaimRepair:
+        claim = graph.claim
+        if claim is None:  # the verifier only returns ``fail`` for an existing claim
+            return _ClaimRepair(attempted=False)
+        remaining = self._settings.graph_retry_budget_s - (time.perf_counter() - started_at)
+        if remaining < CLAIM_REPAIR_MIN_BUDGET_S:
+            return _ClaimRepair(attempted=False)
+        request = build_claim_repair_request(draft, claim, verification)
+        try:
+            response = self._client.complete(
+                request,
+                # The repair may only use what is left of the budget, so a slow
+                # first attempt cannot turn into an SLO-breaking second call.
+                timeout_s=min(remaining, self._settings.graph_timeout_s),
+            )
+        except LLMTimeout:
+            self._audit(
+                None,
+                schema_ok=False,
+                retried=True,
+                reason="timeout",
+                prompt_version=prompt_version,
+            )
+            return _ClaimRepair(
+                attempted=True,
+                verification=verification,
+                codes=("claim_retry_timeout",),
+            )
+        except LLMCallFailed:
+            self._audit(
+                None,
+                schema_ok=False,
+                retried=True,
+                reason="transport",
+                prompt_version=prompt_version,
+            )
+            return _ClaimRepair(
+                attempted=True,
+                verification=verification,
+                codes=("claim_retry_transport",),
+            )
+
+        try:
+            repaired = read_claim_repair(response.text, graph, verification)
+        except _Rejected as exc:
+            self._audit(
+                response,
+                schema_ok=False,
+                retried=True,
+                reason=exc.reason,
+                prompt_version=prompt_version,
+            )
+            return _ClaimRepair(
+                attempted=True,
+                verification=verification,
+                codes=("claim_retry_malformed",),
+            )
+
+        if repaired is None:
+            self._audit(
+                response,
+                schema_ok=False,
+                retried=True,
+                reason="claim_declined",
+                verification_status=verification.status,
+                prompt_version=prompt_version,
+            )
+            return _ClaimRepair(
+                attempted=True,
+                verification=verification,
+                codes=("claim_repair_declined",),
+            )
+
+        verdict = self._verifier.verify(replace(graph, claim=repaired))
+        accepted = verdict.status == "pass"
+        self._audit(
+            response,
+            schema_ok=accepted,
+            retried=True,
+            reason=None if accepted else verdict.reason,
+            verification_status=verdict.status,
+            prompt_version=prompt_version,
+        )
+        if accepted:
+            return _ClaimRepair(attempted=True, claim=repaired, verification=verdict)
+        code = "claim_repair_refuted" if verdict.status == "fail" else "claim_repair_undecided"
+        return _ClaimRepair(attempted=True, verification=verdict, codes=(code,))
 
     def _store(self, key: str, result: GraphBuildResult) -> None:
         if self._cache_size <= 0:
@@ -716,6 +998,62 @@ def _build_graph(draft: ProblemDraft, text: str) -> GraphCheck:
     if spec_errors:
         raise _Rejected("schema_invalid", spec_errors)
     return check
+
+
+def read_claim_repair(
+    text: str,
+    graph: SolutionGraph,
+    verification: VerificationResult,
+) -> VerificationClaim | None:
+    """Read the claim-only reply; ``None`` means the model declined.
+
+    A counterexample repair may only change the intervals: the formalisation is
+    pinned so the model cannot dodge the counterexample by quietly editing f(x).
+    A malformed claim is different — the expression itself was unreadable, so
+    the whole claim may be rewritten.
+    """
+    try:
+        raw: object = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise _Rejected("bad_json", (f"bad_json: {exc.msg}",)) from exc
+    if not isinstance(raw, Mapping):
+        raise _Rejected("bad_json", ("not_object: 响应必须是 JSON 对象",))
+
+    previous = graph.claim
+    if previous is None:
+        raise _Rejected("schema_invalid", ("claim: 原先没有 claim，无法只重写区间",))
+
+    if verification.reason == "malformed":
+        nested = raw.get("claim")
+        if nested is None:
+            return None
+        claim = _claim(nested)
+    else:
+        answer: object = raw.get("answer")
+        if answer is None:
+            block = raw.get("claim")
+            if isinstance(block, Mapping):
+                answer = block.get("answer")
+        if answer is None:
+            return None
+        if not isinstance(answer, list) or not answer:
+            raise _Rejected("schema_invalid", ("claim.answer: 必须是非空的区间数组",))
+        errors: list[str] = []
+        intervals: list[Interval] = []
+        for index, item in enumerate(answer):
+            interval = _interval(item, index, errors)
+            if interval is not None:
+                intervals.append(interval)
+        if errors:
+            raise _Rejected("schema_invalid", tuple(errors))
+        claim = replace(previous, intervals=tuple(intervals))
+
+    if claim is None:
+        return None
+    spec_errors = validate_payload(to_payload(replace(graph, claim=claim)))
+    if spec_errors:
+        raise _Rejected("schema_invalid", spec_errors)
+    return claim
 
 
 def _node(item: _NodePayload) -> SolutionNode:

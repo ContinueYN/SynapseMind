@@ -237,7 +237,7 @@ def _render(
     contrast_probes = sum(1 for probe in probes if _has_contrast(probe.evidence))
 
     lines = [
-        "# M2.5 S4 建图报告（20 道未见题）",
+        f"# M2.5 S4 建图报告（{len(rows)} 道未见题）",
         "",
         f"- 生成时间：{datetime.now().astimezone().isoformat(timespec='seconds')}",
         f"- 模型：`{settings.model}`；prompt：`{settings.graph_prompt_version}`",
@@ -303,7 +303,9 @@ def _render(
     if failures:
         lines += ["", "## 失败明细", ""]
         for row in failures:
-            lines.append(f"- `{row.case.draft.id}`（{row.reason}，{row.attempts} 次调用）：{row.detail}")
+            lines.append(
+                f"- `{row.case.draft.id}`（{row.reason}，{row.attempts} 次调用）：{row.detail}"
+            )
 
     lines += [
         "",
@@ -316,7 +318,7 @@ def _render(
         "诊断层仍是 M1 的三个假设（S5 只把权重来源换成生成图，假设体系没有扩）。"
         "权重方向是否合理需要人工抽查，结构规则只能保证“每个选项都会更新后验、只更新 targets 里的假设、同一探针有正有负”。",
         "- 生成结果按 `(题目 id, 文本, 模型, prompt 版本)` 缓存在进程内；同一进程重跑不重复计费。",
-        "- 20 条题只用于验收，不按单题调 prompt；若某类题系统性失败，只改 prompt 的通用规则，"
+        f"- {len(rows)} 条题只用于验收，不按单题调 prompt；若某类题系统性失败，只改 prompt 的通用规则，"
         "并在报告里记录 prompt 版本变化。",
         "- 人工抽查由开发代理执行，不等同于教师复核；正式对外前仍需教师抽样。",
         "",

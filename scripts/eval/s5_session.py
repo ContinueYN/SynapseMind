@@ -54,6 +54,13 @@ class Case:
     text: str
     topic: str
     subject: str = "math"
+    # A real review passes the student's own words; the plumbing runs use the
+    # stock partial solution so the numbers stay comparable across rounds.
+    work: str = ""
+    answer: str = ""
+
+    def submitted_work(self) -> str:
+        return self.work or SAMPLE_WORK.get(self.subject, SAMPLE_WORK["math"])
 
 
 @dataclass
@@ -84,6 +91,8 @@ def load_cases(path: Path) -> list[Case]:
                 text=str(payload["text"]),
                 topic=str(payload.get("topic", "")),
                 subject=str(payload.get("subject", "math")),
+                work=str(payload.get("work", "")),
+                answer=str(payload.get("answer", "")),
             )
         )
     return cases
@@ -132,8 +141,8 @@ def run_case(container: Any, case: Case, *, policy: str) -> Row:
         view = service.start(
             StartSessionCommand(
                 problem_text=case.text,
-                answer="",
-                work=SAMPLE_WORK.get(case.subject, SAMPLE_WORK["math"]),
+                answer=case.answer,
+                work=case.submitted_work(),
                 subject=case.subject,
             )
         )

@@ -77,6 +77,12 @@ def build_container(
     answers = InMemoryAnswerStore()
     sink = auditor or JsonlCallAuditor(Path(resolved.audit_path))
     graph_generator = generator or build_graph_generator(resolved, client=llm_client, auditor=sink)
+    # SymPy's import (~1.7s) is paid here, once, instead of inside the first
+    # request that happens to carry a verifiable claim (chapter 12 §12.8).
+    # Optional: a fake generator in the tests has no ``warm``.
+    warm = getattr(graph_generator, "warm", None)
+    if callable(warm):
+        warm()
     # The plugin owns the generator; the repository owns the store, so a
     # generated problem can be served again on later turns (M2.5 S5 ②).
     problems.set_plugins(
@@ -100,16 +106,21 @@ def build_container(
         resolver=ProblemResolver(problems, problems.plugins, store=problems),
     )
     planner = HypothesisTargetedPlanner()
+    guards = AnswerStoreLeakGuardFactory(answers)
     composer = LeakSafeProbeComposer(
         inner=build_composer(resolved, client=llm_client, auditor=auditor),
-        guards=AnswerStoreLeakGuardFactory(answers),
+        guards=guards,
     )
+    # Same guard, same renderer, no model call: the first question of a
+    # generated problem does not wait for a cosmetic rewrite (chapter 12 §12.8).
+    opening = LeakSafeProbeComposer(inner=GraphProbeComposer(), guards=guards)
     service = SessionService(
         sessions=sessions,
         problems=problems,
         factory=factory,
         planner=planner,
         composer=composer,
+        opening_composer=opening,
     )
     return Container(
         sessions=sessions,

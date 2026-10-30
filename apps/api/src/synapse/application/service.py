@@ -58,12 +58,19 @@ class SessionService:
         factory: SessionFactory,
         planner: ProbePlanner,
         composer: ProbeComposer,
+        *,
+        opening_composer: ProbeComposer | None = None,
     ) -> None:
         self._sessions = sessions
         self._problems = problems
         self._factory = factory
         self._planner = planner
         self._composer = composer
+        # The first question of an on-demand built problem is composed by the
+        # deterministic renderer (see ``_compose``); ``None`` means "same
+        # composer as every other turn", which is what the rule baseline and
+        # the tests get.
+        self._opening_composer = opening_composer
 
     def start(self, command: StartSessionCommand) -> SessionView:
         session = self._factory.create(command)
@@ -86,7 +93,7 @@ class SessionService:
         if probe is None:
             return self._close(session, "没有可用的探针，先不生成卡点卡。")
         session.asked_probe_ids.append(probe.id)
-        prompt = self._compose(session, problem, probe)
+        prompt = self._compose(session, problem, probe, opening=True)
         self._sessions.add(session)
         return SessionView(session=session, prompt=prompt)
 
@@ -243,10 +250,23 @@ class SessionService:
         probe: Probe,
         *,
         hint_level: int = 0,
+        opening: bool = False,
     ) -> ProbePrompt:
+        """Compose one prompt; the first question may skip the model rewrite.
+
+        Turn 1 is the only composition inside the 8s first-question budget. A
+        *generated* probe was written by the graph model seconds earlier, so a
+        second model pass that may only re-word it buys nothing and costs a
+        whole round trip (measured 1–4s, mostly time-to-first-token). The
+        hand-written seed probe still gets the T3 rewrite: its wording is not
+        model output, and the annotated path has no graph build to pay for.
+        """
+        composer = self._composer
+        if opening and not problem.annotated and self._opening_composer is not None:
+            composer = self._opening_composer
         _, confidence = session.hypotheses.top()
         with tracing(session.session_id, session.turn + 1):
-            return self._composer.compose(
+            return composer.compose(
                 problem,
                 probe,
                 confidence=confidence,

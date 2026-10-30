@@ -7,11 +7,12 @@ S4 measured structure. S5 adds the only thing that can catch a wrong *answer*:
 the graph must state its answer as a machine-checkable claim, and the SymPy
 verifier tries to refute it. This harness runs the 20 unseen problems through
 the whole build (generate -> repair -> structure -> schema -> verify -> one
-retry) and reports, per problem:
+claim-only repair) and reports, per problem:
 
 - whether the model produced a claim at all (coverage, not a gate);
 - ``pass`` / ``fail`` / ``unknown`` and the counterexample when there is one;
-- how many calls the verdict cost.
+- whether a refuted claim was repaired by rewriting the interval alone
+  (``claim_repaired``), and how many calls the verdict cost.
 
 It also runs two *deliberately wrong* mutations of every claim the verifier
 accepted (answer = the whole line; answer widened by one unit). A verifier that
@@ -364,12 +365,14 @@ def _render(
         for row in built
     )
     refuted = [row for row in built if row.result and "claim_dropped_refuted" in row.result.repairs]
+    claim_repaired = [row for row in built if row.result and "claim_repaired" in row.result.repairs]
+    skipped = [row for row in built if row.result and "retry_skipped_budget" in row.result.repairs]
     dropped = [
         row.case.draft.id
         for row in built
         if row.result is not None and "claim_dropped_unsupported" in row.result.repairs
     ]
-    repaired = [
+    rows_with_repairs = [
         (row.case.draft.id, ", ".join(row.result.repairs))
         for row in built
         if row.result is not None and row.result.repairs
@@ -388,6 +391,13 @@ def _render(
         + f"；形状不支持丢弃 {len(dropped)} 题"
         + (f"（{', '.join(dropped)}）" if dropped else "")
         + f"；其余 {len(built) - len(claims) - len(refuted) - len(dropped)} 题没有 claim",
+        f"- claim 修复：只重写区间成功 {len(claim_repaired)} 题"
+        + (
+            f"（{', '.join(row.case.draft.id for row in claim_repaired)}）"
+            if claim_repaired
+            else ""
+        )
+        + f"；预算不足跳过 {len(skipped)} 题",
         f"- 验证结论：pass {statuses.get('pass', 0)} / fail {statuses.get('fail', 0)} / "
         f"unknown {statuses.get('unknown', 0)}",
         f"- 总耗时：{total_ms / 1000:.1f}s；单题平均 {total_ms / len(rows) / 1000:.1f}s",
@@ -427,9 +437,9 @@ def _render(
                 f"{row.attempts} | - | - | - | - | {row.elapsed_ms} |"
             )
 
-    if repaired:
+    if rows_with_repairs:
         lines += ["", "机械修复（不改写步骤含义，全部记录）：", ""]
-        for case_id, codes in repaired:
+        for case_id, codes in rows_with_repairs:
             lines.append(f"- `{case_id}`：{codes}")
 
     lines += ["", "## claim 与验证明细", ""]
@@ -454,12 +464,23 @@ def _render(
             lines.append(f"- 反例：{counter.parameter}={counter.parameter_value}{witness}")
         lines.append("")
 
+    if claim_repaired:
+        lines += ["## claim 修复（只重写区间，不重生成整图）", ""]
+        for row in claim_repaired:
+            assert row.result is not None
+            lines.append(
+                f"- `{row.case.draft.id}`（{row.attempts} 次调用）：反例已消除，"
+                f"答案区间被替换，图未重生成"
+            )
+        lines.append("")
+
     if refuted:
         lines += ["## 被反例推翻的 claim（图保留，答案不再认证）", ""]
         for row in refuted:
             assert row.result is not None and row.result.verification is not None
+            codes = ", ".join(sorted(row.result.repairs))
             lines.append(
-                f"- `{row.case.draft.id}`（{row.attempts} 次调用）："
+                f"- `{row.case.draft.id}`（{row.attempts} 次调用；{codes}）："
                 f"{row.result.verification.detail}"
             )
         lines.append("")
@@ -505,8 +526,10 @@ def _render(
         "  这能给出具体反例，但不能证明命题为真；正式对外前仍需教师抽样。",
         "- 表达式解析有字符白名单、`__builtins__` 置空的 SymPy 命名空间和自由符号检查；",
         "  未知符号、区间倒置/重叠、无穷一端写成闭区间都会判 `malformed` 并让模型重试一次。",
-        "- 验证失败会带着反例重试一次（`max_attempts`）；仍失败则**丢弃 claim**",
-        "  （`claim_dropped_refuted`），图保留、答案不再被当作已核对，",
+        "- 验证失败后只重发 claim（`purpose=graph_claim_repair`，输出区间，不重生成整图），",
+        "  该调用只能用 8s 首问预算的剩余量；修复通过记 `claim_repaired`，仍失败或预算不足则",
+        "  **丢弃 claim**（`claim_dropped_refuted` + `claim_repair_refuted` / `claim_retry_*` /",
+        "  `retry_skipped_budget`），图保留、答案不再被当作已核对，",
         "  反例留在 `GraphBuildResult.verification` 里。",
         "  S4 里 `P_DERIV_003` 漏 `a=0` 那种错误现在会被反例点名，而不是悄悄发到学生面前。",
         "- claim 的 kind/relation/符号冲突属于“形状不支持”，直接丢弃",

@@ -20,8 +20,9 @@ import argparse
 import json
 import math
 import sys
+import tempfile
 import time
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -59,6 +60,41 @@ class Row:
     has_prompt: bool = False
     state: str = ""
     detail: str = ""
+
+
+@dataclass
+class Phases:
+    """Per-call latency read back from the run's audit log.
+
+    The gate measures wall clock per session; this splits it into the model
+    call that costs seconds (graph build) and the one that used to (probe
+    rewrite). Without it, a FAIL says nothing about *which* call to shrink.
+    """
+
+    graph_ms: list[int] = field(default_factory=list)
+    graph_completion: list[int] = field(default_factory=list)
+    graph_retries: int = 0
+    rewrite_ms: list[int] = field(default_factory=list)
+
+    @classmethod
+    def read(cls, path: Path) -> Phases:
+        phases = cls()
+        if not path.is_file():
+            return phases
+        for raw in path.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if not line:
+                continue
+            entry = json.loads(line)
+            if entry.get("kind") == "graph_build":
+                if int(entry.get("latency_ms") or 0) > 0:
+                    phases.graph_ms.append(int(entry["latency_ms"]))
+                phases.graph_completion.append(int(entry.get("completion_tokens") or 0))
+                if entry.get("retried"):
+                    phases.graph_retries += 1
+            elif entry.get("kind") == "llm_call":
+                phases.rewrite_ms.append(int(entry.get("latency_ms") or 0))
+        return phases
 
 
 def load_cases(path: Path) -> list[Case]:
@@ -132,6 +168,9 @@ def render(
     p95: int,
     worst: int,
     passed: bool,
+    phases: Phases | None = None,
+    model: str = "",
+    prompt_version: str = "",
 ) -> str:
     created = sum(1 for row in rows if row.created)
     with_prompt = sum(1 for row in rows if row.has_prompt)
@@ -146,6 +185,10 @@ def render(
         f"拿到首问 {with_prompt}/{len(rows)}；其中现场建图 {generated} 道",
         f"- 延迟：p50 **{p50} ms**、p95 **{p95} ms**、最慢 **{worst} ms**",
         f"- 模式：`{mode}`（真实模型；只测 `SessionService.start()`，不含前端网络与渲染）",
+    ]
+    if model:
+        lines.append(f"- 模型：`{model}`；建图 prompt：`{prompt_version}`")
+    lines += [
         "",
         "口径：一次 POST 交题到拿到第一问的总耗时，包含现场建图、对齐、"
         "探针规划。预算取 8s；建会话失败不计入延迟样本，但直接判失败。",
@@ -164,11 +207,37 @@ def render(
 
     lines += [
         "",
+        "## 阶段耗时（来自本次运行的审计日志）",
+        "",
+    ]
+    if phases is None or (not phases.graph_ms and not phases.rewrite_ms):
+        lines.append("- 没有模型调用记录（本次运行可能全部命中缓存）。")
+    else:
+        if phases.graph_ms:
+            lines.append(
+                f"- 建图：{len(phases.graph_ms)} 次调用、重试 {phases.graph_retries} 次；"
+                f"p50 **{percentile(phases.graph_ms, 0.50)} ms**、"
+                f"p95 **{percentile(phases.graph_ms, 0.95)} ms**；"
+                f"输出 p50 {percentile(phases.graph_completion, 0.50)} tokens"
+            )
+        if phases.rewrite_ms:
+            lines.append(
+                f"- 探针改写：{len(phases.rewrite_ms)} 次；"
+                f"p50 **{percentile(phases.rewrite_ms, 0.50)} ms**、"
+                f"p95 **{percentile(phases.rewrite_ms, 0.95)} ms**"
+            )
+        else:
+            lines.append("- 探针改写：**0 次**（生成题的首问用确定性渲染，不再花一次模型往返）。")
+
+    lines += [
+        "",
         "## 怎么读",
         "",
         "- `建会话`失败会先被计为失败，即使失败得很快；门禁不允许用 422 换低延迟。",
         "- 现场建图路径包含一次模型调用（失败会按设计重试一次），"
         "所以尾延迟比标注种子题高；这正是 `on:10` 前要单独看的一支。",
+        "- 建图耗时 ≈ 首 token 延迟（实测 0.8–3s，随供应商波动）+ 输出 token 数 ÷ 吞吐；"
+        "prompt 长度几乎不花钱（prefill 实测无差异），**输出长度才是预算**。",
         "- 这是服务端耗时，不含浏览器到 API 的网络、首屏渲染与前端 JS。"
         "对外承诺的 8s 首问还需要在前端侧另测一次。",
     ]
@@ -204,6 +273,10 @@ def main() -> int:
         print("! 评测集为空")
         return 2
 
+    # Isolate the audit log so the phase split describes this run only.
+    audit_path = Path(tempfile.mkdtemp(prefix="synapse-first-question-")) / "llm.jsonl"
+    settings = replace(settings, audit_path=str(audit_path))
+
     container = build_container(settings)
     rows: list[Row] = []
     for case in cases:
@@ -217,6 +290,7 @@ def main() -> int:
     p95 = percentile(latencies, 0.95)
     worst = max(latencies) if latencies else 0
     passed = len(latencies) == len(rows) and p95 <= args.budget_ms
+    phases = Phases.read(audit_path)
 
     report = render(
         rows,
@@ -226,6 +300,9 @@ def main() -> int:
         p95=p95,
         worst=worst,
         passed=passed,
+        phases=phases,
+        model=settings.model,
+        prompt_version=settings.graph_prompt_version,
     )
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)

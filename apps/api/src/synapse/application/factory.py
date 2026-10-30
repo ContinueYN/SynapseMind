@@ -95,19 +95,27 @@ class SessionFactory:
             return None
         return plugin.evidence_model(graph).weights
 
-    def _labels_for(self, subject: str) -> Mapping[str, str] | None:
+    def _labels_for(self, problem: Problem) -> Mapping[str, str] | None:
         """Subject-specific names for the shared hypothesis ids (S6).
 
         The scoring vocabulary stays H_L1/H_L2/H_L4; only the card wording is
         replaced. A plugin that does not supply labels keeps the math ones, so
-        the annotated baseline is unchanged.
+        the annotated baseline is unchanged. ``labels_for(problem)`` (optional)
+        wins over the ``hypothesis_labels`` mapping so a plugin can vary wording
+        per problem — math uses it to keep the seed's topic name off generated
+        cards.
         """
 
         if self._subjects is None:
             return None
-        plugin = self._subjects.for_subject(subject)
+        plugin = self._subjects.for_subject(problem.subject)
         if plugin is None:
             return None
+        hook = getattr(plugin, "labels_for", None)
+        if callable(hook):
+            per_problem = hook(problem)
+            if isinstance(per_problem, Mapping):
+                return {str(key): str(value) for key, value in per_problem.items()}
         labels = getattr(plugin, "hypothesis_labels", None)
         if isinstance(labels, Mapping):
             return {str(key): str(value) for key, value in labels.items()}
@@ -153,7 +161,7 @@ class SessionFactory:
                 alignment,
                 evidence=self._evidence_for(problem.subject, problem.graph),
                 focus=focus,
-                labels=self._labels_for(problem.subject),
+                labels=self._labels_for(problem),
             ),
             max_turns=6,
             created_at=self._clock.now(),

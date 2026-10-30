@@ -6,6 +6,7 @@ Acceptance from chapter 13 §13.7: "数学插件包装现有种子题，行为�
 from __future__ import annotations
 
 import copy
+from dataclasses import replace
 
 from fastapi.testclient import TestClient
 
@@ -23,7 +24,7 @@ from synapse.domain.problem.alignment import RuleBasedAligner
 from synapse.domain.problem.models import AlignmentResult, Problem, StudentAttempt
 from synapse.infrastructure.in_memory import InMemoryProblemRepository
 from synapse.infrastructure.seed import SAMPLE_PROBLEM
-from synapse.infrastructure.subjects.math import MathPlugin
+from synapse.infrastructure.subjects.math import MATH_HYPOTHESIS_LABELS, MathPlugin
 from synapse.infrastructure.system import SystemClock, UuidSessionIdGenerator
 
 CATALOG = {SAMPLE_PROBLEM.id: SAMPLE_PROBLEM}
@@ -202,6 +203,24 @@ def test_factory_asks_the_subject_plugin_for_its_aligner() -> None:
 def test_container_exposes_the_registry() -> None:
     container = build_container()
     assert container.subjects.for_subject("math") is not None
+
+
+def test_generated_graphs_do_not_reuse_the_seed_topic_in_the_l1_label() -> None:
+    """The seed's L1 label names its own topic; a generated graph can be anything.
+
+    Observed on the 100-problem run: a 数列 and a 立体几何 card both ended with
+    "概念不清：恒成立与最值". The annotated card must stay byte-identical.
+    """
+
+    generated = replace(SAMPLE_PROBLEM, annotated=False)
+
+    assert PLUGIN.labels_for(SAMPLE_PROBLEM) == MATH_HYPOTHESIS_LABELS
+    assert MATH_HYPOTHESIS_LABELS["H_L1"] == HYPOTHESES["H_L1"].label
+
+    labels = PLUGIN.labels_for(generated)
+    assert "恒成立" not in labels["H_L1"]
+    assert set(labels) == set(MATH_HYPOTHESIS_LABELS)
+    assert labels["H_L2"] == MATH_HYPOTHESIS_LABELS["H_L2"]
 
 
 def test_physics_is_accepted_by_the_dto_but_still_422(

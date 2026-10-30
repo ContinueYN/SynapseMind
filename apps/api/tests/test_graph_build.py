@@ -11,7 +11,7 @@ import pytest
 from synapse.application.graph import GraphBuildFailed
 from synapse.application.llm import LLMRequest, LLMResponse, LLMTimeout
 from synapse.domain.problem.graph_structure import fingerprint
-from synapse.domain.problem.models import ProblemDraft, SolutionGraph
+from synapse.domain.problem.models import Interval, ProblemDraft, SolutionGraph
 from synapse.infrastructure.llm.audit import InMemoryCallAuditor
 from synapse.infrastructure.llm.graph import (
     GRAPH_MAX_TOKENS,
@@ -126,13 +126,32 @@ def _range_json(*, lower_inclusive: bool, expression: str = "exp(x) - a*x") -> s
     )
 
 
+def _answer_json(*, lower_inclusive: bool) -> str:
+    """The answer-only reply the claim repair asks for (no graph, no claim block)."""
+    return json.dumps(
+        {
+            "answer": [
+                {
+                    "lower": "0",
+                    "upper": "E",
+                    "lower_inclusive": lower_inclusive,
+                    "upper_inclusive": True,
+                }
+            ]
+        },
+        ensure_ascii=False,
+    )
+
+
 class FakeClient:
-    def __init__(self, *replies: str | Exception) -> None:
+    def __init__(self, *replies: str | Exception, latency_ms: int = 42) -> None:
         self.replies = list(replies)
         self.calls: list[LLMRequest] = []
+        self.timeouts: list[float] = []
+        self.latency_ms = latency_ms
 
     def complete(self, request: LLMRequest, *, timeout_s: float) -> LLMResponse:
-        del timeout_s
+        self.timeouts.append(timeout_s)
         self.calls.append(request)
         reply = self.replies.pop(0)
         if isinstance(reply, Exception):
@@ -140,7 +159,7 @@ class FakeClient:
         return LLMResponse(
             text=reply,
             model="fake-1",
-            latency_ms=42,
+            latency_ms=self.latency_ms,
             prompt_tokens=120,
             completion_tokens=80,
         )
@@ -192,7 +211,7 @@ def test_valid_graph_is_built_and_audited() -> None:
     assert entry.schema_ok is True
     assert entry.retried is False
     assert entry.model == "fake-1"
-    assert entry.prompt_version == "graph-v6"
+    assert entry.prompt_version == "graph-v9"
     assert entry.graph_fingerprint == result.fingerprint
     # No claim in the reply: the build is fine, the answer is just unverified.
     assert entry.verification_status == "unknown"
@@ -209,6 +228,10 @@ def test_bad_json_is_retried_with_feedback() -> None:
     assert result.attempts == 2
     assert len(client.calls) == 2
     assert "未通过校验" in client.calls[1].user
+    # The retry is the second half of the budget: it must ask for the smallest
+    # graph that still passes the rules, not a richer one.
+    assert "最小可用图" in client.calls[1].user
+    assert "最小可用图" not in client.calls[0].user
     first, second = auditor.entries
     assert first.schema_ok is False
     assert first.fallback_reason == "bad_json"
@@ -385,7 +408,7 @@ def test_physics_uses_its_own_prompt_and_audit_version() -> None:
     assert "恒成立" not in client.calls[0].system
     assert result.graph.claim is None
     (entry,) = auditor.entries
-    assert entry.prompt_version == "graph-v6-physics"
+    assert entry.prompt_version == "graph-v9-physics"
 
 
 def test_physics_claim_is_dropped_instead_of_certified() -> None:
@@ -581,13 +604,20 @@ def test_plugin_without_a_generator_says_so() -> None:
     assert "LLMGraphGenerator" in info.value.detail
 
 
-def test_a_wrong_answer_range_is_retried_with_the_counterexample() -> None:
+def test_a_wrong_answer_range_is_repaired_without_regenerating_the_graph() -> None:
     auditor = InMemoryCallAuditor()
-    client = FakeClient(_range_json(lower_inclusive=False), _range_json(lower_inclusive=True))
+    client = FakeClient(_range_json(lower_inclusive=False), _answer_json(lower_inclusive=True))
 
     result = _generator(client, auditor).generate(RANGE_DRAFT)
 
     assert result.attempts == 2
+    assert len(client.calls) == 2
+    # The repair must not regenerate the graph: a full graph completion is what
+    # used to push the tail past 7.5s (ADR-0004 §5.4).
+    assert client.calls[1].purpose == "graph_claim_repair"
+    assert "nodes" not in client.calls[1].system
+    assert client.calls[1].max_tokens is not None
+    assert client.calls[1].max_tokens < GRAPH_MAX_TOKENS
     # The counterexample itself goes back to the model: a=0 works but is
     # excluded by the first answer.
     assert "verification_counterexample" in client.calls[1].user
@@ -595,22 +625,51 @@ def test_a_wrong_answer_range_is_retried_with_the_counterexample() -> None:
     assert result.verification is not None
     assert result.verification.status == "pass"
     assert result.graph.claim is not None
+    assert result.graph.claim.expression == "exp(x) - a*x"
+    assert result.graph.claim.intervals == (
+        Interval(lower="0", upper="E", lower_inclusive=True, upper_inclusive=True),
+    )
+    assert "claim_repaired" in result.repairs
     first, second = auditor.entries
     assert first.fallback_reason == "counterexample"
     assert first.verification_status == "fail"
     assert second.verification_status == "pass"
+    assert second.retried is True
+
+
+def test_the_repair_cannot_change_the_formalised_constraint() -> None:
+    # A model that ignores "answer only" and rewrites the whole claim must not
+    # dodge the counterexample by silently changing f(x) to fit its answer.
+    full = _range_payload(
+        {
+            "lower": "0",
+            "upper": "E",
+            "lower_inclusive": True,
+            "upper_inclusive": True,
+        },
+        expression="exp(x) - b*x",
+    )
+    client = FakeClient(_range_json(lower_inclusive=False), json.dumps(full, ensure_ascii=False))
+
+    result = _generator(client).generate(RANGE_DRAFT)
+
+    assert result.graph.claim is not None
+    assert result.graph.claim.expression == "exp(x) - a*x"
+    assert result.graph.claim.parameter == "a"
 
 
 def test_an_answer_range_that_keeps_failing_loses_its_claim_but_not_the_graph() -> None:
-    wrong = _range_json(lower_inclusive=False)
+    client = FakeClient(_range_json(lower_inclusive=False), _answer_json(lower_inclusive=False))
 
-    result = _generator(FakeClient(wrong, wrong)).generate(RANGE_DRAFT)
+    result = _generator(client).generate(RANGE_DRAFT)
 
     assert result.attempts == 2
+    assert len(client.calls) == 2
     # The graph's probes are what the dialogue uses; the refuted answer is the
     # part that must not be treated as checked.
     assert result.graph.claim is None
     assert "claim_dropped_refuted" in result.repairs
+    assert "claim_repair_refuted" in result.repairs
     assert result.verification is not None
     assert result.verification.status == "fail"
     assert result.verification.counterexample is not None
@@ -618,7 +677,81 @@ def test_an_answer_range_that_keeps_failing_loses_its_claim_but_not_the_graph() 
     assert "claim" not in to_payload(result.graph)
 
 
-def test_a_malformed_claim_is_retried_with_a_syntax_hint() -> None:
+def test_a_repair_that_declines_the_range_drops_the_claim() -> None:
+    client = FakeClient(_range_json(lower_inclusive=False), json.dumps({"answer": None}))
+
+    result = _generator(client).generate(RANGE_DRAFT)
+
+    assert result.graph.claim is None
+    assert "claim_dropped_refuted" in result.repairs
+    assert "claim_repair_declined" in result.repairs
+
+
+def test_a_repair_timeout_drops_the_claim_instead_of_the_build() -> None:
+    auditor = InMemoryCallAuditor()
+    client = FakeClient(_range_json(lower_inclusive=False), LLMTimeout("slow"))
+
+    result = _generator(client, auditor).generate(RANGE_DRAFT)
+
+    assert result.graph.claim is None
+    assert "claim_retry_timeout" in result.repairs
+    assert result.attempts == 2
+    last = auditor.entries[-1]
+    assert last.fallback_reason == "timeout"
+    assert last.retried is True
+
+
+def test_a_malformed_repair_is_discarded_without_a_third_call() -> None:
+    client = FakeClient(_range_json(lower_inclusive=False), "这不是 JSON")
+
+    result = _generator(client).generate(RANGE_DRAFT)
+
+    assert len(client.calls) == 2
+    assert result.graph.claim is None
+    assert "claim_dropped_refuted" in result.repairs
+    assert "claim_retry_malformed" in result.repairs
+
+
+def test_only_one_claim_repair_is_attempted() -> None:
+    client = FakeClient(
+        _range_json(lower_inclusive=False),
+        _answer_json(lower_inclusive=False),
+        _answer_json(lower_inclusive=True),
+    )
+
+    result = _generator(client, max_attempts=3).generate(RANGE_DRAFT)
+
+    # A repair that fails is not retried again: the answer is optional metadata,
+    # and a third call would exist only to chase it.
+    assert len(client.calls) == 2
+    assert result.graph.claim is None
+
+
+def test_the_repair_is_bounded_by_the_remaining_first_question_budget() -> None:
+    client = FakeClient(_range_json(lower_inclusive=False), _answer_json(lower_inclusive=True))
+
+    _generator(client, graph_retry_budget_s=2.0).generate(RANGE_DRAFT)
+
+    # The repair may only use what is left of the 8s budget, so it cannot turn a
+    # slow first attempt into a timeout far past the SLO.
+    assert 1.0 <= client.timeouts[1] <= 2.0
+
+
+def test_a_slow_refutation_skips_the_repair_instead_of_blowing_the_budget() -> None:
+    wrong = _range_json(lower_inclusive=False)
+    client = FakeClient(wrong, wrong, latency_ms=4000)
+
+    result = _generator(client, graph_retry_budget_s=1.0).generate(RANGE_DRAFT)
+
+    # A repair that cannot finish inside the budget is not started: the graph is
+    # served, the refuted answer is dropped, the skip is recorded.
+    assert len(client.calls) == 1
+    assert result.graph.claim is None
+    assert "claim_dropped_refuted" in result.repairs
+    assert "retry_skipped_budget" in result.repairs
+
+
+def test_a_malformed_claim_is_rewritten_with_a_syntax_hint() -> None:
     client = FakeClient(
         _range_json(lower_inclusive=True, expression="exp(x) - b*x"),
         _range_json(lower_inclusive=True),
@@ -627,7 +760,10 @@ def test_a_malformed_claim_is_retried_with_a_syntax_hint() -> None:
     result = _generator(client).generate(RANGE_DRAFT)
 
     assert result.attempts == 2
+    assert client.calls[1].purpose == "graph_claim_repair"
     assert "verification_malformed" in client.calls[1].user
+    assert result.graph.claim is not None
+    assert result.graph.claim.expression == "exp(x) - a*x"
 
 
 def test_the_claim_is_serialised_and_conforms_to_the_spec() -> None:

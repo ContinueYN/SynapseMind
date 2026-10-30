@@ -50,11 +50,30 @@ MATH_HYPOTHESIS_LABELS: Mapping[str, str] = {
     hypothesis_id: hypothesis.label for hypothesis_id, hypothesis in HYPOTHESES.items()
 }
 
+# The seed's L1 label names its own topic ("恒成立与最值"). A generated graph can
+# be any topic, so reusing it verbatim tells a 数列/立体几何 student they have a
+# 恒成立 problem — observed on every generated card in the 100-problem run.
+GENERATED_HYPOTHESIS_LABELS: Mapping[str, str] = {
+    **MATH_HYPOTHESIS_LABELS,
+    "H_L1": "概念不清：没抓住这一步的关键条件",
+}
+
 
 class MathPlugin:
     subject = SUBJECT
     level = VerifiabilityLevel.STRONG
     hypothesis_labels = MATH_HYPOTHESIS_LABELS
+
+    def labels_for(self, problem: Problem) -> Mapping[str, str]:
+        """Card wording: the seed's topic name only on the seed's own problem.
+
+        ``hypothesis_labels`` stays the annotated vocabulary so the seed card is
+        byte-identical; a generated graph gets the topic-neutral L1 wording.
+        """
+
+        if problem.annotated:
+            return MATH_HYPOTHESIS_LABELS
+        return GENERATED_HYPOTHESIS_LABELS
 
     def __init__(
         self,
