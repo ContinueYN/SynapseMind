@@ -32,7 +32,6 @@ fix(web): keep one question per turn on mobile
 
 ## PR 检查清单
 
-- [ ] `python scripts/checks/check_repo.py`
 - [ ] 后端：`cd apps/api && ruff check src tests && ruff format --check src tests && mypy src && lint-imports && pytest`
 - [ ] 前端：`cd apps/web && npm run typecheck && npm run lint && npm run build`
 - [ ] 新增/修改的接口有 spec 或 JSON Schema

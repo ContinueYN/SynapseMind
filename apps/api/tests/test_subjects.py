@@ -20,6 +20,7 @@ from synapse.application.subject import (
 )
 from synapse.domain.diagnosis.hypotheses import HYPOTHESES
 from synapse.domain.problem.alignment import RuleBasedAligner
+from synapse.domain.problem.models import AlignmentResult, Problem, StudentAttempt
 from synapse.infrastructure.in_memory import InMemoryProblemRepository
 from synapse.infrastructure.seed import SAMPLE_PROBLEM
 from synapse.infrastructure.subjects.math import MathPlugin
@@ -127,6 +128,10 @@ class _FlipEvidencePlugin:
     subject = "math"
     level = VerifiabilityLevel.STRONG
 
+    def aligner_for(self, problem: object) -> RuleBasedAligner:
+        del problem
+        return RuleBasedAligner()
+
     def evidence_model(self, graph: object) -> EvidenceModel:
         del graph
         return EvidenceModel(weights={"p_a0_derivative": {"A": {"H_L1": 1.2}}})
@@ -149,6 +154,49 @@ def test_factory_uses_the_plugins_evidence_model() -> None:
     session = factory.create(command)
 
     assert session.hypotheses.evidence == {"p_a0_derivative": {"A": {"H_L1": 1.2}}}
+
+
+class _SpyAligner:
+    """Records that the factory asked the plugin, then returns no gap."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def align(self, problem: Problem, attempt: StudentAttempt) -> AlignmentResult:
+        del attempt
+        self.calls += 1
+        return AlignmentResult(
+            first_divergence="none",
+            matched_node_ids=tuple(node.id for node in problem.graph.nodes),
+            missing_node_ids=(),
+            evidence=("spy aligner",),
+            excluded=(),
+        )
+
+
+def test_factory_asks_the_subject_plugin_for_its_aligner() -> None:
+    """S8: alignment strategy is a plugin capability, not a factory default."""
+
+    spy = _SpyAligner()
+    plugin = MathPlugin(CATALOG, annotated_aligner=spy)
+    factory = SessionFactory(
+        problems=InMemoryProblemRepository(),
+        aligner=RuleBasedAligner(),
+        ids=UuidSessionIdGenerator(),
+        clock=SystemClock(),
+        subjects=SubjectRegistry((plugin,)),
+    )
+
+    session = factory.create(
+        StartSessionCommand(
+            problem_text=SAMPLE_PROBLEM.text,
+            answer="a≥1/e",
+            work="定义域 x>0。",
+        )
+    )
+
+    assert spy.calls == 1
+    assert session.alignment.first_divergence == "none"
 
 
 def test_container_exposes_the_registry() -> None:

@@ -14,7 +14,13 @@ scripts/
 │  └─ check_repo.py      # 文件、链接、JSON、skill 映射检查
 ├─ eval/
 │  ├─ m2_exit.py         # M2 退出判定（10 条 golden 回放）
-│  └─ s4_graph_build.py  # M2.5 S4 建图评测（20 道未见题）
+│  ├─ s4_graph_build.py  # M2.5 S4 建图评测（20 道未见题）
+│  ├─ s5_verify.py       # M2.5 S5 建图 + claim 反例验证
+│  ├─ s5_session.py      # M2.5 S5 请求链路（建图 → 探针 → 卡点卡）
+│  ├─ s6_physics.py      # M2.5 S6 物理接入（6 题）
+│  ├─ s6_verifier.py     # M2.5 S6 物理验证器自检（无需 key）
+│  ├─ s7_none_tier.py    # M2.5 S7 语文 NONE 档结构提示（6 题 × 2 段）
+│  └─ s8_alignment.py    # M2.5 S8 分句级对齐（6 题 × 3 段）
 └─ release/
    └─ export_public.py   # 可选的公开树导出工具
 ```
@@ -29,9 +35,25 @@ cd apps/api
 
 # 20 道未见题建图，需真实 key；报告写入 eval/reports/
 .\.venv\Scripts\python.exe ..\..\scripts\eval\s4_graph_build.py
+
+# S5：建图 + claim 反例验证 / 请求链路（20 题，需真实 key）
+.\.venv\Scripts\python.exe ..\..\scripts\eval\s5_verify.py
+.\.venv\Scripts\python.exe ..\..\scripts\eval\s5_session.py
+
+# S6：物理接入（6 题，需真实 key）；验证器自检不需要 key
+.\.venv\Scripts\python.exe ..\..\scripts\eval\s6_physics.py
+.\.venv\Scripts\python.exe ..\..\scripts\eval\s6_verifier.py
+
+# S7：语文 NONE 档结构提示（6 题 × 2 段，需真实 key）
+.\.venv\Scripts\python.exe ..\..\scripts\eval\s7_none_tier.py
+
+# S8：分句级对齐（6 题 × 3 段 partial/full/blank，需真实 key）
+.\.venv\Scripts\python.exe ..\..\scripts\eval\s8_alignment.py
 ```
 
-## 检查
+## 可选本地检查
+
+CI 不再运行文档/链接完整性检查；需要排查时再手动执行：
 
 ```bash
 python scripts/checks/check_repo.py

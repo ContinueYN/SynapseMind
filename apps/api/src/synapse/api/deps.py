@@ -36,7 +36,7 @@ from synapse.application.ports import AnswerStore, ProblemRepository, SessionRep
 from synapse.application.problem_resolver import ProblemResolver
 from synapse.application.service import SessionService
 from synapse.application.subject import SubjectRegistry
-from synapse.domain.problem.alignment import CompositeAligner, RuleBasedAligner, TypeCueAligner
+from synapse.domain.problem.alignment import RuleBasedAligner
 from synapse.infrastructure.guards import AnswerStoreLeakGuardFactory
 from synapse.infrastructure.in_memory import (
     InMemoryAnswerStore,
@@ -48,6 +48,7 @@ from synapse.infrastructure.llm.client import OpenAICompatibleClient
 from synapse.infrastructure.llm.composer import LLMProbeComposer
 from synapse.infrastructure.llm.graph import LLMGraphGenerator
 from synapse.infrastructure.llm.settings import LLMSettings
+from synapse.infrastructure.subjects.chinese import ChinesePlugin
 from synapse.infrastructure.subjects.math import MathPlugin
 from synapse.infrastructure.subjects.physics import PhysicsPlugin
 from synapse.infrastructure.system import SystemClock, UuidSessionIdGenerator
@@ -83,14 +84,13 @@ def build_container(
             (
                 MathPlugin(problems.catalog, generator=graph_generator),
                 PhysicsPlugin(generator=graph_generator),
+                ChinesePlugin(generator=graph_generator),
             )
         )
     )
-    aligner = CompositeAligner(
-        annotated=RuleBasedAligner(),
-        generated=TypeCueAligner(),
-        annotated_ids=problems.annotated_ids,
-    )
+    # S8: the strategy lives on the subject plugin. This aligner is only the
+    # no-registry fallback; every production subject returns its own.
+    aligner = RuleBasedAligner()
     factory = SessionFactory(
         problems=problems,
         aligner=aligner,

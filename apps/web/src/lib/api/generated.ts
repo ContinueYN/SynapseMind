@@ -190,6 +190,57 @@ export interface components {
             /** Version */
             version: string;
         };
+        /**
+         * HintOut
+         * @description NONE-tier output: coverage of the reference structure, not a diagnosis.
+         *
+         *     Kept separate from ``DiagnosisOut`` on purpose — it has no layer, no
+         *     confidence and no ``next_action``/``verify``, so a client cannot render it
+         *     as a card by mistake (M2.5 S7, ``specs/structure-hint.schema.json``).
+         */
+        HintOut: {
+            /**
+             * Version
+             * @constant
+             */
+            version: "0.2";
+            /** Session Id */
+            session_id: string;
+            /** Problem Id */
+            problem_id: string;
+            /** Subject */
+            subject: string;
+            /**
+             * Level
+             * @constant
+             */
+            level: "none";
+            /** One Line */
+            one_line: string;
+            /** Steps */
+            steps?: components["schemas"]["HintStepOut"][];
+            /** Focus Node Id */
+            focus_node_id?: string | null;
+            /**
+             * Next Step
+             * @default
+             */
+            next_step: string;
+            /** Disclaimer */
+            disclaimer: string;
+        };
+        /** HintStepOut */
+        HintStepOut: {
+            /** Node Id */
+            node_id: string;
+            /** Text */
+            text: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "covered" | "partial" | "missing";
+        };
         /** HistoryItemOut */
         HistoryItemOut: {
             /** Turn */
@@ -251,7 +302,7 @@ export interface components {
              * @default math
              * @enum {string}
              */
-            subject: "math" | "physics";
+            subject: "math" | "physics" | "chinese";
             /**
              * Grade
              * @default high_school
@@ -290,6 +341,7 @@ export interface components {
             max_turns: number;
             prompt?: components["schemas"]["ProbeOut"] | null;
             diagnosis?: components["schemas"]["DiagnosisOut"] | null;
+            hint?: components["schemas"]["HintOut"] | null;
             /** Notice */
             notice?: string | null;
             progress: components["schemas"]["ProgressOut"];

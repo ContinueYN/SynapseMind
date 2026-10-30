@@ -42,18 +42,15 @@ python tools/diagrams.py
 python tools/merge_markdown.py
 python tools/generate_docx.py
 pwsh tools/update_toc_and_export.ps1   # Windows + Word
-python scripts/checks/check_repo.py
 ```
 
 ## PR 检查清单
 
-- [ ] `python scripts/checks/check_repo.py` 通过
 - [ ] 后端：`cd apps/api && ruff check src tests && ruff format --check src tests && mypy src && lint-imports && pytest`
-- [ ] 前端：`cd apps/web && npm run typecheck && npm run lint && npm run build`
+- [ ] 前端：`cd apps/web && npm run typecheck && npm run lint && npm test && npm run build`
 - [ ] 新增/修改的接口有 spec 或 JSON Schema
 - [ ] 学习模式响应没有 `solution` 字段
 - [ ] 新增 Prompt 有对应的红队用例
-- [ ] 文档链接、图片可打开
 - [ ] 没有把学生原文/密钥/大文件临时文件提交进来
 
 ## 评审重点

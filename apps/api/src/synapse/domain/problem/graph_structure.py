@@ -95,6 +95,7 @@ def review(
     min_targets: int = MIN_PROBE_TARGETS,
     require_evidence: bool = False,
     calibrate_evidence: bool = False,
+    require_probes: bool = True,
 ) -> GraphCheck:
     """Repair what is mechanical and report what is not.
 
@@ -111,6 +112,10 @@ def review(
     magnitude reaches ``EVIDENCE_CALIBRATION_CEILING`` when the model wrote
     everything too timidly (S5 ③). It never changes a sign or a relative weight,
     never scales down, and is reported as a repair.
+
+    ``require_probes`` is off for a NONE-tier subject (M2.5 S7): it never asks a
+    probe, so demanding one would reject a perfectly usable structure. Probe
+    *structure* is still validated when probes are present.
     """
     codes: set[str] = set()
     issues: list[str] = []
@@ -183,7 +188,7 @@ def review(
                             f"probe_target_unknown: {probe.id or node.id} 指向 {target!r}"
                         )
             issues.extend(_probe_evidence_issues(probe, require_evidence=require_evidence))
-    if total_probes == 0:
+    if total_probes == 0 and require_probes:
         issues.append("no_probes: 解法图至少要有一个探针")
     if calibrate_evidence and total_probes:
         nodes = _calibrate_evidence(nodes, codes)

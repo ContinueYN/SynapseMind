@@ -14,7 +14,9 @@ scripts/
    └─ check_repo.py      # 必需文件、链接、JSON 检查
 ```
 
-## 检查
+## 可选本地检查
+
+CI 不运行文档完整性检查；需要排查时再手动执行：
 
 ```bash
 python scripts/checks/check_repo.py

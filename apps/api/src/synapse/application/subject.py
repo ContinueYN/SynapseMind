@@ -1,9 +1,9 @@
 """Subject plugin port (M2.5 S2).
 
 The dialogue kernel never learns which subject it is talking about: a plugin
-supplies the *content* (how to identify a problem, which graph, which probes,
-which evidence weights, whether a step can be verified) and the state machine
-still decides the next state.
+supplies the *content* (how to identify a problem, which graph, which alignment
+strategy, which probes, which evidence weights, whether a step can be verified)
+and the state machine still decides the next state.
 
 Three constraints from chapter 13 §13.4:
 
@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Literal, Protocol
 
+from synapse.domain.problem.alignment import StepAligner
 from synapse.domain.problem.models import (
     Probe,
     Problem,
@@ -132,6 +133,18 @@ class SubjectPlugin(Protocol):
 
     def build_graph(self, problem: Problem | ProblemDraft) -> SolutionGraph:
         """Return an annotated graph, or generate one for a draft (S4)."""
+        ...
+
+    def aligner_for(self, problem: Problem) -> StepAligner:
+        """Which matching strategy this subject uses for this problem (S8).
+
+        The plugin owns the choice so a subject can opt into a different
+        matcher without a second dispatch in the factory or the composition
+        root. ``MathPlugin`` still switches between the labelled rule aligner
+        and the generic graph aligner; ``ChinesePlugin`` opts into the
+        clause-level variant; physics keeps the generic two-state one so its
+        S6 numbers stay comparable.
+        """
         ...
 
     def probes_for(self, node: SolutionNode) -> tuple[Probe, ...]: ...

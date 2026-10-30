@@ -9,6 +9,8 @@ from __future__ import annotations
 from synapse.api.schemas import (
     CardOut,
     DiagnosisOut,
+    HintOut,
+    HintStepOut,
     HistoryItemOut,
     NextActionOut,
     ProbeOut,
@@ -18,6 +20,7 @@ from synapse.api.schemas import (
 )
 from synapse.application.composer import ProbePrompt
 from synapse.application.service import SessionView
+from synapse.domain.diagnosis.hint import StructureHint
 from synapse.domain.diagnosis.models import DiagnosisCard
 from synapse.domain.dialogue.session import DialogueSession, TurnRecord
 
@@ -75,6 +78,26 @@ def diagnosis_out(card: DiagnosisCard) -> DiagnosisOut:
     )
 
 
+def hint_out(hint: StructureHint) -> HintOut:
+    """Map the NONE-tier hint; it never carries card fields."""
+
+    return HintOut(
+        version=hint.version,
+        session_id=hint.session_id,
+        problem_id=hint.problem_id,
+        subject=hint.subject,
+        level="none",
+        one_line=hint.one_line,
+        steps=[
+            HintStepOut(node_id=step.node_id, text=step.text, status=step.status)
+            for step in hint.steps
+        ],
+        focus_node_id=hint.focus_node_id,
+        next_step=hint.next_step,
+        disclaimer=hint.disclaimer,
+    )
+
+
 def session_out(view: SessionView, problem_title: str, problem_text: str) -> SessionOut:
     session = view.session
     return SessionOut(
@@ -88,6 +111,7 @@ def session_out(view: SessionView, problem_title: str, problem_text: str) -> Ses
         max_turns=session.max_turns,
         prompt=probe_out(view.prompt) if view.prompt else None,
         diagnosis=diagnosis_out(view.diagnosis) if view.diagnosis else None,
+        hint=hint_out(view.hint) if view.hint else None,
         notice=view.notice,
         progress=progress_out(session),
         history=[history_out(record) for record in session.history],

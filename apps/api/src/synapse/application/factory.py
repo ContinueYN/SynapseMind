@@ -16,7 +16,7 @@ from synapse.application.ports import (
     ProblemRepository,
 )
 from synapse.application.problem_resolver import ProblemResolver
-from synapse.application.subject import SubjectRegistry
+from synapse.application.subject import SubjectRegistry, VerifiabilityLevel
 from synapse.domain.diagnosis.hypotheses import (
     EvidenceWeights,
     HypothesisSet,
@@ -64,6 +64,23 @@ class SessionFactory:
         # keep the new problem and a plugin that can build graphs.
         self._resolver = resolver or ProblemResolver(problems, subjects)
 
+    def level_for(self, subject: str) -> VerifiabilityLevel:
+        """The subject's promise tier (M2.5 S7); used by the service gate.
+
+        Without a registry this is the M1 rule baseline, which is STRONG: the
+        annotated catalog is the one subject the product can actually verify.
+        An unknown subject must never reach here — the resolver refuses it
+        first — but if it does, STRONG keeps the pre-S7 behaviour instead of
+        silently downgrading a working path.
+        """
+
+        if self._subjects is None:
+            return VerifiabilityLevel.STRONG
+        plugin = self._subjects.for_subject(subject)
+        if plugin is None:
+            return VerifiabilityLevel.STRONG
+        return plugin.level
+
     def _evidence_for(self, subject: str, graph: SolutionGraph) -> EvidenceWeights | None:
         """Ask the subject plugin for its evidence model; ``None`` = M1 default.
 
@@ -96,6 +113,22 @@ class SessionFactory:
             return {str(key): str(value) for key, value in labels.items()}
         return None
 
+    def _aligner_for(self, problem: Problem) -> StepAligner:
+        """Ask the subject plugin which matcher this problem needs (S8).
+
+        ``self._aligner`` is only the no-registry fallback: with a registry the
+        plugin is authoritative, so a NONE-tier subject can use clause-level
+        matching while math/physics keep the two-state aligner. No subject name
+        is compared here.
+        """
+
+        if self._subjects is None:
+            return self._aligner
+        plugin = self._subjects.for_subject(problem.subject)
+        if plugin is None:
+            return self._aligner
+        return plugin.aligner_for(problem)
+
     def create(self, command: StartSessionCommand) -> DialogueSession:
         if command.mode != "learning":
             raise UnsupportedMode(command.mode)
@@ -109,7 +142,7 @@ class SessionFactory:
             confidence=command.confidence,
             self_report=command.self_report,
         )
-        alignment = self._aligner.align(problem, attempt)
+        alignment = self._aligner_for(problem).align(problem, attempt)
         focus = self._focus_for(problem, alignment)
         session = DialogueSession(
             session_id=self._ids.new_session_id(),

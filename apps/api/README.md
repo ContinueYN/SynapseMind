@@ -17,7 +17,7 @@ apps/api/src/synapse/
 │  ├─ problem/
 │  │  ├─ models.py            # Problem / SolutionGraph / Probe / AlignmentResult
 │  │  ├─ identification.py    # 严格识别：归一化后“包含”已标注题，否则拒绝
-│  │  └─ alignment.py         # StepAligner 端口 + RuleBasedAligner
+│  │  └─ alignment.py         # StepAligner 端口 + Rule/TypeCue/Clause 三种对齐策略
 │  ├─ diagnosis/
 │  │  ├─ models.py            # L0–L6、Hypothesis、DiagnosisCard
 │  │  └─ hypotheses.py        # 先验/对数似然证据/后验/判定
@@ -33,7 +33,7 @@ apps/api/src/synapse/
 │  ├─ composer.py             # GraphProbeComposer + LeakSafe/Fallback/Shadow/Canary 装饰器
 │  ├─ card_builder.py         # 由收敛假设生成 DiagnosisCard
 │  ├─ replay.py               # golden 回放与退出判定（eval 与 pytest 共用）
-│  ├─ subject.py              # SubjectPlugin 端口：识别/建图/探针/证据/验证
+│  ├─ subject.py              # SubjectPlugin 端口：识别/建图/对齐策略/探针/证据/验证
 │  └─ service.py              # SessionService（Facade）：start/get/submit/exit
 ├─ infrastructure/            # 端口实现
 │  ├─ seed.py                 # M1 唯一种子题 + 4 个探针 + 标准答案
@@ -41,7 +41,9 @@ apps/api/src/synapse/
 │  ├─ guards.py               # 唯一读取答案的适配器：构造泄漏防护
 │  ├─ system.py               # UTC 时钟 / S_ 会话 ID
 │  ├─ subjects/               # 学科插件实现（M2.5）
-│  │  └─ math.py              # MathPlugin：严格识别 + 种子图/EVIDENCE + 生成图证据
+│  │  ├─ math.py              # MathPlugin：严格识别 + 种子图/EVIDENCE + 生成图证据
+│  │  ├─ physics.py           # PhysicsPlugin：生成图 + 量纲/数值验证（PARTIAL）
+│  │  └─ chinese.py           # ChinesePlugin：生成图 + 结构提示（NONE）
 │  └─ llm/                    # 唯一允许 import 模型客户端的包
 │     ├─ settings.py          # off/shadow/on:10 开关、模型、超时、canary 分桶
 │     ├─ client.py            # OpenAI 兼容客户端（默认 DeepSeek）
@@ -115,7 +117,7 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 
 本地把变量写进**仓库根目录的 `.env`** 即可：`scripts/dev/run.py` 用 `uvicorn --env-file` 传入，`scripts/eval/m2_exit.py` 显式 `load_dotenv()`。库代码与测试**不会**隐式读这个文件，所以本机的 key 不会改变测试结果。
 
-生成图的 prompt 版本由 `SYNAPSE_GRAPH_PROMPT_VERSION` 控制（默认 `graph-v2`）；缓存键包含它，改 prompt 必须同时升版本，否则旧缓存会掩盖变化。
+生成图的 prompt 版本由 `SYNAPSE_GRAPH_PROMPT_VERSION` 控制（默认 `graph-v6`，物理/语文分别拼 `-physics`/`-chinese`）；缓存键包含它，改 prompt 必须同时升版本，否则旧缓存会掩盖变化。
 
 失败链：JSON 不合法 → 重试 1 次 → 仍失败回退规则；超时与传输失败不重试（保 8s 首问预算），直接回退。每次调用、每次降级、每条 shadow 差异都写 `AuditEntry`：`session_id`、`turn`、`model`、`latency_ms`、`prompt_tokens`、`completion_tokens`、`retried`、`fallback_reason`、`schema_ok`。
 
@@ -123,17 +125,28 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 
 ## 学科插件（M2.5）
 
-`SubjectPlugin` 是「对话内核不认识学科」的接缝：插件只提供**内容**（识别、图、探针、证据权重、验证结论），状态机仍决定状态。契约见第 13 章，端口在 [`application/subject.py`](src/synapse/application/subject.py)，当前唯一实现在 [`infrastructure/subjects/math.py`](src/synapse/infrastructure/subjects/math.py)。
+`SubjectPlugin` 是「对话内核不认识学科」的接缝：插件只提供**内容**（识别、图、对齐策略、探针、证据权重、验证结论），状态机仍决定状态。契约见第 13 章，端口在 [`application/subject.py`](src/synapse/application/subject.py)；实现在 [`infrastructure/subjects/`](src/synapse/infrastructure/subjects/)：`math.py`（STRONG）、`physics.py`（PARTIAL）、`chinese.py`（NONE）。S8 起 `aligner_for(problem)` 也由插件给出：数学在标注题/生成题之间切规则/类型线索，语文用分句级匹配，物理保持两态匹配。
 
-| 方法 | 现在（S2–S4） | 后续 |
-|---|---|---|
-| `identify()` | 归一化后「包含」已标注题；不同题一律拒绝，不再用关键字 | 生成式识别（未排期）；S6 给 `physics` 补 handler |
-| `build_graph()` | `Problem` 返回手写种子图；`ProblemDraft` 走 `LLMGraphGenerator`：生成 → 机械修复 → 结构规则 → `solution-graph.schema.json` → 失败重试一次。生成图必须带逐选项证据权重（prompt `graph-v2`） | S5 剩余：把生成的图接进 ALIGN/PROBE；未接主链路前只用于评测 |
-| `probes_for()` | 返回节点自带探针 | 接口不变 |
-| `evidence_model()` | 生成图读图内 `probe.evidence`；只有已标注种子图回退手写 `EVIDENCE`，未知图返回空表（不借用种子权重） | 生成图的权重方向仍需人工/验证器抽查 |
-| `verify()` | 恒返回 `unknown` | S5 接 SymPy；STRONG 档才允许 `diagnose` |
+**对外承诺由 `application/commitment.py` 的能力表决定**（这是唯一开关，别处不再判断）：
 
-`subject` 是显式声明：文本识别出的学科与声明不一致时返回 **422**，而不是静默按文本路由。注册表目前只有一个插件，S6 接物理时只加一个实现。
+| `level` | 学科 | 探针 | 卡点卡 | 结构提示 |
+|---|---|---|---|---|
+| `STRONG` | 数学 | 有 | 有（附反例/SymPy 结论） | 无 |
+| `PARTIAL` | 物理 | 有 | 有（`verify()` 只对结构化 `StudentStep.data` 给结论） | 无 |
+| `NONE` | 语文 | 无 | **无** | **有**（`specs/structure-hint.schema.json`） |
+
+NONE 档会话在 `ALIGN` 之后直接收束到 `STOP → CLOSED`：不追问、不定位卡点，只返回一条结构提示（步骤覆盖 + 下一步先看哪里 + 固定免责声明）。它不是卡点卡的简化版——`HintOut` 没有 `layer`/`confidence`/`next_action`/`verify`，前端也无法把它渲染成卡。S8 起步骤状态是 `covered`/`partial`/`missing`（schema v0.2）：`partial` 只表示“节点里至少一个小句被写到”，不是“写错”，也不是“卡在这里”。
+
+| 方法 | 数学（S2–S4） | 物理（S6） | 语文（S7） |
+|---|---|---|---|
+| `identify()` | 归一化后「包含」已标注题；不同题一律拒绝 | 恒 `None`（必须显式声明 `subject`） | 恒 `None` |
+| `build_graph()` | `Problem` 返回手写种子图；`ProblemDraft` 走 `LLMGraphGenerator`：生成 → 机械修复 → 结构规则 → `solution-graph.schema.json` → 失败重试一次 | 同一个生成器，prompt `graph-v6-physics`，不输出 `claim` | 同一个生成器，prompt `graph-v6-chinese`，不输出探针与 `claim`；无探针图由 `review(require_probes=False)` 放行 |
+| `aligner_for()` | 标注题 → `RuleBasedAligner`；生成题 → `TypeCueAligner` | `TypeCueAligner`（S6 基线不重标定） | `ClauseCueAligner`（分句重合，可报 `partial`） |
+| `probes_for()` | 返回节点自带探针 | 同左（`hypothesis_labels` 换物理词表） | 恒空 |
+| `evidence_model()` | 生成图读图内 `probe.evidence`；只有已标注种子图回退手写 `EVIDENCE` | 只读图内权重，不回退数学 `EVIDENCE` | 恒空 |
+| `verify()` | SymPy 反例搜索（`pass`/`fail`/`unknown`） | `StudentStep.data` 的量纲与数值回代；纯文本 `unknown` | 恒 `unknown`（NONE 档没有可自动验证的真值） |
+
+`subject` 是显式声明：文本识别出的学科与声明不一致时返回 **422**，而不是静默按文本路由。三个插件共用同一套状态机与诊断门槛；对齐策略由插件给出（S8），`domain/dialogue/` 一行未改。
 
 识别是**严格**的：只接受确实包含已标注题原文的提交（比较前忽略空白、标点、全半角与 LaTeX 转义），其余返回 422 并说明原因。关键字匹配会把「同一知识点、另一道题」也当成种子题，用错的解法图解释学生的错误——那比拒绝更糟。
 

@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://synapsemind.dev/schemas/structure-hint.schema.json",
+  "title": "StructureHint",
+  "description": "结构提示：可验证性 NONE 档学科（语文/英语/历史）的唯一输出。只描述解法图里的步骤有没有被写到（或只写到一部分），不判断对错、不定位卡点、不给置信度，也不生成卡点卡（M2.5 S7；S8 起按分句重合区分「写到一部分」）。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "session_id",
+    "problem_id",
+    "subject",
+    "level",
+    "one_line",
+    "steps",
+    "focus_node_id",
+    "next_step",
+    "disclaimer"
+  ],
+  "properties": {
+    "version": {"type": "string", "const": "0.2"},
+    "session_id": {"type": "string", "pattern": "^S_[A-Z0-9]+$"},
+    "problem_id": {"type": "string", "pattern": "^P_[A-Z0-9_]+$"},
+    "subject": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32,
+      "description": "学科标签，必须由请求显式声明；NONE 档不做自动识别。"
+    },
+    "level": {
+      "type": "string",
+      "const": "none",
+      "description": "可验证性档位。结构提示只在 NONE 档出现；PARTIAL/STRONG 输出的是卡点卡。"
+    },
+    "one_line": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "一句话结论，只允许描述“步骤有没有出现 / 是否只出现了一部分”，不能出现假设名、置信度或“卡在”。"
+    },
+    "steps": {
+      "type": "array",
+      "maxItems": 20,
+      "description": "解法图的步骤，按图顺序；status 只表示这一步有没有被写到、是否只写到一部分，不表示对错。",
+      "items": {"$ref": "#/$defs/step"}
+    },
+    "focus_node_id": {
+      "type": ["string", "null"],
+      "pattern": "^n[0-9]+$",
+      "description": "第一个没有完全写到的节点（partial 或 missing 都算）；全部覆盖时为 null。它是“下一步先看哪里”，不是卡点。"
+    },
+    "next_step": {
+      "type": "string",
+      "maxLength": 200,
+      "description": "建议的下一步动作；只能说“补上/对照”，不能说“你错在”。"
+    },
+    "disclaimer": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300,
+      "description": "必须明说：该学科没有可自动验证的真值，本输出不是诊断。"
+    }
+  },
+  "$defs": {
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node_id", "text", "status"],
+      "properties": {
+        "node_id": {"type": "string", "pattern": "^n[0-9]+$"},
+        "text": {"type": "string", "minLength": 1, "maxLength": 200},
+        "status": {
+          "type": "string",
+          "enum": ["covered", "partial", "missing"],
+          "description": "covered=过程里似乎写到了；partial=只写到一部分（至少一个小句与节点重合）；missing=似乎没有写到。三者都只按线索词/分句重合判断有无，不判断对错。"
+        }
+      }
+    }
+  }
+}

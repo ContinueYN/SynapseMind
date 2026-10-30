@@ -21,7 +21,7 @@ import hashlib
 import json
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from pathlib import Path
 from typing import cast
@@ -197,10 +197,69 @@ PHYSICS_SYSTEM_PROMPT = """你是高中物理解法图标注器。输入一道�
     整张图会被判为无效。"""
 
 
+CHINESE_SYSTEM_PROMPT = """你是高中语文解法图标注器。
+输入一道高中语文题（现代文阅读、古诗文阅读、写作），输出一张“解题步骤图”JSON。
+这张图只描述**答题需要完成的认知动作**，不写答案、不写范文。
+语文题的重点是：读题干与限制语 → 定题型与答题角度 → 定位原文/确定依据 → 提取并转写要点
+→ 组织成文（分点、术语、结合原文） → 检查扣题与分值。
+
+硬性要求：
+1. 只输出一个 JSON 对象，不要 markdown、代码块或解释。顶层只有 nodes / edges：
+   {"nodes": [
+      {"id": "n1", "type": "READ", "text": "...", "demand": {"V": 0.2}},
+      {"id": "n2", "type": "CONDITION", "text": "...", "demand": {"WM": 0.4}}
+    ],
+    "edges": [["n1", "n2"]]}
+2. nodes 为 3–10 个（硬上限 20）；id 从 n1 连续编号；text 不超过 60 字，
+   写这一步要做什么，不写答案内容，也不要复述题干。
+3. type 只能是 READ / CONCEPT / CONDITION / STRATEGY / TRANSFORM / COMPUTE / CHECK 之一。
+   语文建议：READ 读题干、圈出限制语与分值；CONCEPT 判定题型/文体/答题角度；
+   CONDITION 定位原文区间、确认依据与筛选条件；STRATEGY 选答题框架、判定手法；
+   TRANSFORM 把原文信息转成要点；COMPUTE 分点组织语言、写完整句子；
+   CHECK 检查扣题、要点齐全、分值对应、有无错别字。
+4. demand 只填与这一步相关的维度，取值 0–1：
+   V 符号识别、Gf 推理、Gv 空间、WM 工作记忆、Gs 加工速度、LTS 长时记忆、M 元认知。
+5. edges 的每一项是 [前置节点, 后继节点]，必须无环；第一个节点是 READ，最后一个节点是 CHECK；
+   每个节点至少与另一个节点相连。
+6. **不要输出探针（probes）。** 该学科不做追问，探针会被直接丢弃；写了也只是浪费长度。
+   同理**不要输出 claim**：语文答案没有被自动验证的手段，任何“答案已验证”的字段都不该出现。
+7. 每个节点都必须能在学生作答里**看出来有没有做到**：写“定位第 3 段的关键句”“点出比喻的作用”，
+   不要写“理解文章”“体会情感”这类无法观察的动作。
+8. 不要给出答案、范文或得分点全文；这张图是步骤，不是标准答案。
+9. 步骤之间要能看出先后依赖：没有前一步的产出，后一步写不出来。"""
+
+
+@dataclass(frozen=True, slots=True)
+class _GraphProfile:
+    """Per-subject generation contract (M2.5 S4/S6/S7).
+
+    ``probes``/``claim`` say what the tier can actually use. A NONE-tier
+    subject never asks a probe and has no verifier, so its graph is generated
+    without either; asking the model for them would cost tokens and imply a
+    promise the product does not make.
+    """
+
+    system: str
+    probes: bool
+    claim: bool
+
+
+_PROFILES: dict[str, _GraphProfile] = {
+    "math": _GraphProfile(GRAPH_SYSTEM_PROMPT, probes=True, claim=True),
+    "physics": _GraphProfile(PHYSICS_SYSTEM_PROMPT, probes=True, claim=False),
+    "chinese": _GraphProfile(CHINESE_SYSTEM_PROMPT, probes=False, claim=False),
+}
+
+
+def _profile(subject: str) -> _GraphProfile:
+    # An unregistered subject cannot reach the generator (the resolver refuses
+    # it first); defaulting to the math profile keeps the failure mode readable
+    # instead of inventing a fourth shape.
+    return _PROFILES.get(subject, _PROFILES["math"])
+
+
 def _system_prompt(subject: str) -> str:
-    if subject == "physics":
-        return PHYSICS_SYSTEM_PROMPT
-    return GRAPH_SYSTEM_PROMPT
+    return _profile(subject).system
 
 
 def _prompt_version(settings: LLMSettings, subject: str) -> str:
@@ -616,6 +675,17 @@ def _build_graph(draft: ProblemDraft, text: str) -> GraphCheck:
             raise _Rejected("schema_invalid", ("edge_shape: edges 的每一项必须是 [前置, 后继]",))
         edges.append((edge[0], edge[1]))
 
+    profile = _profile(draft.subject)
+    repairs: set[str] = set()
+    if not profile.probes:
+        # A NONE-tier subject never asks a probe (S7). Keeping the model's
+        # probes would imply a promise the product does not make, so they are
+        # dropped like an unsupported claim: the structure survives, the
+        # probing does not.
+        if any(node.probes for node in nodes):
+            repairs.add("probes_dropped_unsupported")
+        nodes = tuple(replace(node, probes=()) for node in nodes)
+
     graph = SolutionGraph(
         problem_id=draft.id,
         version="g1",
@@ -623,23 +693,24 @@ def _build_graph(draft: ProblemDraft, text: str) -> GraphCheck:
         nodes=nodes,
         edges=tuple(edges),
         # v1's claim verifier is a math parameter-range tool. A physics answer
-        # carries units/vectors, so a claim-shaped block here is never trusted;
-        # the CHECK node is where the model is told to put unit/magnitude checks.
-        claim=None if draft.subject == "physics" else _claim(raw.get("claim")),
+        # carries units/vectors and a language answer has no formal statement at
+        # all, so a claim-shaped block in those subjects is never trusted; the
+        # CHECK node is where the model is told to put its own checks.
+        claim=_claim(raw.get("claim")) if profile.claim else None,
     )
     check = review(
         graph,
         allowed_targets=ALLOWED_PROBE_TARGETS,
-        require_evidence=True,
-        calibrate_evidence=True,
+        require_evidence=profile.probes,
+        calibrate_evidence=profile.probes,
+        require_probes=profile.probes,
     )
     if not check.ok:
         raise _Rejected(_classify(check.issues), check.issues)
-    if draft.subject == "physics" and raw.get("claim") is not None:
-        check = replace(
-            check,
-            repairs=tuple(sorted({*check.repairs, "claim_dropped_unsupported"})),
-        )
+    if not profile.claim and raw.get("claim") is not None:
+        repairs.add("claim_dropped_unsupported")
+    if repairs:
+        check = replace(check, repairs=tuple(sorted({*check.repairs, *repairs})))
 
     spec_errors = validate_payload(to_payload(check.graph))
     if spec_errors:

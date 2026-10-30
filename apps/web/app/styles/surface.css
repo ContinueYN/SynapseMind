@@ -2488,6 +2488,108 @@ svg {
   padding-top: var(--s4);
 }
 
+/* ───────────────────────── 结构提示（NONE 档） ───────────────────────── */
+
+/* 没有把握尺：这里能数的只有“几步被提到”，所以给的是计数，不是百分比 */
+.sm-hint-tally {
+  display: grid;
+  gap: 4px;
+  justify-items: end;
+  text-align: right;
+}
+
+.sm-hint-tally b {
+  color: var(--ink);
+  font-size: 34px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.sm-hint-tally b i {
+  margin-left: 3px;
+  color: var(--ink-3);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 400;
+}
+
+.sm-hint-tally span {
+  color: var(--ink-3);
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  white-space: nowrap;
+}
+
+.sm-steps {
+  display: grid;
+  margin: var(--s3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sm-steps li {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: baseline;
+  padding: 11px 0;
+  border-top: 1px solid rgba(16, 30, 48, 0.06);
+}
+
+.sm-steps li:first-child {
+  border-top: 0;
+}
+
+.sm-steps li b {
+  color: var(--ink-4);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+
+.sm-steps li span {
+  color: var(--ink-2);
+  font-size: var(--fs-p);
+  line-height: 1.7;
+}
+
+.sm-steps li i {
+  color: var(--ink-4);
+  font-size: 10.5px;
+  font-style: normal;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+}
+
+.sm-steps li[data-status="covered"] b {
+  color: var(--azure-ink);
+}
+
+.sm-steps li[data-status="covered"] span {
+  color: var(--ink-3);
+}
+
+/* partial 不是“错”：只把序号压回中性色，措辞由组件给“写到了一部分” */
+.sm-steps li[data-status="partial"] b {
+  color: var(--ink-3);
+}
+
+.sm-steps li[data-status="partial"] span {
+  color: var(--ink-2);
+}
+
+.sm-steps li[data-focus="true"] b,
+.sm-steps li[data-focus="true"] i {
+  color: var(--azure-deep);
+}
+
+.sm-steps li[data-focus="true"] span {
+  color: var(--ink);
+}
+
 /* ───────────────────────── 卡点卡独立页 ───────────────────────── */
 
 .sm-dossier {

@@ -28,6 +28,7 @@ from synapse.application.subject import (
     Verdict,
     VerifiabilityLevel,
 )
+from synapse.domain.problem.alignment import StepAligner, TypeCueAligner
 from synapse.domain.problem.identification import TextProblemIdentifier
 from synapse.domain.problem.models import (
     Probe,
@@ -60,10 +61,15 @@ class PhysicsPlugin:
         catalog: Mapping[str, Problem] | None = None,
         *,
         generator: GraphGenerator | None = None,
+        aligner: StepAligner | None = None,
     ) -> None:
         self._catalog = dict(catalog or {})
         self._identifier = TextProblemIdentifier(self._catalog)
         self._generator = generator
+        # S8 leaves physics on the two-state aligner on purpose: its S6 report
+        # was measured with this strategy, and switching it would move the card
+        # nodes without a new baseline.
+        self._aligner: StepAligner = aligner or TypeCueAligner()
 
     def identify(self, text: str) -> ProblemRef | None:
         """Only serve an annotated physics problem; otherwise let the resolver
@@ -84,6 +90,12 @@ class PhysicsPlugin:
                 detail="物理插件没有接建图器；生成物理图需要 LLMGraphGenerator",
             )
         return self._generator.generate(problem).graph
+
+    def aligner_for(self, problem: Problem) -> StepAligner:
+        """Keep S6's two-state aligner; clause matching is not re-baselined."""
+
+        del problem
+        return self._aligner
 
     def probes_for(self, node: SolutionNode) -> tuple[Probe, ...]:
         return node.probes

@@ -78,9 +78,13 @@ npm install
 npm run dev        # http://localhost:3000
 npm run typecheck
 npm run lint
+npm test           # Vitest + jsdom：结构提示与交题表单的组件回归
+npm run test:watch
 npm run build
 npm run generate:api   # 需要先生成 .tmp/openapi.json
 ```
+
+组件测试与源码同目录（`*.test.tsx`），环境配置在 `vitest.config.mts`，`src/test/setup.ts` 负责 jsdom 的 `matchMedia`/`rAF` 垫片。它们只测纯前端交互，不替代 API 的 `pytest`。
 
 一键启动（含 API）：在仓库根目录 `python scripts/dev/run.py`。
 

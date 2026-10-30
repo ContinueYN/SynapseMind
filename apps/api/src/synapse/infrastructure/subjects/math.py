@@ -28,6 +28,12 @@ from synapse.application.subject import (
     VerifiabilityLevel,
 )
 from synapse.domain.diagnosis.hypotheses import EVIDENCE, HYPOTHESES
+from synapse.domain.problem.alignment import (
+    CompositeAligner,
+    RuleBasedAligner,
+    StepAligner,
+    TypeCueAligner,
+)
 from synapse.domain.problem.identification import TextProblemIdentifier
 from synapse.domain.problem.models import (
     Probe,
@@ -56,10 +62,19 @@ class MathPlugin:
         *,
         identifier: ProblemIdentifier | None = None,
         generator: GraphGenerator | None = None,
+        annotated_aligner: StepAligner | None = None,
+        generated_aligner: StepAligner | None = None,
     ) -> None:
         self._catalog = dict(catalog)
         self._identifier = identifier or TextProblemIdentifier(self._catalog)
         self._generator = generator
+        # The plugin owns the dispatch (S8). An annotated problem has a
+        # hand-written reference and the rule aligner tuned against it; a
+        # generated one only has node types and existence cues.
+        self._aligner = CompositeAligner(
+            annotated=annotated_aligner or RuleBasedAligner(),
+            generated=generated_aligner or TypeCueAligner(),
+        )
 
     def identify(self, text: str) -> ProblemRef | None:
         problem_id = self._identifier.identify(text)
@@ -81,6 +96,12 @@ class MathPlugin:
         # S5 wires the generated graph into ALIGN/PROBE; until then the draft
         # path is used by the S4 evaluation harness.
         return self._generator.generate(problem).graph
+
+    def aligner_for(self, problem: Problem) -> StepAligner:
+        """Annotated → hand-tuned rules; generated → type-cue existence (S8)."""
+
+        del problem  # the composite reads ``problem.annotated`` itself
+        return self._aligner
 
     def probes_for(self, node: SolutionNode) -> tuple[Probe, ...]:
         return node.probes

@@ -18,7 +18,7 @@ class StrictModel(BaseModel):
 class ProblemIn(StrictModel):
     text: str | None = Field(default=None, min_length=1, max_length=4000)
     image_url: str | None = Field(default=None, max_length=2000)
-    subject: Literal["math", "physics"] = "math"
+    subject: Literal["math", "physics", "chinese"] = "math"
     grade: Literal["primary_school", "middle_school", "high_school"] = "high_school"
 
     @model_validator(mode="after")
@@ -102,6 +102,37 @@ class DiagnosisOut(StrictModel):
     card: CardOut
 
 
+class HintStepOut(StrictModel):
+    node_id: str = Field(pattern=r"^n[0-9]+$")
+    text: str = Field(min_length=1, max_length=200)
+    status: Literal["covered", "partial", "missing"]
+
+
+class HintOut(StrictModel):
+    """NONE-tier output: coverage of the reference structure, not a diagnosis.
+
+    Kept separate from ``DiagnosisOut`` on purpose — it has no layer, no
+    confidence and no ``next_action``/``verify``, so a client cannot render it
+    as a card by mistake (M2.5 S7; v0.2 since S8,
+    ``specs/structure-hint.schema.json``).
+
+    ``status="partial"`` means at least one clause matched but coverage stayed
+    below the covered threshold. It never means "wrong", and only the NONE
+    tier's clause aligner emits it.
+    """
+
+    version: Literal["0.2"]
+    session_id: str = Field(pattern=r"^S_[A-Z0-9]+$")
+    problem_id: str = Field(pattern=r"^P_[A-Z0-9_]+$")
+    subject: str = Field(min_length=1, max_length=32)
+    level: Literal["none"]
+    one_line: str = Field(min_length=1, max_length=200)
+    steps: list[HintStepOut] = Field(default_factory=list, max_length=20)
+    focus_node_id: str | None = Field(default=None, pattern=r"^n[0-9]+$")
+    next_step: str = Field(default="", max_length=200)
+    disclaimer: str = Field(min_length=1, max_length=300)
+
+
 class SessionOut(StrictModel):
     session_id: str = Field(pattern=r"^S_[A-Z0-9]+$")
     state: str
@@ -113,6 +144,7 @@ class SessionOut(StrictModel):
     max_turns: int = Field(ge=1)
     prompt: ProbeOut | None = None
     diagnosis: DiagnosisOut | None = None
+    hint: HintOut | None = None
     notice: str | None = None
     progress: ProgressOut
     history: list[HistoryItemOut] = Field(default_factory=list)

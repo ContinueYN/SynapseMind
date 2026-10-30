@@ -13,6 +13,8 @@ export type SessionResponse = Schemas["SessionOut"];
 export type Probe = Schemas["ProbeOut"];
 export type Diagnosis = Schemas["DiagnosisOut"];
 export type DiagnosisCard = Schemas["CardOut"];
+export type StructureHint = Schemas["HintOut"];
+export type HintStep = Schemas["HintStepOut"];
 export type HistoryItem = Schemas["HistoryItemOut"];
 export type Progress = Schemas["ProgressOut"];
 export type TurnInput = Schemas["TurnRequest"];
@@ -32,7 +34,7 @@ export type SessionState =
 export interface CreateSessionInput {
   problem: {
     text: string;
-    subject?: "math" | "physics";
+    subject?: "math" | "physics" | "chinese";
     grade?: "high_school";
   };
   attempt: {

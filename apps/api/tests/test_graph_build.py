@@ -399,6 +399,70 @@ def test_physics_claim_is_dropped_instead_of_certified() -> None:
     assert result.verification.status == "unknown"
 
 
+CHINESE_DRAFT = ProblemDraft(
+    id="P_CN_001",
+    text="文中两次写到“灯”，请结合全文简要分析其作用。",
+    subject="chinese",
+)
+
+_CHINESE: dict[str, Any] = {
+    "nodes": [
+        {"id": "n1", "type": "READ", "text": "读题干，圈出限制语与分值", "demand": {"V": 0.2}},
+        {
+            "id": "n2",
+            "type": "CONDITION",
+            "text": "定位原文区间，勾出依据句",
+            "demand": {"WM": 0.4},
+        },
+        {"id": "n3", "type": "COMPUTE", "text": "分点组织答案，写完整句子", "demand": {"Gf": 0.5}},
+        {"id": "n4", "type": "CHECK", "text": "检查扣题与分值对应", "demand": {"M": 0.3}},
+    ],
+    "edges": [["n1", "n2"], ["n2", "n3"], ["n3", "n4"]],
+}
+
+
+def test_chinese_uses_its_own_prompt_and_needs_no_probes() -> None:
+    """S7: a NONE-tier graph is steps only, so ``no_probes`` must not fail it."""
+
+    auditor = InMemoryCallAuditor()
+    client = FakeClient(json.dumps(_CHINESE, ensure_ascii=False))
+
+    result = _generator(client, auditor).generate(CHINESE_DRAFT)
+
+    assert "高中语文" in client.calls[0].system
+    assert "不要输出探针" in client.calls[0].system
+    assert "不要输出 claim" in client.calls[0].system
+    assert result.graph.probes() == ()
+    assert result.graph.claim is None
+    assert "no_probes" not in result.repairs
+    assert result.repairs == ()
+    (entry,) = auditor.entries
+    assert entry.schema_ok is True
+    assert entry.prompt_version == "graph-v6-chinese"
+    assert entry.verification_status == "unknown"
+
+
+def test_chinese_drops_probes_a_model_still_writes() -> None:
+    payload = copy.deepcopy(_CHINESE)
+    payload["nodes"][1]["probes"] = [
+        {
+            "id": "p1",
+            "question": "先定位原文还是先概括？",
+            "options": ["先定位", "先概括"],
+            "targets": ["H_L2", "H_L1"],
+            "evidence": {"A": {"H_L2": 0.9, "H_L1": -0.4}, "B": {"H_L1": 0.9, "H_L2": -0.4}},
+        }
+    ]
+    payload["claim"] = {"kind": "parameter_range"}
+
+    result = _generator(FakeClient(json.dumps(payload, ensure_ascii=False))).generate(CHINESE_DRAFT)
+
+    assert result.graph.probes() == ()
+    assert result.graph.claim is None
+    assert "probes_dropped_unsupported" in result.repairs
+    assert "claim_dropped_unsupported" in result.repairs
+
+
 def test_full_scale_evidence_is_left_alone() -> None:
     payload = copy.deepcopy(_VALID)
     payload["nodes"][2]["probes"][0]["evidence"]["B"]["H_L2"] = 0.95

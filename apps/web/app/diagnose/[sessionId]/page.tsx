@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { Dendrite, type DendriteStop } from "@/components/Dendrite";
 import { DiagnosisCardView } from "@/components/DiagnosisCardView";
 import { ProblemBrief } from "@/components/ProblemBrief";
+import { StructureHintView } from "@/components/StructureHintView";
 import { Surface } from "@/components/Surface";
 import { ProbeCard } from "@/components/ProbeCard";
 import { Thread } from "@/components/Thread";
@@ -148,6 +149,10 @@ export default function DiagnosePage() {
   }
 
   const located = Boolean(session.diagnosis);
+  /* NONE 档学科（语文/英语/历史）没有可自动验证的真值：只出结构提示 */
+  const hint = session.hint ?? null;
+  const hintSteps = hint?.steps ?? [];
+  const hintTouched = hintSteps.filter((step) => step.status !== "missing").length;
   const confidence = Math.round((session.progress?.confidence ?? 0) * 100);
   const history = session.history ?? [];
 
@@ -165,6 +170,13 @@ export default function DiagnosePage() {
       id: "stuck",
       label: "卡点",
       detail: session.diagnosis.card.label,
+      state: "stuck",
+    });
+  } else if (hint) {
+    stops.push({
+      id: "structure",
+      label: "结构",
+      detail: `有写到 ${hintTouched}/${hintSteps.length} 步`,
       state: "stuck",
     });
   } else if (session.prompt) {
@@ -185,7 +197,7 @@ export default function DiagnosePage() {
             <p className="sm-lab">诊断进度</p>
             <p className="sm-rail-turn">
               {session.turn}
-              <small>/ {session.max_turns} 轮</small>
+              <small>{hint ? "只给结构，不追问" : `/ ${session.max_turns} 轮`}</small>
             </p>
             <p className="sm-rail-phase">{PHASE[session.state] ?? session.state}</p>
           </div>
@@ -193,30 +205,47 @@ export default function DiagnosePage() {
           <Dendrite step={46} stops={stops} />
 
           <div className="sm-signal">
-            <div className="sm-signal-top">
-              <span className="sm-signal-lab">系统把握</span>
-              <span className="sm-signal-v">{confidence}%</span>
-            </div>
-            <div
-              aria-label={`系统把握 ${confidence}%`}
-              aria-valuemax={100}
-              aria-valuemin={0}
-              aria-valuenow={confidence}
-              className="sm-bar"
-              role="progressbar"
-            >
-              <i style={{ width: `${Math.max(4, confidence)}%` }} />
-            </div>
-            <p className="sm-signal-note">
-              {located ? "已收敛到一处，证据见右侧。" : "不到 80% 不下结论。"}
-            </p>
+            {hint ? (
+              <>
+                <div className="sm-signal-top">
+                  <span className="sm-signal-lab">本轮输出</span>
+                  <span className="sm-signal-v">结构提示</span>
+                </div>
+                <p className="sm-signal-note">
+                  {hint.subject === "chinese" ? "语文" : hint.subject}
+                  没有可自动验证的标准答案：不估算把握，也不判断卡点。
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="sm-signal-top">
+                  <span className="sm-signal-lab">系统把握</span>
+                  <span className="sm-signal-v">{confidence}%</span>
+                </div>
+                <div
+                  aria-label={`系统把握 ${confidence}%`}
+                  aria-valuemax={100}
+                  aria-valuemin={0}
+                  aria-valuenow={confidence}
+                  className="sm-bar"
+                  role="progressbar"
+                >
+                  <i style={{ width: `${Math.max(4, confidence)}%` }} />
+                </div>
+                <p className="sm-signal-note">
+                  {located ? "已收敛到一处，证据见右侧。" : "不到 80% 不下结论。"}
+                </p>
+              </>
+            )}
           </div>
         </aside>
 
         <section className="sm-stage">
           <div className="sm-stage-head">
             <p className="sm-stage-title">{session.problem_title}</p>
-            <span className="sm-stage-tag">{located ? "屏 03 · 定位" : "屏 02 · 追问"}</span>
+            <span className="sm-stage-tag">
+              {hint ? "屏 04 · 结构" : located ? "屏 03 · 定位" : "屏 02 · 追问"}
+            </span>
           </div>
 
           <ProblemBrief text={session.problem_text} />
@@ -226,6 +255,8 @@ export default function DiagnosePage() {
           <div ref={probeRef}>
             {session.diagnosis ? (
               <DiagnosisCardView card={session.diagnosis.card} sessionId={sessionId} />
+            ) : hint ? (
+              <StructureHintView hint={hint} sessionId={sessionId} />
             ) : session.prompt ? (
               <ProbeCard
                 busy={busy}
@@ -261,7 +292,9 @@ export default function DiagnosePage() {
           ) : null}
 
           <p className="sm-fine">
-            这一轮的原则：一次只问一个可回答的问题；不重复问；前 3 轮不给最终答案。
+            {hint
+              ? "这一轮的原则：只对照结构，不判断对错；想说“哪里没懂”，回交题页补一句过程。"
+              : "这一轮的原则：一次只问一个可回答的问题；不重复问；前 3 轮不给最终答案。"}
           </p>
         </section>
       </div>

@@ -10,14 +10,17 @@ from dataclasses import dataclass
 
 from synapse.application.card_builder import build_diagnosis_card
 from synapse.application.commands import StartSessionCommand, SubmitAnswerCommand
+from synapse.application.commitment import Capabilities, capabilities_for
 from synapse.application.composer import ProbeComposer, ProbePrompt
 from synapse.application.factory import SessionFactory
+from synapse.application.hint_builder import build_structure_hint
 from synapse.application.planner import ProbePlanner
 from synapse.application.ports import (
     ProblemRepository,
     SessionRepository,
 )
 from synapse.application.trace import tracing
+from synapse.domain.diagnosis.hint import StructureHint
 from synapse.domain.diagnosis.models import DiagnosisCard
 from synapse.domain.dialogue.events import DialogueEvent
 from synapse.domain.dialogue.session import DialogueSession, TurnRecord
@@ -41,6 +44,10 @@ class SessionView:
     prompt: ProbePrompt | None = None
     diagnosis: DiagnosisCard | None = None
     notice: str | None = None
+    # NONE-tier subjects get a structure hint instead of a card (M2.5 S7).
+    # The two are mutually exclusive by construction: the tier decides before a
+    # probe is ever asked, and ``hint`` is derived, not stored.
+    hint: StructureHint | None = None
 
 
 class SessionService:
@@ -61,6 +68,13 @@ class SessionService:
     def start(self, command: StartSessionCommand) -> SessionView:
         session = self._factory.create(command)
         problem = self._problem(session.problem_id)
+
+        capabilities = self._capabilities(problem)
+        if capabilities.structure_hint:
+            # S7: a NONE-tier subject stops after ALIGN. Asking a probe here
+            # would promise a diagnosis we cannot verify, so the session is
+            # closed with the structure hint and no card.
+            return self._structure_only(session, problem, capabilities)
 
         if session.alignment.first_divergence == "none":
             return self._close(
@@ -85,7 +99,11 @@ class SessionService:
                 session=session,
                 prompt=self._compose(session, problem, probe),
             )
-        return SessionView(session=session, diagnosis=session.diagnosis)
+        return SessionView(
+            session=session,
+            diagnosis=session.diagnosis,
+            hint=self._hint(session),
+        )
 
     def submit(self, session_id: str, command: SubmitAnswerCommand) -> SessionView:
         session = self._get(session_id)
@@ -97,7 +115,11 @@ class SessionService:
                 notice="卡点卡已生成，可进入复核或迁移验证。",
             )
         if session.state in {DialogueState.STOP, DialogueState.CLOSED}:
-            return SessionView(session=session, notice="会话已结束，不再接受新的回答。")
+            return SessionView(
+                session=session,
+                notice="会话已结束，不再接受新的回答。",
+                hint=self._hint(session),
+            )
 
         problem = self._problem(session.problem_id)
         current_probe_id = session.current_probe_id
@@ -288,6 +310,40 @@ class SessionService:
             "不知道",
             "完全不会",
         }
+
+    def _capabilities(self, problem: Problem) -> Capabilities:
+        """What this subject's tier lets the dialogue promise (S7)."""
+
+        return capabilities_for(self._factory.level_for(problem.subject))
+
+    def _hint(self, session: DialogueSession) -> StructureHint | None:
+        """Rebuild the structure hint for a NONE-tier session.
+
+        Derived from the alignment and the graph, so a reloaded session shows
+        the same text without the aggregate having to store it.
+        """
+
+        problem = self._problem(session.problem_id)
+        level = self._factory.level_for(problem.subject)
+        if not capabilities_for(level).structure_hint:
+            return None
+        return build_structure_hint(session, problem, level=level.value)
+
+    def _structure_only(
+        self,
+        session: DialogueSession,
+        problem: Problem,
+        capabilities: Capabilities,
+    ) -> SessionView:
+        """Close a NONE-tier session after ALIGN with a structure hint."""
+
+        hint = build_structure_hint(
+            session,
+            problem,
+            level=self._factory.level_for(problem.subject).value,
+        )
+        view = self._close(session, capabilities.note)
+        return SessionView(session=view.session, notice=view.notice, hint=hint)
 
     def _get(self, session_id: str) -> DialogueSession:
         session = self._sessions.get(session_id)

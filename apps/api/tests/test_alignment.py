@@ -67,6 +67,7 @@ def _generated(*nodes: tuple[str, str]) -> Problem:
         id="gen:demo",
         title="生成的题",
         text="已知函数 g(x)=x^2-a x+1，对任意 x∈R 有 g(x)>0，求 a 的范围。",
+        annotated=False,
         graph=SolutionGraph(
             problem_id="gen:demo",
             version="v1",
@@ -184,7 +185,6 @@ def test_composite_aligner_sends_annotated_problems_to_the_rule_aligner() -> Non
     aligner = CompositeAligner(
         annotated=RuleBasedAligner(),
         generated=TypeCueAligner(),
-        annotated_ids=frozenset({SAMPLE_PROBLEM.id}),
     )
     seed_attempt = StudentAttempt(answer="a≥1/e", work="定义域 x>0。")
     generated_attempt = StudentAttempt(answer="a∈(-2,2)", work="题目要求对所有 x∈R 成立。")

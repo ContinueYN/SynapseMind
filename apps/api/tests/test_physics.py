@@ -16,9 +16,10 @@ from synapse.application.commands import StartSessionCommand
 from synapse.application.graph import GraphBuildFailed, GraphBuildResult
 from synapse.application.subject import StudentStep, SubjectRegistry, VerifiabilityLevel
 from synapse.domain.diagnosis.hypotheses import HYPOTHESES, HypothesisSet
-from synapse.domain.problem.alignment import AlignmentResult
+from synapse.domain.problem.alignment import AlignmentResult, TypeCueAligner
 from synapse.domain.problem.models import (
     Probe,
+    Problem,
     ProblemDraft,
     SolutionGraph,
     SolutionNode,
@@ -133,6 +134,23 @@ def test_physics_evidence_model_reads_generated_weights() -> None:
     assert set(model.probe_ids) == {"p1", "p2"}
     assert model.for_probe("p1")["A"] == {"H_L2": 0.9, "H_L1": -0.4}
     assert model.for_probe("p2")["A"] == {"H_L2": 0.9, "H_L4": -0.3}
+
+
+def test_physics_keeps_the_two_state_aligner() -> None:
+    """S8 does not re-baseline S6: physics stays on the generic aligner."""
+
+    plugin = PhysicsPlugin(generator=_PhysicsGenerator())
+    graph = plugin.build_graph(ProblemDraft(id="P_PHYS_001", text=PHYSICS_TEXT, subject="physics"))
+    problem = Problem(
+        id="P_PHYS_001",
+        title="物理",
+        text=PHYSICS_TEXT,
+        subject="physics",
+        annotated=False,
+        graph=graph,
+    )
+
+    assert isinstance(plugin.aligner_for(problem), TypeCueAligner)
 
 
 def test_physics_verify_is_honest_about_partial() -> None:

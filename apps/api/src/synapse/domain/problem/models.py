@@ -149,10 +149,18 @@ class StudentAttempt:
 
 @dataclass(frozen=True, slots=True)
 class AlignmentResult:
-    """Where the student's process first diverges from the reference graph."""
+    """Where the student's process first diverges from the reference graph.
+
+    ``partial_node_ids`` was added in M2.5 S8 for clause-level matching: a
+    multi-clause step whose first half was written is neither fully covered nor
+    absent. Math/physics aligners never populate it, so their results are
+    unchanged; only a subject that opts into clause matching (Chinese today)
+    can report a step as partially written.
+    """
 
     first_divergence: str
     matched_node_ids: tuple[str, ...]
     missing_node_ids: tuple[str, ...]
     evidence: tuple[str, ...]
     excluded: tuple[str, ...] = ()
+    partial_node_ids: tuple[str, ...] = ()

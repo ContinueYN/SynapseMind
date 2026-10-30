@@ -51,6 +51,7 @@ const SELF_REPORTS: { value: SelfReport; label: string }[] = [
 const SUBJECTS: { value: Subject; label: string }[] = [
   { value: "math", label: "数学" },
   { value: "physics", label: "物理" },
+  { value: "chinese", label: "语文" },
 ];
 
 /** 文本框跟着内容长高：中文换行多，固定 rows 会一直出现内滚动条 */
@@ -305,7 +306,8 @@ export function ProblemForm({
       ) : null}
 
       <p className="sm-fine" style={{ marginTop: 0 }}>
-        数学走已标注的种子题，物理题现场建图；物理需要服务端配置模型 key。前 3 轮不给最终答案。
+        数学走已标注的种子题；物理与语文现场建图，需要服务端配置模型 key。
+        语文按“只给结构提示”承诺：不追问、不判断卡点。前 3 轮不给最终答案。
       </p>
     </form>
   );
