@@ -6,21 +6,24 @@
 
 ## 一、当前状态（2026-10-30）
 
-**M1 walking skeleton 可本地运行**：交题 → 解法图对齐 → 2 轮探针 → L2 卡点卡。规则版实现，内存仓储。
+> 下面各段里的 `pytest` 数字是**写成当时的快照**（307 → 308 → 327，随每轮新增测试递增），
+> 不是互相矛盾的三个值；当前值以实跑为准。判断一条能力有没有落地，看它有没有自己的
+> 报告和测试，不要看这里的数字。
 
-**M2（窄口径）已落地**：`infrastructure/llm` + `LLMProbeComposer` + 校验/重试/降级 + `shadow` 双跑 + 10 条 golden 回放与退出判定报告。默认 `SYNAPSE_LLM_MODE=off`，部署形态与 M1 相同（内存仓储、无队列）。
+**现在在哪**（逐段验收记录见 [docs/status/m2.5-log.md](docs/status/m2.5-log.md)）：
 
-**M2.5 S4/S5 已落地（2026-10-29 / 2026-10-30）**：解法图可由模型生成，必须过结构规则与 `specs/solution-graph.schema.json`，失败只重试一次并显式报错；生成图自带每个选项的 log-odds 证据权重（prompt 从 `graph-v3` 起，现已升到 `graph-v6`），`MathPlugin.evidence_model()` 只对已标注种子图回退 `EVIDENCE`。**S5 第三阶段：答案可被反例打脸**——图顶层可选 `claim`（`∀x∈D: f(x,a) rel 0 ⇔ a∈区间`），`infrastructure/verification/` 用 SymPy 做反例搜索并返回 `pass|fail|unknown`，`fail` 带具体反例回灌给模型重试一次。真实 20 题重跑（`graph-v3` 连跑四轮）：**建图稳定 20/20**，最后一轮 23 次调用、3 次重试，p50 4.05s / p95 5.51s；20 题里只有 `P_DERIV_003` 属于 v1 能形式化的形状，四轮都给出同一个错的 `a∈(-∞,e]`——`a=-24.46` 在答案区间内但 `x=-6.8e12` 时表达式 `-1.67e14 < 0`，带反例重试一次仍是同一区间，于是**丢弃 claim、保留图**。另外，模型偶尔会把存在性条件（`P_DERIV_004` 两个零点、`P_GEO_001` 两个交点）写成 `relation:"="` 的 claim，四轮里出现过 0–3 次，按“形状不支持”丢弃（`claim_dropped_unsupported`）；同一题两次生成的节点数/claim 数量会变，这是 `temperature=0` 不保证可重复的已知问题。**S5 第四阶段（2026-10-30）：生成图已接进 HTTP 主链路**——`TypeCueAligner`（存在性检查）+ `CompositeAligner` 按 `annotated_ids` 分发（S8 起改为按 `problem.annotated`），缺节点按类型给先验（`NODE_TYPE_LAYER`/`FOCUS_PRIORS`），`build_diagnosis_card` 分标注/生成两支，`ProblemResolver` 未命中标注库就现场建图并存为 `annotated=False`。20 道未见题：建会话 20/20、出卡 7/20（其余按设计停在低置信收束）、**卡点节点 7/7 属于该图**；p50 5.4s、p95 35.9s（两次生成重试把尾巴拉长）（`eval/reports/m2.5-s5-session.md`）。**S5 ③/④（2026-10-30）：证据权重校准 + claim 负参数分支**——prompt 升到 `graph-v6`，要求每个探针至少一个权重达到 ±0.8~1.0、同一假设的选项差 ≥1.0、整图覆盖 H_L1/H_L2/H_L4；图构建器在模型写得偏弱时按**全图统一系数**放大到 0.90（只放大不缩小，保符号与相对强弱，记 `evidence_calibrated`，见 ADR-0003）。20 道未见题：建会话 20/20、**出卡 20/20（上一轮 7/20）**、卡点节点 20/20 属于该图；125 个探针、750 条权重，max|w|=0.90，|w|≥0.8 的 350 条；p50 6.4s / p95 9.3s。claim 侧：`P_DERIV_003` 两次都写 `(-∞,e]`，反例 `a=-24.46` 推翻负参数段，重试后仍保留，于是丢弃 claim、保留图；20 题里 claim 接受 0、推翻 1、其余 19 题按形状不输出 claim。④ 仍开放：模型能写 claim 形状，但推不对负参数分支；不要靠把具体函数写进 prompt「修」，那只是评测泄漏。报告：`eval/reports/m2.5-s5-session.md`、`eval/reports/m2.5-s5-verification.md`。
+| 阶段 | 状态 | 一句话 |
+|---|---|---|
+| M1 walking skeleton | 落地 | 交题 → 对齐 → 2 轮探针 → L2 卡点卡；规则版，内存仓储 |
+| M2 窄口径 | 落地 | LLM 追问 + 校验/重试/降级 + 10 条 golden；默认 `SYNAPSE_LLM_MODE=off` |
+| M2.5 S4–S8 | 落地 | 生成图进主链路；物理 PARTIAL、语文 NONE；首问 p50 4.2s / p95 4.6s（预算 8s） |
+| S5 ⑥ 等式链校验 | **落地但未接线** | `notation.py` + `equalities.py` 只有测试引用，产品链路无调用方 |
+| 题集 / 复盘 / 探针 | 落地 | 100 题带 `expected_answer`、4 条真实学生原话、构造真值的缺口探针 |
+| 包装层（门面、论文引用区） | **未开始** | 首页没有 CHC／突触／引用任何一处 |
 
-**S6 第二学科已落地（2026-10-30）**：物理以 `PhysicsPlugin` 接入，`subject="physics"`、`level=PARTIAL`，**状态机、对齐器、诊断门槛一行未改**。物理图表由同一个 `LLMGraphGenerator` 生成，prompt 为 `graph-v6-physics`：节点语义换成「读题与单位 → 选模型 → 受力/过程 → 列方程 → 求解 → 单位/量级检验」，探针 targets 仍是 H_L1/H_L2/H_L4，但文案换成物理词表；**物理图不输出 claim**（v1 验证器只覆盖数学参数范围），模型若写了就丢弃并记 `claim_dropped_unsupported`。`PhysicsPlugin.verify()` 读取可选的 `StudentStep.data`（`equation`/`expression`、`unit`、`units`、`values`、`expected`、`tolerance`）做量纲与数值回代；纯文本仍是 `unknown`。`api/deps.py` 同时注册数学与物理插件，`SessionFactory` 通过可选 `hypothesis_labels` 换卡面文案，评分/先验/log-odds 完全复用。真实 6 道物理题：建会话 6/6、出卡 6/6、卡点节点 6/6 在图内、卡面 6/6 为物理词表；27 探针（每题 4–5）、170 条权重、max|w|=0.90、|w|≥0.8 的 95 条；p50 5.77s / p95 6.66s。报告：`eval/reports/m2.5-s6-physics.md`。边界：必须显式声明 `subject="physics"`（不自动识别），物理没有标注题集/存储答案，6/6 是接线结果而非诊断准确率。
+下一步与优先级见第三节。
 
-**S7 NONE 档已落地（2026-10-30，语文）**：`ChinesePlugin`（`subject="chinese"`、`level=NONE`）接进同一个 `SubjectRegistry`，`application/commitment.py` 是唯一开关——STRONG/PARTIAL = 探针 + 卡点卡，NONE = **只出结构提示**。`SessionService.start()` 在建图/对齐之后、探针规划之前分流，语文会话走 `ALIGN → STOP → CLOSED`，`ProbePlanner` 根本不会被调用；**状态机、转移表、对齐器一行未改**。输出是另一张表（`specs/structure-hint.schema.json`，`HintOut`）：`one_line` + 步骤表（`covered`/`missing`）+ `focus_node_id` + `next_step` + 固定 disclaimer，**没有 layer / confidence / next_action / verify**，所以前端渲染不成卡点卡；提示是派生值（每次 `get()` 重建），聚合根不加字段。语文 prompt 为 `graph-v6-chinese`：只要认知动作，明确不要探针与 claim；模型若写了，建图器丢弃并记 `probes_dropped_unsupported` / `claim_dropped_unsupported`，图保留（`review(..., require_probes=False)` 才允许无探针图）。真实 6 道语文题 × 2 段过程（只写前几步 / 写完整）：建会话 12/12、结构提示 12/12、schema 合规 12/12、出卡 0/12、探针 0/12、CLOSED 12/12；同一题两段过程复用同一张图 6/6，覆盖数 full ≥ partial 6/6、focus 后移 4/6；p50 2.3s / p95 3.2s。报告：`eval/reports/m2.5-s7-none-tier.md`。**已知低估**：存在性对齐按节点整句 3-gram 覆盖率判定，语文节点是多分句长句，学生只写前半句仍算 `missing`（partial 均值 1.0/8、full 均值 1.7/8）——方向保守，但覆盖计数偏低；改进候选是分句级匹配或把对齐器做成端口（S8）。
-
-**S8 对齐策略插件化 + 分句级匹配已落地（2026-10-30）**：`SubjectPlugin.aligner_for(problem) -> StepAligner`，`SessionFactory._aligner_for()` 先问插件；`CompositeAligner` 改按 `problem.annotated` 分发（去掉第二套 `annotated_ids`），`api/deps.py` 不再组装它，只留无插件回退。数学标注→`RuleBasedAligner`、生成→`TypeCueAligner`，物理保持 `TypeCueAligner`，语文改用 `ClauseCueAligner`：按 `，；。：、` 切小句（丢弃 <4 字碎片），每句与过程求最长连续公共子串（≥4 字才计），覆盖率 ≥75% 判 `covered`、≥15% 判 `partial`。`AlignmentResult` 加 `partial_node_ids`（默认空），基类两态对齐器永不产生 partial，所以数学/物理结果逐字段不变。`structure-hint.schema.json` 升 **v0.2**，`HintOut.status`/`StructureHint.status` 加 `partial`；提示文案「写到了一部分 / 先把…补全」，前端计数改成「有写到的步数（含部分）」。真实 6 道语文题 × 3 段过程（partial/full/blank）：建会话 **18/18**、结构提示 **18/18**、schema v0.2 **18/18**、服务与直接 `ClauseCueAligner` 一致 **18/18**、出卡/探针 **0/18**、`CLOSED` **18/18**；**同一张图**上旧 full covered 均值 **1.7**，新 full covered **1.7** + partial **2.3**（加权 **2.8**），full≥partial 6/6、新≥旧 6/6、blank 全 missing 6/6。报告：`eval/reports/m2.5-s8-clause-alignment.md`。边界：仍是字面重合，不是语义匹配；`partial` 不是写错；数学/物理没有 opt-in；`domain/dialogue/` 一行未改。
-
-**前端组件测试已落地（2026-10-30）**：S7/S8 新增两个界面（语文结构提示、学科选择）之前只有手工 smoke。现在用 Vitest 5 + jsdom + Testing Library，在 `components/*.test.tsx` 覆盖：结构提示的 `covered/partial/missing` 计数与标签、focus 标记、全覆盖无 focus、不得出现“你错了”；交题表单的学科切换、空题拦截、裁剪后提交载荷、示例填充、busy/error 状态。共 **9 个测试**，`npm test` 本地通过，CI 的 web job 增加 Test 步骤；配置在 `vitest.config.mts`，jsdom 垫片在 `src/test/setup.ts`。它只测前端交互，不替代 API 的 296 个 `pytest`。
-
-**2026-10-29 内容修正（重要）**：种子题 `P_FUNC_001` 的 `SAMPLE_ANSWER` 原写成 `a∈(-∞,0]∪[1/e,∞)`，但 `a≤0` 时 `f(x)=ln x - a x→+∞`，不满足恒成立；正确范围是 `a≥1/e`。已修正答案/参考解、n6 节点文本、`p_union` 的正确选项与证据方向、卡点卡 one-line、golden v0.1 的 g-001/g-004/g-005/g-006/g-009 标注（配额改为 3/3/2/2），并新增 `test_seed_math.py` 用 SymPy 直接验证答案。10 条 golden 仍 10/10、平均 2.40 轮。**教训**：关键词对齐的 golden 只能证明“步骤覆盖率”，不能证明数学正确；验证器必须能对形式化断言给出反例或证明。
+---
 
 **未实现**（不要以为已经有）：
 
@@ -28,13 +31,13 @@
 |---|---|
 | LLM 追问 | **有**：`infrastructure/llm/`（DeepSeek，默认 `off`）；T5「LLM 辅助对齐」未做且默认不做 |
 | `shadow` 真实对照 | **已跑（2026-10-29，真实 key）**：10/10 不变，24/24 JSON 合法，p95 1.10s，0 重试 0 降级；细节见 `eval/reports/m2-exit-v0.1-shadow.md` 与 ADR-0002 §5.1 |
-| 学科插件 / 解法图生成 | `SubjectPlugin` + `MathPlugin` 包装种子图（S1–S3）；识别为严格匹配（不同题交给建图器，识别不了且建不出图才 422）。**S4/S5 有生成器且已接进主链路**：`LLMGraphGenerator`（prompt → JSON → 机械修复 → 结构规则 → schema → 验证 → 一次重试）生成图、逐选项证据权重与可证伪 `claim`；`ProblemResolver` 未命中标注库就现场建图并登记为 `annotated=False`，通用对齐与通用卡点卡按图工作。**S6 已接入物理**（`PhysicsPlugin`，PARTIAL，`graph-v6-physics`）；物理无标注题集，需显式声明 `subject="physics"`，`verify()` 对结构化 `StudentStep.data` 做量纲/数值回代、纯文本仍 `unknown`。**S7 已接入语文**（`ChinesePlugin`，NONE，`graph-v6-chinese`）：不追问、不出卡，只出结构提示（`specs/structure-hint.schema.json`）；同样必须显式声明 `subject="chinese"`。**S8 已把对齐策略收进插件端口**（`SubjectPlugin.aligner_for`）：数学/物理保持两态，语文用分句级 `ClauseCueAligner`；`CompositeAligner` 改按 `problem.annotated` 分发，`api/deps.py` 不再组装 |
+| 学科插件 / 解法图生成 | `SubjectPlugin` + `MathPlugin` 包装种子图（S1–S3）；识别为严格匹配（不同题交给建图器，识别不了且建不出图才 422）。**S4/S5 有生成器且已接进主链路**：`LLMGraphGenerator`（prompt → JSON → 机械修复 → 结构规则 → schema → 验证 → 一次重试）生成图、逐选项证据权重与可证伪 `claim`；`ProblemResolver` 未命中标注库就现场建图并登记为 `annotated=False`，通用对齐与通用卡点卡按图工作。**S6 已接入物理**（`PhysicsPlugin`，PARTIAL，`graph-v9-physics`）；物理无标注题集，需显式声明 `subject="physics"`，`verify()` 对结构化 `StudentStep.data` 做量纲/数值回代、纯文本仍 `unknown`。**S7 已接入语文**（`ChinesePlugin`，NONE，`graph-v6-chinese`）：不追问、不出卡，只出结构提示（`specs/structure-hint.schema.json`）；同样必须显式声明 `subject="chinese"`。**S8 已把对齐策略收进插件端口**（`SubjectPlugin.aligner_for`）：数学/物理保持两态，语文用分句级 `ClauseCueAligner`；`CompositeAligner` 改按 `problem.annotated` 分发，`api/deps.py` 不再组装 |
 | RAG / 向量检索 | 无 |
 | PostgreSQL / Redis / Alembic | 无；`InMemorySessionRepository` |
 | OCR | 无；`image_url` 仅在 DTO 预留 |
 | 鉴权 / 多租户 | 无 |
 | worker 实际任务 | 无；`apps/worker` 只有说明 |
-| 24h 迁移验证 / 教师复核 | 无 |
+| 24h 迁移验证 / 教师复核 | 无。教师复核的**工具**已就位（`scripts/eval/s5_review.py` + `student-answers-v0.1.jsonl` + 填表页 `tools/review-form.html`），也自己从公开问答页收了 4 条学生原话（`public-web`），但**还没有老师填过 `人工判断` 列**，也没有同一批题的真实学生作答 |
 
 **已知硬边界**：入口的默认路径仍是「只有一道标注题」——`SYNAPSE_LLM_MODE=off`（默认）或缺少 key 时，非种子题依旧返回 **422**，这是显式设计，不是 bug。接上 key 后入口会现场建图（`ProblemResolver` + `MathPlugin.build_graph`），建图失败同样 422 并给出原因。**生成题的能力边界**：① 存在性对齐（数学/物理 `TypeCueAligner`，语文 `ClauseCueAligner`）只判断「这一步有没有被写到 / 是否只写到一部分」，写错了发现不了；② 生成题没有存储答案，泄漏守卫退化为通用短语检查；③ 卡点卡的 `HYPOTHESES[*].node_id` 仍是种子专用，生成题的卡面从「探针 → 节点」反推节点。证据表 `EVIDENCE` 覆盖种子题的四个探针，实测只有 `H_L2` 能越过 `0.80 + 0.25`；`L1`/`L4` 案例按「低置信不硬判」收束（见 `eval/reports/m2-exit-v0.1.md`）。
 
@@ -42,6 +45,7 @@
 
 ## 二、必读顺序
 
+0. [docs/README.md](docs/README.md) — 文档总索引：三层文档（设想／主体／实现）、每份的职责与时效。不确定该看哪份时先看它。
 1. [`specs/dialogue-state.md`](specs/dialogue-state.md) — 10 状态、转移、8 条硬约束。**任何改动先看它。**
 2. [`README.md`](README.md) — 架构总览（九节，含决策记录）。
 3. [`docs/design/chapters/12-M2交付计划.md`](docs/design/chapters/12-M2交付计划.md) — 下一步做什么、怎么验收。
@@ -49,6 +53,7 @@
 5. [`docs/adr/0001-language-and-code-architecture.md`](docs/adr/0001-language-and-code-architecture.md) — 技术选型与改选条件。
 6. [`docs/adr/0002-llm-provider-and-golden-scale.md`](docs/adr/0002-llm-provider-and-golden-scale.md) — 模型供应商与 golden 规模（已定：DeepSeek `deepseek-chat` / 10 条）。
 7. [`docs/adr/0003-generated-graph-evidence-calibration.md`](docs/adr/0003-generated-graph-evidence-calibration.md) — 生成图证据权重的 0.90 校准与备选方案。
+8. [`docs/adr/0004-first-question-latency-budget.md`](docs/adr/0004-first-question-latency-budget.md) — 首问 8s 预算：改哪一段、为什么、代价，以及被拒的方案（单独预算/异步/对冲/换模型）。
 
 **本地详尽版**（未入库，仅本机存在）：
 
@@ -62,7 +67,8 @@
 
 1. **M2 收尾**（T1–T4 + T6–T7 已完成，真实 shadow 已跑）：
    - 实测口径：JSON 合法 24/24、p95 1.10s、0 降级（ADR-0002 §5.1）；
-   - **首问整体门禁已独立测量（2026-10-30，连跑两次）**：`scripts/eval/m2_first_question.py` 对 20 道未见题只测 `SessionService.start()`（含现场建图/对齐/探针规划）。第一轮 p50 **6405ms** / p95 **9304ms**、19/20 建会话（1 次 `bad_json`）；第二轮 p50 **6391ms** / p95 **11856ms**、20/20 建会话，但 2 题触发 `schema_invalid` 重试，单题到 11.8s。预算 8s，**两轮都未过**。`on:10` 灰度前不能把 S5 的 9.3s 当作已解决；尾延迟的主因是建图 schema 失败后的一次重试，其次是模型本身 p50 已 6.4s。要么把生成题路径单独定预算，要么先做延迟治理（报告：`eval/reports/m2-first-question.md`、`m2-first-question-run2.md`）。
+   - **首问整体门禁：已通过（2026-10-30 晚，ADR-0004）**。`scripts/eval/m2_first_question.py` 对 20 道未见题只测 `SessionService.start()`（含现场建图/对齐/探针规划），预算 8s。治理前两轮 FAIL（p50 6405/6391ms、p95 9304/11856ms，后一轮 2 题 `schema_invalid` 重试）；治理后按 `graph-v9` 连跑三轮：run5 **p50 4208ms / p95 4690ms**、run6 p50 4417ms / p95 8632ms（**FAIL**：2 题重试各 ≈4.4s）、run7 **p50 4252ms / p95 4619ms**。改的是「输出长度 + 装饰性调用 + 预热 + 预算内重试」，不是调门槛（细节与代价见本文件状态段和 ADR-0004）。**残留风险**：claim 修复样本 ≈5.3–6.3s（建图 4.3–4.5s + 区间重写 0.8–1.8s），20 题里 p95 容得下 2 个；schema 重试样本仍 ≈7.6s（最小图重试）。供应商 TTFT 若长期 >2s，p50 会跟着涨，届时再按 ADR-0004 的选项 A/D 重新评估。
+   - **仍未做**：**真实学生作答**（`s5_review.py` 与 `student-answers-v0.1.jsonl` 已就位，但 `source=student` 是 0 条；只有 3 条 synthetic 走通了管线，出卡 3/3、期望卡点命中 1/3，三张卡都是 L1）。浏览器端到端已量过一轮（loopback + 4G 限速，见上段与 `eval/reports/m2-first-question-browser.md`），但还没有 RUM 与多设备样本。
    - 请求 `deepseek-chat` 实际服务 id 是 `deepseek-flash`，冻结基线看审计里的 `model` 字段。
 2. **M2.5**：第 13 章 S1–S8。S1/S2/S3 已完成（枚举扩到 `math`/`physics` + 三学段；`SubjectPlugin` + `MathPlugin`；识别从关键字换成「归一化包含」严格匹配，不同题返回 422）。
    - **S4 已完成（2026-10-29）**：`application/graph.py`（端口）+ `domain/problem/graph_structure.py`（结构规则/机械修复）+ `infrastructure/llm/graph.py`（生成 + spec 校验 + 一次重试 + 进程内缓存 + 指纹审计）。20 道未见题结构 20/20、人工抽查 19/20（95%）；0 重试 0 修复；p50 3.65s / p95 4.54s。报告：`eval/reports/m2.5-s4-graph-build.md`、`eval/reports/m2.5-s4-graph-review.md`。
@@ -72,11 +78,11 @@
    - **S5 第三阶段已完成（2026-10-29）：SymPy 验证器 + 反例。** 形式化字段按建议放在**图顶层** `claim`（`specs/solution-graph.schema.json` 的 `$defs/claim`）：`kind`（v1 只有 `parameter_range`）、`parameter`/`variable`（单字母小写）、`variable_domain`、`constraint{expression,relation}`、`answer[{lower,upper,lower_inclusive,upper_inclusive}]`，语义是 `∀x∈D: f(x,a) rel 0 ⇔ a∈answer`。`application/verification.py` 定义端口与 `pass|fail|unknown`，`infrastructure/verification/sympy_verifier.py` 做**反例搜索**：表达式走字符白名单 + `__builtins__` 置空的 SymPy 命名空间 + 自由符号白名单；x 取线性网格 + 12 个数量级 + 边界加密，参数在区间内外各取样（含端点本身），对最紧处做黄金分割细化；两个方向都查（区间内不满足 → 偏宽；区间外满足 → 偏窄）。`fail` 带 `a=…, x=…, 表达式=…` 的具体反例，回灌给模型重试一次；仍失败则**丢弃 claim、保留图**（`claim_dropped_refuted`），这是刻意的：`P_GEO_001` 这种“图对、claim 形式化错”的题不该整题报废，但答案也不能再被当作已核对。claim 的 kind/relation/符号冲突直接丢弃（`claim_dropped_unsupported`），不浪费重试。真实 20 题见上方状态；报告：`eval/reports/m2.5-s5-verification.md`（含变形自检与正向对照：同一题 `[0,E]` → pass、`(-∞,E]` → fail 带反例）。
    - **S5 第四阶段已完成（2026-10-30）：生成图接进 ALIGN/PROBE。** ① `TypeCueAligner` 按节点类型做**存在性**检查（线索词 / 是否写过式子 / 同一字母两侧分类 / 3-gram 兜底），`CompositeAligner` 按 `annotated_ids` 分发（S8 起改为按 `problem.annotated`），`RuleBasedAligner` 一行未改；② 缺节点的**类型**决定先验（`NODE_TYPE_LAYER` + `FOCUS_PRIORS` + `from_alignment(focus=...)`），种子题没有 `focus` 时仍走原来的节点档案，10 条 golden 逐字节不变；③ `build_diagnosis_card` 分两支：标注题沿用旧文案，生成题引用「推动后验的那次作答」或只报「过程里没有出现这一步」，id 用 `node:{id}`/`verify:{problem_id}`；④ `ProblemResolver`：标注库严格命中 → 否则现场建图 → 存为 `annotated=False`（`P_GEN_<指纹>`，同题不重复生成），没有建图器或建图失败仍 422。实测：`scripts/eval/s5_session.py` 20 题建会话 20/20、出卡 7/20、卡点节点 7/7 属于该图，报告 `eval/reports/m2.5-s5-session.md`。出卡率低不是接线问题：生成图每题只有 3–7 个探针、权重 max|w|=0.60（|w|≥0.8 的 0 条），targets 又分散在不同假设对上，同一个 `0.80 + 0.25` 门槛很难在 6 轮里达到——**这属于 S5 ③ 的探针/权重校准**，不要靠调低门槛「修」。
    - **S5 ② 的边界（写进第 13 章）**：存在性对齐发现不了「写错」；生成题没有存储答案 → 泄漏守卫退化；首问预算现在含一次建图（p50 4–5s）。
-   - **S5 ③ 已完成（2026-10-30）**：prompt `graph-v6` 要求权重用满 ±1；图构建器在模型写得偏弱时按全图统一系数放大到 0.90（只放大、不改符号与相对强弱，记 `evidence_calibrated`；ADR-0003）。20 题建会话 20/20、**出卡 20/20（上一轮 7/20）**、卡点节点 20/20 在图内；125 探针 / 750 权重，max|w|=0.90，|w|≥0.8 的 350 条；p50 6.4s / p95 9.3s。④ **仍未完成**：`P_DERIV_003` 两次都写 `(-∞,e]`，重试后仍保留负参数段，按设计丢弃 claim、保留图；claim 接受 0/20、推翻 1/20，其余 19 题按形状不输出 claim。下一步换更强模型或扩展反例搜索，不要再往 prompt 里塞具体函数（试过 `e^x−a x`，一次就「修好」，但那是评测泄漏）。报告：`eval/reports/m2.5-s5-session.md`、`eval/reports/m2.5-s5-verification.md`。
+   - **S5 ③ 已完成（2026-10-30）**：prompt `graph-v6` 要求权重用满 ±1；图构建器在模型写得偏弱时按全图统一系数放大到 0.90（只放大、不改符号与相对强弱，记 `evidence_calibrated`；ADR-0003）。20 题建会话 20/20、**出卡 20/20（上一轮 7/20）**、卡点节点 20/20 在图内；125 探针 / 750 权重，max|w|=0.90，|w|≥0.8 的 350 条；p50 6.4s / p95 9.3s（首问治理后按 `graph-v9` 重跑：98 探针、建图 p50 4.3s、出卡仍 20/20，见 ADR-0004）。④ **已由 claim-only repair 覆盖（2026-10-30 晚）**：首轮生成仍偶发写错（`P_DERIV_003` 历史四轮写 `(-∞,e]`；本轮 20 题首轮就写 `[0,e]`），但被反例推翻后只重写区间，受控探针五例（负参数段、整段漏、两端开闭）**14/15 修对**（`eval/reports/m2.5-s5-claim-repair.md`）。没有把具体函数写进 prompt；修复请求里的表达式来自模型自己的 claim。批量统计仍以 `s5_verify.py` 为准。
    - **S6 已完成（2026-10-30）：物理接入，PARTIAL 档。** `PhysicsPlugin`（`subject="physics"`、`level=PARTIAL`）通过同一个 `LLMGraphGenerator` 生成图，prompt 为 `graph-v6-physics`；物理图不写 claim（v1 SymPy 验证器只覆盖数学参数范围），写了就丢弃并记 `claim_dropped_unsupported`；探针 targets 仍复用 H_L1/H_L2/H_L4，但 `hypothesis_labels` 换成物理词表，评分/先验/门槛完全不动。`api/deps.py` 同时注册数学与物理插件，`domain/dialogue/` 一行未改。真实 6 题：建会话 6/6、出卡 6/6、卡点节点 6/6 在图内、卡面 6/6 物理词表；27 探针 / 170 权重，max|w|=0.90，|w|≥0.8 的 95 条；p50 5.77s / p95 6.66s。报告：`eval/reports/m2.5-s6-physics.md`。**S6 后续已验证器**：`PhysicsPlugin.verify()` 读取 `StudentStep.data`，量纲错误/数值矛盾返回 `fail`，缺数据/未知单位/未知符号/畸形输入返回 `unknown`；纯文本和数学路径仍 `unknown`。`domain/dialogue/` 与数学 SymPy 验证器未改。物理暂无标注题集/真实学生作答，6/6 是接线结果不是诊断准确率。
    - **S7 已完成（2026-10-30）：NONE 档承诺降级，语文接入。** `ChinesePlugin`（`subject="chinese"`、`level=NONE`）与数学/物理共用同一个 `SessionService`、状态机和 `CompositeAligner`；`application/commitment.py` 的能力表是唯一开关，NONE 在 ALIGN 之后直接收束到 `STOP → CLOSED`，不调用探针规划器、不生成卡点卡。输出换成另一张契约（`specs/structure-hint.schema.json` / `domain/diagnosis/hint.py`）：`one_line` + `steps[{node_id,text,status}]` + `focus_node_id` + `next_step` + 固定 disclaimer，没有 layer/confidence/next_action/verify；提示由对齐结果派生，每次 `get()` 重建。语文 prompt `graph-v6-chinese` 只要求步骤，探针/claim 若被写出会被丢弃（`probes_dropped_unsupported` / `claim_dropped_unsupported`），`review(require_probes=False)` 允许无探针图。真实 6 题 × 2 段过程：建会话 12/12、结构提示 12/12、schema 合规 12/12、出卡 0/12、探针 0/12；同题复用同一张图 6/6，覆盖数 full ≥ partial 6/6、focus 后移 4/6；p50 2.3s / p95 3.2s。报告：`eval/reports/m2.5-s7-none-tier.md`。**已知低估**：整句 3-gram 覆盖率对多分句语文节点偏严，覆盖计数偏低（partial 1.0/8、full 1.7/8）；**S7 之后**该补的是分句级匹配或对齐器端口（S8 候选），不是调低门槛。物理 PARTIAL 验证器的量纲/数值回代已落地（需要 `StudentStep.data`）；矢量、微积分、不确定度与自然语言抽取仍未做。
    - **S8 已完成（2026-10-30）：对齐策略插件化 + 分句级匹配，契约 v0.2。** `SubjectPlugin.aligner_for(problem) -> StepAligner`；`SessionFactory` 先问插件，`CompositeAligner` 改按 `problem.annotated` 分发，`api/deps.py` 只留无插件回退。数学标注→`RuleBasedAligner`、生成→`TypeCueAligner`，物理 `TypeCueAligner`，语文 `ClauseCueAligner`（小句 ≥4 字、公共段 ≥4 字、覆盖 ≥75% 为 `covered` / ≥15% 为 `partial`）。`AlignmentResult` 加 `partial_node_ids`；`structure-hint.schema.json` 升 v0.2，`HintOut` 加 `partial`，前端计数「有写到的步数（含部分）」。6 题 × 3 段过程：建会话 18/18、schema 18/18、服务=直接调用 18/18、0 卡/0 探针、CLOSED 18/18；同一张图旧 full covered 均值 1.7 → 新 covered 1.7 + partial 2.3（加权 2.8），full≥partial 6/6、新≥旧 6/6、blank 全 missing 6/6。报告：`eval/reports/m2.5-s8-clause-alignment.md`。**边界**：字面重合不是语义匹配；`partial` 不是写错；数学/物理没有 opt-in；`domain/dialogue/` 未改。**S8 之后**仍没有语文标注题集/真实学生作答，18/18 是接线验收，不是诊断准确率。
-3. **待收口的既有问题**：`docs/design/plan/` 未入库；评测集有 10 条、`eval/golden/README` 的 100 条配额未达（需 M2.5 扩题）。前端组件测试已补，但仍是组件级，不含浏览器端到端。
+3. **待收口的既有问题**：`docs/design/plan/` 未入库；M2.5 题集已扩到 100 道数学（带 `expected_answer`）+ 6 物理 + 6 语文，但 `eval/golden/` 仍是 10 条，`eval/golden/README` 的 100 条配额未达（golden 是模拟对话，不是题集）。前端组件测试已补，但仍是组件级，不含浏览器端到端。
 
 ---
 
@@ -112,7 +118,9 @@ cd apps/api
 .\.venv\Scripts\python.exe ..\..\scripts\eval\m2_exit.py --live-shadow
 
 # M2 首问整体 P95 门禁（20 道未见题，含现场建图；预算 8s，失败退出码 1）
+# 报告里有「阶段耗时」一节：建图调用数/重试数、p50/p95、输出 token 中位数、改写次数
 .\.venv\Scripts\python.exe ..\..\scripts\eval\m2_first_question.py
+# 尾延迟旋钮：SYNAPSE_GRAPH_RETRY_BUDGET_S（默认 7.5s，claim 重试的预算线）
 
 # M2.5 S4 建图（20 道未见题；需真实 key；产出 eval/reports/m2.5-s4-graph-build.md）
 .\.venv\Scripts\python.exe ..\..\scripts\eval\s4_graph_build.py
@@ -120,9 +128,25 @@ cd apps/api
 # M2.5 S5 建图 + claim 反例验证（同 20 题；产出 eval/reports/m2.5-s5-verification.md 与 s5-graphs/）
 .\.venv\Scripts\python.exe ..\..\scripts\eval\s5_verify.py
 
+# M2.5 S5 claim 只重写区间的受控探针（默认五例：负参数段 (-∞,e]、整段漏 [1,e]、
+# 两端开闭 (0,e]/[0,e)、负参数段收窄 (-1,e]；--case NAME 单跑、--repeats N 控次数；
+# 需真实 key；产出 eval/reports/m2.5-s5-claim-repair.md）
+.\.venv\Scripts\python.exe ..\..\scripts\eval\s5_claim_repair.py
+
+# M2.5 S5 ④ 真实学生作答复盘（读 eval/problems/student-answers-v0.1.jsonl；
+# 出卡/卡点层/期望卡点是否命中，最后一列留给老师填；需真实 key；
+# 产出 eval/reports/m2.5-s5-student-review.md）
+$env:SYNAPSE_LLM_MODE='on'
+.\.venv\Scripts\python.exe ..\..\scripts\eval\s5_review.py --limit 5
+
 # M2.5 S5 ②/③ 请求链路（20 题现场建图 → 探针 → 卡点卡；产出 eval/reports/m2.5-s5-session.md）
 # --policy aligned（默认）模拟“作答与对齐结论一致”，--policy first 一律选第一项作对照
 .\.venv\Scripts\python.exe ..\..\scripts\eval\s5_session.py
+
+# M2.5 S5 ③ 缺口定位探针（构造真值：让模型扮演学生故意跳过一步；需真实 key；
+# --limit N 控题数；产出 eval/reports/m2.5-s5-gap-probe.md）
+$env:SYNAPSE_LLM_MODE='on'
+.\.venv\Scripts\python.exe ..\..\scripts\eval\s5_gap_probe.py --limit 20
 
 # M2.5 S6 物理接入（6 题；需真实 key；产出 eval/reports/m2.5-s6-physics.md）
 .\.venv\Scripts\python.exe ..\..\scripts\eval\s6_physics.py
@@ -159,7 +183,14 @@ python tools/merge_markdown.py
 | 新增 Python 依赖要重装 venv | `pyproject.toml` 加了 `jsonschema`（运行时）与 `types-jsonschema`（dev）；旧 venv 没有时会 ImportError。`pip install -e ".[dev]"` 一次补齐 |
 | 根目录 `eval/` 在 `.gitignore` | 只忽略**根目录**的私有评测材料；`scripts/eval/` 是工具、必须入库（早先写成不带锚点的 `eval/`，把 `m2_exit.py` 一起吞了）。golden 数据仍需 `git add -f eval/golden/golden-v0.1.jsonl`，`eval/reports/` 是产物不入库 |
 | CI 跑 `ruff format --check` | 只跑 `ruff check` 会在 CI 挂（format 与 check 是两套规则）；写完先 `ruff format src tests`。文件末尾缺换行也算未格式化 |
-| 生成图 prompt 已升到 `graph-v6` | v2 起每个探针的每个选项都必须有 `evidence` 权重；v3 起可选 `claim`（参数区间）并把验证接进建图；v4 起要求每个探针至少一个权重达到 ±0.8~1.0、同一假设的选项差 ≥1.0、整图覆盖三个假设；v6 还要求检查 parameter=0、parameter<0、variable→±∞。旧图和旧报告先看报告头部的 prompt 版本。schema 里 `probe.evidence` 与 `claim` 都是可选，「生成图必须有 evidence」由 `graph_structure.review(require_evidence=True)` 强制 |
+| 生成图 prompt 已升到 `graph-v9` | v2 起每个探针的每个选项都必须有 `evidence` 权重；v3 起可选 `claim`（参数区间）并把验证接进建图；v4 起要求每个探针至少一个权重达到 ±0.8~1.0、同一假设的选项差 ≥1.0、整图覆盖三个假设；v6 还要求检查 parameter=0、parameter<0、variable→±∞；**v7/v8/v9 是首问延迟治理的三版**（v7 探针 3 个 → 出卡掉到 15/20；v8 探针 4 个 → 16/20；v9 探针 4–5 个 + 每个假设两向权重 → 20/20）。旧图和旧报告先看报告头部的 prompt 版本。schema 里 `probe.evidence` 与 `claim` 都是可选，「生成图必须有 evidence」由 `graph_structure.review(require_evidence=True)` 强制 |
+| 物理/语文的 prompt 版本各自钉住 | `SYNAPSE_GRAPH_PROMPT_VERSION` 现在**只控制数学**（默认 `graph-v9`）；物理是 `_PROFILES` 里的常量 `graph-v9-physics`，语文是 `graph-v6-chinese`。它们的 prompt 文本没跟着数学改，标签就不能假装改了——`test_graph_build.py` 专门断言这三个值。改物理/语文 prompt 时改常量并同步测试，别指望环境变量 |
+| 首问对生成题不再改写（0 次 `llm_call` 是设计） | `SessionService.start()` 对 `annotated=False` 的题用确定性 `GraphProbeComposer`，只对标注种子题调 `opening_composer`（`LeakSafeProbeComposer(T3)`）。看到生成题首问没有 `probe_rewrite` 审计行，不要当成 composer 没接上；`tests/test_first_question.py` 有 4 条断言盯着（生成题不调、标注题调、第 2 轮起生成题也调、改写要审计） |
+| prompt 长度不花时间，输出长度才是预算 | 实测 37 tokens 与 3677 tokens 的 TTFT 无差异（都是 0.8–3s 的供应商底价），completion ≈220–320 tokens/s。想省首问延迟就去砍输出（探针数/选项数/evidence 条数），把 system prompt 压缩一遍不会有可测收益——别为此改 prompt 的规则 |
+| SymPy 在组合根预热 | `build_container()` 对生成器调 `warm()`，`DefaultGraphVerifier.warm()` 幂等 import SymPy（1665ms）。**不要**把这个导入挪回请求路径，也不要在测试里依赖「第一次带 claim 的调用会自己导入」——预热缺失的表现是单个请求多 1.7s |
+| claim 修复只用预算剩余量 | 反例推翻 claim 后只发一次 `graph_claim_repair`（只重写区间，不重生成整图）；只有当「`SYNAPSE_GRAPH_RETRY_BUDGET_S`（默认 7.5s）− 已用时间 ≥ 1s」才发，且调用超时直接取这个剩余量。超时/格式错/继续被推翻/预算不足都保留图、丢 claim，记 `claim_dropped_refuted` 加 `claim_retry_timeout` / `claim_retry_malformed` / `claim_repair_refuted` / `retry_skipped_budget`。**只修一次**，不要改成循环。schema 失败的重试仍走整图（那是拿到图的唯一路径），但要用最小可用图 |
+| 一次模型调用只写一条审计 | `graph_build` 的行数就是调用次数。claim 被推翻的「丢弃+保留图」分支原来写两行（`schema_ok=false` 一行、`schema_ok=true` 一行），按行统计会把调用数和重试数都算多；现在丢弃的那次一行、保留的那次一行。看到「23 次调用 / 3 次重试」这类历史数字先确认是哪一版 |
+| 探针数直接决定出卡率 | `aligned` 策略下同一批 20 题：3 探针 15/20、4 探针 16/20、5 探针 **20/20**。卡点门槛 0.80+0.25 没动，变的是「攒证据的轮数」。压输出预算时先看 s5_session 的出卡率，不要只看建图耗时——省下的 0.5s 可能换来 4 道题不出卡 |
 | 生成图证据会被全图校准 | `review(..., calibrate_evidence=True)` 只在全图峰值 `0 < max|w| < 0.90` 时按 `0.90/峰值` 统一放大，记 `evidence_calibrated`；只放大不缩小，不改符号与相对强弱，手写种子图不走这条分支。0.90 是证据强度下限，不是数学正确性；引用生成图权重时先看报告里的 max|w| 与修复码 |
 | PowerShell `Set-Content` 会按 ANSI 重写含中文的 UTF-8 文件 | 本机这样把 `test_graph_build.py` 写坏过（中文变 `?`，ruff 报 `stream did not contain valid UTF-8`）。改 Python/中文文件一律用 edit 工具；确需命令行替换先确认 `$PSVersionTable.PSVersion` 并显式 `-Encoding utf8` |
 | SymPy 没有 `py.typed` | `mypy src` 会报 `import-untyped`；`pyproject.toml` 里对 `sympy*` 开了 `ignore_missing_imports`（验证器把所有 SymPy 调用收在 float 边界的 helper 后面）。`sympy` 只在 `[dev]` extras 里，生产环境缺它时验证器返回 `unknown/unavailable`，不抛异常 |
@@ -181,7 +212,14 @@ python tools/merge_markdown.py
 | 结构提示的「没写到」是存在性判断，v0.2 多一档「只写到一部分」 | `missing` 表示连一个小句/类型线索词都没对上；`partial` 表示至少一个小句对上、但覆盖率 <75%。两者都不表示写错。语文节点常是多分句长句，S8 用分句级匹配把 S7 的 `missing` 拆出 `partial`（full covered 仍 1.7，partial 2.3，加权 2.8/8）；阈值在 `ClauseCueAligner`，不要为了「看起来更准」调低。措辞固定「看起来没有写到 / 只写到了一部分」，不要写成「这一步错了」 |
 | `specs/structure-hint.schema.json` 是 v0.2 必检契约 | `check_repo.py` 的 `PUBLIC_REQUIRED` 与 `REQUIRED` 都登记了它；`status` 枚举是 `covered|partial|missing`，`version` 必须是 `"0.2"`。改 `HintOut`/`StructureHint` 必须同步 spec 与 `apps/web/src/lib/api/generated.ts`，否则类型检查与契约测试会对不上。它是**另一张表**，不要往 `DiagnosisOut` 上挂可选字段来「复用」 |
 | 对齐策略由插件选，不在 deps 里分支 | `SubjectPlugin.aligner_for(problem)` 是唯一入口；`SessionFactory` 只在没有插件时退回构造参数。`CompositeAligner` 只看 `problem.annotated`，不再有第二套 `annotated_ids`；新增学科时实现 `aligner_for()`，不要改 `factory.py` 或 `deps.py` 的 if/else。数学/物理的两态对齐器不得产生 `partial`，`AlignmentResult.partial_node_ids` 默认空 |
+| 浏览器侧首问只占 1–5%，且不能靠 prefetch 省 | 真实浏览器量到的是「API 4.19–5.58s + 客户端 56–168ms（本机）/ 221–237ms（4G RTT 150ms）」。客户端那半是 App Router 动态路由取 RSC 的 1 个 RTT；`router.prefetch("/diagnose/_")` 在 4G 下没有可测收益（prefetch 只取片段壳，真 RSC 仍按真实 id 再取），别再加回来。量的时候每题必须是**没被 `ProblemResolver` 缓存过**的新题，否则会量到 0.2s 的缓存命中 |
 | 前端测试跑的是 jsdom，不是浏览器 | `npm test` 用 `vitest.config.mts` + `src/test/setup.ts`；jsdom 没有 `matchMedia`/`rAF`，已在 setup 里垫片，`next/link` 在 `StructureHintView.test.tsx` 里被替换成 `<a>`。组件测试不覆盖真实布局、CSS 与动画，不能替代 `npm run build` 或浏览器 smoke；新增依赖后先跑 `npm ci --dry-run` 确认 lock 一致 |
+| 没有真数据时也有可机算的准确率：构造真值 | `scripts/eval/s5_gap_probe.py` 让模型扮演学生、**故意跳过第 k 步**并自报 `kept`，于是「哪一步该算没写」由构造决定。20 题（1 条泄漏剔除）：写了的步骤被认出 **59/98 = 60%**、缺口被认成 `missing` **13/19**、「首个 `missing` 就是被跳过那步」**4/19 = 21%**、卡点落在它 **4/18 = 22%**。前两个能干净归因到 `TypeCueAligner`（整句 3-gram 对口语改写几乎不命中）；最后那个含 `aligned` 策略代答的水分。`kept` 自报是防伪约定：模型把跳过的那步写了、或与节点文本有 6 字以上重合，就判泄漏并剔除（本轮 1/20）。改对齐器前后各跑一遍，比争论哪个匹配器更强可靠 |
+| 判学生写的式子：误判比漏判更伤 | `verification/notation.py` 只做机械转写（`2x`→`2*x`、`x²`→`x**2`、`sinX`→`sin(x)`、`根号（16）`→`sqrt(16)`），**读不懂就返回 `None`，绝不猜**；`equalities.py` 只在「两边都读得懂、自由符号相同、且都不是单个符号」时才判等号，`x=2`、`an=3^(n-1)` 这类赋值/定义不判。踩过的坑：`根号下（80/245）` 若被截成 `80/245`，会把学生**正确**的一步判成「等号不成立」——现在整段跳过并记 `notation_unsupported`。写这条链路的测试先测「不该报的没报」（`test_unreadable_heights_do_not_produce_a_false_alarm`），再测「该报的报了」 |
+| 出卡率不是诊断准确率，命中率也不是 | `s5_session.py` 的 `aligned` 策略让模拟学生顺着对齐结论答题：20/20、100 题里 99/100 出卡只能证明接线。真实复盘跑 `s5_review.py`：它读学生原文，出卡与「期望卡点」做去空白子串匹配，`人工判断` 一列留空给老师。4 条 `public-web`（公开问答页里学生自己写的过程）拿到 4/4 出卡、4/4 节点在图内，但关键词命中只有 0/4（另一次 1/4）——**其中两三张卡其实指对了步骤**（`P_PUB_002`「代入基本极限 sin x/x→1」、`P_PUB_004`「用 a_n=S_n-S_{n-1} 消去 S」），是期望关键词「化简」「下标」没出现在节点文本里。**命中率比诊断本身更粗**，别拿它当准确率；卡点层仍 4/4 是 `L1`（层由「对齐发现的第一处缺失」决定，和题目语义无关） |
+| 生成题的卡面文案不能沿用种子题的主题 | 种子 `H_L1` 的 label 是「概念不清：恒成立与最值」，生成题早期直接复用它，于是 100 题里数列、立体几何、概率的卡都写着「恒成立与最值」。现在 `MathPlugin.labels_for(problem)` 按 `problem.annotated` 分档：标注题返回原表（种子卡逐字节不变），生成题用「概念不清：没抓住这一步的关键条件」；`SessionFactory._labels_for(problem)` 先问 `labels_for()` 再退回 `hypothesis_labels` 映射。物理/语文的 `hypothesis_labels` 不受影响。加卡面文案时先想清楚「这句话对任意主题的题都成立吗」 |
+| 复盘脚本的 `work` 会改变对齐结果 | `StartSessionCommand` 的 `work` 参与存在性对齐，`answer` 只用于泄漏守卫/展示。`s5_session.py` 默认灌 `SAMPLE_WORK["math"]`（「先确认题目的条件，再按参数分类讨论」），所以它对齐到的节点是那句模板话匹配到的；复盘时必须传学生原文，否则量到的是模板的卡点 |
+| `s4_graph_build.py` 的默认参数仍是 20 题 v0.1 | 默认 `--problems unseen-v0.1.jsonl`、`--out m2.5-s4-graph-build.md`、`--graphs-dir s4-graphs`，而这三项都已被 `-v02` 取代（`eval/reports/INDEX.md` 里标为历史）。跑 100 题必须显式给：`--problems eval/problems/unseen-v0.2.jsonl --out eval/reports/m2.5-s4-graph-build-v02.md --graphs-dir eval/reports/s4-graphs-v02`。否则会用 20 题口径**覆盖**那份历史报告，第二天看起来像指标倒退——这是「报告名不带轮次」的直接代价 |
 
 ---
 
@@ -201,16 +239,21 @@ python tools/merge_markdown.py
 ```text
 README.md                    对外：架构（无进度）
 AGENTS.md                    对内：本文件
+docs/README.md               文档总索引（三层：设想／主体／实现）
 docs/adr/                    决策记录（改选条件）
 docs/design/chapters/        设计书正文 00–14 + 附录（会被合并成 DOCX/PDF）
 docs/design/plan/            本地详尽计划（未入库）
 docs/design/release/         构建产物（未入库，需重建）
+docs/vision/                 设想层：学习机理（诊断—归因—干预—巩固），不承诺已实现
 specs/                       机器可验证契约（JSON Schema + 状态机）
 apps/api/                    后端：domain / application / infrastructure / api 分层
 apps/web/                    前端：Next.js 15
 eval/golden/                 M2 金标准 10 条（入库，需 `git add -f`）
-eval/problems/               M2.5 题集：20 道建图题 + 6 道物理 + 6 道语文（入库，需 `git add -f`）
-eval/reports/                评测报告与生成图（产物，不入库）
+eval/problems/               M2.5 题集：100 道数学（v0.2，带 expected_answer）+ 6 物理 + 6 语文
+                             + 学生作答样本（3 条 synthetic + 4 条 public-web，入库，需 `git add -f`）
+eval/reports/                评测报告与生成图（产物，不入库；INDEX.md 是基线索引）
+eval/redteam/                诱导／越界／泄漏用例（只有 README，未开工）
+scripts/release/             公开仓库导出：export_public.py + templates/（把本仓裁成对外树）
 ```
 
 ---

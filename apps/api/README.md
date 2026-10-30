@@ -117,7 +117,9 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 
 本地把变量写进**仓库根目录的 `.env`** 即可：`scripts/dev/run.py` 用 `uvicorn --env-file` 传入，`scripts/eval/m2_exit.py` 显式 `load_dotenv()`。库代码与测试**不会**隐式读这个文件，所以本机的 key 不会改变测试结果。
 
-生成图的 prompt 版本由 `SYNAPSE_GRAPH_PROMPT_VERSION` 控制（默认 `graph-v6`，物理/语文分别拼 `-physics`/`-chinese`）；缓存键包含它，改 prompt 必须同时升版本，否则旧缓存会掩盖变化。
+生成图的 prompt 版本：数学由 `SYNAPSE_GRAPH_PROMPT_VERSION` 控制（默认 `graph-v9`），物理与语文各自钉在自己的常量上（`graph-v9-physics`、`graph-v6-chinese`）——它们的 prompt 文本没跟着数学一起改，审计标签就不能假装改了。缓存键包含版本，改 prompt 必须同时升版本，否则旧缓存会掩盖变化。
+
+**首问的两次调用只留一次（ADR-0004）**：未见题要现场建图，首问就在 8s 预算里。生成题的首问走确定性渲染器，不再花一次模型往返去润色一条刚由同一个模型写出的问句；标注种子题仍走 T3 改写。claim 被反例推翻后**只重写区间**（`graph_claim_repair`），不再重生成整图；请求钉死表达式/参数/定义域，只允许改 `answer`，调用超时取 `SYNAPSE_GRAPH_RETRY_BUDGET_S`（默认 7.5s）减去已用时间，剩余不足 1s 就保留图、丢掉 claim 并记 `retry_skipped_budget`。SymPy 在 `build_container()` 预热，首次带 claim 的请求不再付约 1.7s 的导入。
 
 失败链：JSON 不合法 → 重试 1 次 → 仍失败回退规则；超时与传输失败不重试（保 8s 首问预算），直接回退。每次调用、每次降级、每条 shadow 差异都写 `AuditEntry`：`session_id`、`turn`、`model`、`latency_ms`、`prompt_tokens`、`completion_tokens`、`retried`、`fallback_reason`、`schema_ok`。
 
@@ -140,7 +142,7 @@ NONE 档会话在 `ALIGN` 之后直接收束到 `STOP → CLOSED`：不追问、
 | 方法 | 数学（S2–S4） | 物理（S6） | 语文（S7） |
 |---|---|---|---|
 | `identify()` | 归一化后「包含」已标注题；不同题一律拒绝 | 恒 `None`（必须显式声明 `subject`） | 恒 `None` |
-| `build_graph()` | `Problem` 返回手写种子图；`ProblemDraft` 走 `LLMGraphGenerator`：生成 → 机械修复 → 结构规则 → `solution-graph.schema.json` → 失败重试一次 | 同一个生成器，prompt `graph-v6-physics`，不输出 `claim` | 同一个生成器，prompt `graph-v6-chinese`，不输出探针与 `claim`；无探针图由 `review(require_probes=False)` 放行 |
+| `build_graph()` | `Problem` 返回手写种子图；`ProblemDraft` 走 `LLMGraphGenerator`：生成 → 机械修复 → 结构规则 → `solution-graph.schema.json` → 失败重试一次（重试要最小可用图） | 同一个生成器，prompt `graph-v9-physics`，不输出 `claim` | 同一个生成器，prompt `graph-v6-chinese`，不输出探针与 `claim`；无探针图由 `review(require_probes=False)` 放行 |
 | `aligner_for()` | 标注题 → `RuleBasedAligner`；生成题 → `TypeCueAligner` | `TypeCueAligner`（S6 基线不重标定） | `ClauseCueAligner`（分句重合，可报 `partial`） |
 | `probes_for()` | 返回节点自带探针 | 同左（`hypothesis_labels` 换物理词表） | 恒空 |
 | `evidence_model()` | 生成图读图内 `probe.evidence`；只有已标注种子图回退手写 `EVIDENCE` | 只读图内权重，不回退数学 `EVIDENCE` | 恒空 |

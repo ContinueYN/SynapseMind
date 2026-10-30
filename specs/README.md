@@ -41,4 +41,4 @@
 }
 ```
 
-含义是 `∀x∈variable_domain: expression <relation> 0 ⇔ parameter ∈ answer`；`answer` 的端点是 SymPy 表达式字符串，`null` 表示无穷，多个区间即并集。v1 只支持这一种形状（参数区间）；求一个值、解集、证明题没有 `claim`，验证结果为 `unknown`，不算失败。`kind`/`relation` 不在支持范围内时，结构规则会丢弃 claim 并记一条修复（`claim_dropped_unsupported`），图仍然可用。校验与反例由 `infrastructure/verification/` 执行（`pass|fail|unknown`）：`fail` 会带具体反例让建图器重试一次，仍失败则丢弃 claim（`claim_dropped_refuted`）、保留图，反例留在 `GraphBuildResult.verification` 里。
+含义是 `∀x∈variable_domain: expression <relation> 0 ⇔ parameter ∈ answer`；`answer` 的端点是 SymPy 表达式字符串，`null` 表示无穷，多个区间即并集。v1 只支持这一种形状（参数区间）；求一个值、解集、证明题没有 `claim`，验证结果为 `unknown`，不算失败。`kind`/`relation` 不在支持范围内时，结构规则会丢弃 claim 并记一条修复（`claim_dropped_unsupported`），图仍然可用。校验与反例由 `infrastructure/verification/` 执行（`pass|fail|unknown`）：`fail` 会带着具体反例让建图器**只重写区间**（`graph_claim_repair`，表达式/参数/定义域钉死），仍失败则丢弃 claim（`claim_dropped_refuted`）、保留图，反例留在 `GraphBuildResult.verification` 里。

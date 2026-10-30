@@ -27,6 +27,7 @@
 | [0001](0001-language-and-code-architecture.md) | 语言与代码架构选择 | accepted |
 | [0002](0002-llm-provider-and-golden-scale.md) | 模型供应商与金标准规模 | accepted |
 | [0003](0003-generated-graph-evidence-calibration.md) | 生成图的证据权重校准 | accepted |
+| [0004](0004-first-question-latency-budget.md) | 首问 8s 预算下的生成题延迟治理 | accepted |
 
 ## 原则
 

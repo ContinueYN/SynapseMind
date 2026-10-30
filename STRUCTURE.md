@@ -17,7 +17,7 @@
 ├─ specs/                 # 契约源：状态机 + JSON Schema
 ├─ eval/                  # 怎么证明诊断是准的
 │  ├─ golden/            # 双教师标注的黄金对话
-│  ├─ problems/          # 建图评测题（只有题干，没有答案）
+│  ├─ problems/          # 评测题集（题干 + expected_answer）＋ 学生作答样本
 │  └─ redteam/           # 诱导、边界、泄漏测试
 ├─ infra/                 # Compose / Nginx / 可观测性配置（M1 落）
 ├─ tools/                 # 文档生成与图，不是运行时依赖
@@ -27,7 +27,8 @@
 │  ├─ design/
 │  │  ├─ chapters/       # 第 0–14 章 + 附录，唯一手写源
 │  │  └─ assets/         # 3 张设计图，由脚本生成
-│  └─ reference/         # 能力清单等原始参考
+│  ├─ reference/         # 能力清单等原始参考
+│  └─ vision/            # 设想层：学习机理、CHC 归因、生物类比与文献
 ├─ .github/workflows/     # CI
 ├─ README.md              # 项目入口
 ├─ STRUCTURE.md           # 本文件
@@ -50,9 +51,9 @@ docs/design/release/      # 合并 MD / DOCX / PDF；生成物，不进 Git
 | `apps/web/` | 页面、组件、RSC/ISR、SEO、SSE 客户端、BFF 透传 | 状态机、诊断规则、Prompt 编排、答案判定 | `app/`、`components/`、`src/lib/api/`、`package.json` |
 | `apps/api/` | `domain`（纯函数）、`application`（用例/ports）、`infrastructure`（LLM/RAG/DB）、`api`（路由/SSE）、`workers`（任务） | 前端页面、文档生成、部署脚本 | `src/synapse/`、`tests/`、`pyproject.toml` |
 | `apps/worker/` | 部署入口与任务说明；与 api 同镜像、不同 command | 第二份领域代码、第二套模型 | `README.md`；M2 起任务 |
-| `specs/` | 状态机转移表、输入/解法图/诊断卡 JSON Schema | 生成的 TS 类型、运行时代码、草稿 | 1 个状态机文档 + 3 个 schema |
+| `specs/` | 状态机转移表、输入/解法图/诊断卡 JSON Schema | 生成的 TS 类型、运行时代码、草稿 | 1 个状态机文档 + 4 个 JSON Schema（`problem-input`／`solution-graph`／`diagnosis`／`structure-hint` v0.2） |
 | `eval/golden/` | 黄金对话、双教师标注、评分 rubric | 真实学生隐私数据、生产日志 | `README.md`；完整 100 条本地/私有 |
-| `eval/problems/` | 建图评测题：题干 + 主题标签，不含答案与解法图 | 学生作答、人工解法图 | 20 条未见题 + `README.md` |
+| `eval/problems/` | 评测题集：题干、主题标签、`expected_answer`；学生作答原文 | 人工解法图、隐私数据 | 100 道数学未见题（`unseen-v0.2.jsonl`）+ 6 物理 + 6 语文 + 作答样本（3 条 synthetic、4 条 public-web）+ `README.md` |
 | `eval/redteam/` | 诱导、越界、答案泄漏、提示注入用例 | 普通单元测试 | `README.md` |
 | `infra/` | `compose.yaml`、Dockerfile、Nginx、OTel 配置 | 业务代码、前端组件 | `README.md`；M2 起容器文件 |
 | `tools/` | `diagrams.py`、`merge_markdown.py`、`generate_docx.py`、TOC/PDF 脚本 | 运行时依赖、业务逻辑 | 5 个脚本 + `requirements.txt` |
@@ -93,6 +94,7 @@ specs/ 改契约 → 改 apps/api 的 Pydantic/转移表 → 生成 TS 类型 �
 
 | 想了解 | 看 |
 |---|---|
+| 文档总索引（三层、职责、时效） | [docs/README.md](docs/README.md) |
 | 项目定位与快速开始 | [README.md](README.md) |
 | 为什么选 TS + Python、为什么不用 Go/Java | [docs/adr/0001-language-and-code-architecture.md](docs/adr/0001-language-and-code-architecture.md) |
 | 应用怎么分工 | [apps/README.md](apps/README.md) |
