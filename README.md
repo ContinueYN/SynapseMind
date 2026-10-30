@@ -200,5 +200,3 @@ Nginx（SSE 关闭缓冲、限流、超时）
 ## License
 
 [MIT](LICENSE) © 2026 SynapseMind contributors。
-
-Web 端包含来自 React Bits 的 Aurora / GradientText / SpotlightCard / StarBorder 组件，适用 **MIT + Commons Clause**，不属于本项目 MIT 授权范围；完整声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

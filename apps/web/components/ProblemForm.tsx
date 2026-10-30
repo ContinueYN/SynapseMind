@@ -54,16 +54,22 @@ const SUBJECTS: { value: Subject; label: string }[] = [
   { value: "chinese", label: "语文" },
 ];
 
-/** 文本框跟着内容长高：中文换行多，固定 rows 会一直出现内滚动条 */
-function useAutosize(value: string) {
+/**
+ * 文本框跟着内容长高，但**有上限**：中文换行多，固定 rows 会一直出现内滚动条；
+ * 可如果不封顶，粘一段长题面就会把整块交题板顶长，两边版面被拉斜。
+ * 超过上限就地内滚，板子高度基本不动。
+ */
+function useAutosize(value: string, max: number) {
   const ref = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     const node = ref.current;
     if (!node) return;
     node.style.height = "auto";
-    node.style.height = `${node.scrollHeight}px`;
-  }, [value]);
+    const needed = node.scrollHeight;
+    node.style.height = `${Math.min(needed, max)}px`;
+    node.dataset.clip = needed > max + 1 ? "true" : "false";
+  }, [value, max]);
 
   return ref;
 }
@@ -80,8 +86,8 @@ export function ProblemForm({
   const [more, setMore] = useState(false);
   const submitRef = useRef<HTMLButtonElement>(null);
 
-  const problemRef = useAutosize(value.problem);
-  const workRef = useAutosize(value.work);
+  const problemRef = useAutosize(value.problem, 150);
+  const workRef = useAutosize(value.work, 208);
 
   const clueCount = [value.problem, value.answer, value.work].filter((item) =>
     item.trim(),
@@ -231,7 +237,7 @@ export function ProblemForm({
           onClick={() => setMore((open) => !open)}
           type="button"
         >
-          {more ? "收起补充" : "补一条：卡在哪 / 有几分把握"}
+          {more ? "收起" : "补一句：卡在哪、有几分把握"}
           {value.stuckAt.trim() || value.selfReport !== "unsure" ? " · 已填" : ""}
         </button>
 
@@ -270,7 +276,7 @@ export function ProblemForm({
                   ))}
                 </div>
                 <p className="sm-note sm-note-quiet" style={{ marginTop: 10 }}>
-                  只用来区分真会和蒙对。答案对、过程缺一环，是最需要被看见的一种。
+                  只用来区分真会和蒙对。
                 </p>
               </div>
             </div>

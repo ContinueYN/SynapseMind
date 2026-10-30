@@ -80,7 +80,7 @@ describe("ProblemForm", () => {
     await user.click(screen.getByRole("button", { name: "没有题目？填入示例题" }));
 
     expect(screen.getByDisplayValue(/已知函数 f\(x\)=ln x - a x/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /收起补充/ })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: /收起/ })).toHaveAttribute(
       "aria-expanded",
       "true",
     );

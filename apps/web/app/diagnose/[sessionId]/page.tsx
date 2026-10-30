@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { Dendrite, type DendriteStop } from "@/components/Dendrite";
 import { DiagnosisCardView } from "@/components/DiagnosisCardView";
+import { Plane } from "@/components/Plane";
 import { ProblemBrief } from "@/components/ProblemBrief";
 import { StructureHintView } from "@/components/StructureHintView";
 import { Surface } from "@/components/Surface";
@@ -121,17 +122,19 @@ export default function DiagnosePage() {
   if (error && !session) {
     return (
       <section className="sm-state">
-        <p className="sm-kicker">会话没打开</p>
-        <h1 className="sm-h1">{error}</h1>
-        <p className="sm-p">诊断服务可能在 8000 端口没起来；也可以先回到交题页。</p>
-        <p style={{ marginTop: 26 }}>
-          <Link className="sm-cta" href="/">
-            回到交题页
-            <span aria-hidden="true" className="sm-ar">
-              →
-            </span>
-          </Link>
-        </p>
+        <Plane>
+          <p className="sm-kicker">会话没打开</p>
+          <h1 className="sm-h1">{error}</h1>
+          <p className="sm-p">诊断服务可能在 8000 端口没起来；也可以先回到交题页。</p>
+          <p style={{ marginTop: 26 }}>
+            <Link className="sm-cta" href="/">
+              回到交题页
+              <span aria-hidden="true" className="sm-ar">
+                →
+              </span>
+            </Link>
+          </p>
+        </Plane>
       </section>
     );
   }
@@ -139,11 +142,13 @@ export default function DiagnosePage() {
   if (!session) {
     return (
       <section className="sm-state">
-        <p className="sm-kicker">正在恢复会话</p>
-        <h1 className="sm-h1">先看一下你刚才写到哪。</h1>
-        <p className="sm-p" style={{ marginTop: 24 }}>
-          <span className="sm-tl-shim" />
-        </p>
+        <Plane>
+          <p className="sm-kicker">正在恢复会话</p>
+          <h1 className="sm-h1">先看一下你刚才写到哪。</h1>
+          <p className="sm-p" style={{ marginTop: 24 }}>
+            <span className="sm-tl-shim" />
+          </p>
+        </Plane>
       </section>
     );
   }
@@ -192,7 +197,7 @@ export default function DiagnosePage() {
   return (
     <div>
       <div className="sm-session">
-        <aside className="sm-rail">
+        <aside className="sm-rail sm-plane">
           <div>
             <p className="sm-lab">诊断进度</p>
             <p className="sm-rail-turn">
@@ -205,7 +210,7 @@ export default function DiagnosePage() {
           <Dendrite step={46} stops={stops} />
 
           <div className="sm-signal">
-            {hint ? (
+{hint ? (
               <>
                 <div className="sm-signal-top">
                   <span className="sm-signal-lab">本轮输出</span>
@@ -233,18 +238,18 @@ export default function DiagnosePage() {
                   <i style={{ width: `${Math.max(4, confidence)}%` }} />
                 </div>
                 <p className="sm-signal-note">
-                  {located ? "已收敛到一处，证据见右侧。" : "不到 80% 不下结论。"}
+                  {located ? "已经收敛到一处，证据在右边。" : "把握到 80% 才出卡。"}
                 </p>
               </>
             )}
           </div>
         </aside>
 
-        <section className="sm-stage">
+        <section className="sm-stage sm-plane">
           <div className="sm-stage-head">
             <p className="sm-stage-title">{session.problem_title}</p>
-            <span className="sm-stage-tag">
-              {hint ? "屏 04 · 结构" : located ? "屏 03 · 定位" : "屏 02 · 追问"}
+<span className="sm-stage-tag">
+              {hint ? "结构" : located ? "定位" : "追问"}
             </span>
           </div>
 
@@ -294,7 +299,7 @@ export default function DiagnosePage() {
           <p className="sm-fine">
             {hint
               ? "这一轮的原则：只对照结构，不判断对错；想说“哪里没懂”，回交题页补一句过程。"
-              : "这一轮的原则：一次只问一个可回答的问题；不重复问；前 3 轮不给最终答案。"}
+              : "一次只问一个；问过的不会再问；前三轮不给答案。"}
           </p>
         </section>
       </div>

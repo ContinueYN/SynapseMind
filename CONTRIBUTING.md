@@ -62,4 +62,4 @@ pwsh tools/update_toc_and_export.ps1   # Windows + Word
 
 ## License
 
-原创代码使用 [MIT](LICENSE)。Web 端 React Bits 组件适用 **MIT + Commons Clause**，见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)；提交第三方代码前先确认许可兼容。
+原创代码使用 [MIT](LICENSE)。提交第三方代码前先确认许可兼容。

@@ -28,9 +28,9 @@ apps/web/
 │  └─ styles/                 # tokens.css + surface.css
 ├─ components/
 │  ├─ AppShell.tsx            # 顶栏 + 页脚
-│  ├─ TopBar.tsx              # 顶栏右侧：模式 + 一键回首页（子页常驻）
+│  ├─ BrandOrb.tsx            # 顶部那颗球：图案 + 外圈阅读进度，悬停展开回首页
 │  ├─ Ground.tsx              # 底：白→浅蓝 + 水光 + 三团极慢呼吸的光斑（不跟指针）
-│  ├─ ScrollRule.tsx          # 顶部 2px 液面（读到哪儿）
+│  ├─ ScrollRule.tsx          # 写 --read-n（球的进度环）与 --scroll（景深）；开局强制回顶部
 │  ├─ Surface.tsx             # 琉璃面：唯一的玻璃，冷光 + 柔光 + 1° 倾斜
 │  ├─ useGlass.ts             # 把指针写进 --mx/--my、--lx/--ly、--rx/--ry（rAF 节流）
 │  ├─ ProblemForm.tsx         # 受控表单，提交交给父级

@@ -47,4 +47,4 @@ fix(web): keep one question per turn on mobile
 
 ## License
 
-原创代码使用 [MIT](LICENSE)。React Bits 组件另有许可限制，见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
+原创代码使用 [MIT](LICENSE)。提交第三方代码前先确认许可兼容。

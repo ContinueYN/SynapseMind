@@ -28,4 +28,4 @@
 - `paper.css` 已删除：纸与出版那套（衬线、零圆角、零玻璃）在 H4 被明确否决，不要恢复。
 - `glass.css` / `GlassCard.tsx` / `Backdrop.tsx` 已删除：它们的能力现在在 `surface.css` 与 `Surface.tsx` / `Ground.tsx` 里，不要恢复旧文件。
 - `components/reactbits/` 已删除：Aurora、GradientText、SpotlightCard、StarBorder 属于第 14 章 §14.12 的反模式，不要重新引入。
-- 液面（`LiquidVessel`）、旧进度条（`ProgressRail`）、旧记录（`Transcript`）已删除，进度统一由 `Dendrite` 表达。
+- 液面（`LiquidVessel`）、旧进度条（`ProgressRail`）、旧记录（`Transcript`）已删除，进度统一由 `Dendrite` 表达——`Dendrite` 现在是「一根玻璃管 + 液面 + 几颗珠」，不再是折线；不许恢复曲线与"卡点短须"。
