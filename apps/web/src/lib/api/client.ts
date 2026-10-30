@@ -1,6 +1,8 @@
 import type {
   CreateSessionInput,
   SessionResponse,
+  StepInput,
+  StepVerdict,
   TurnInput,
 } from "./types";
 
@@ -71,6 +73,17 @@ export function submitTurn(
 ): Promise<SessionResponse> {
   return request<SessionResponse>(
     `/api/v1/sessions/${encodeURIComponent(sessionId)}/turns`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+/** Verify one step; read-only, so it never advances the dialogue. */
+export function verifyStep(
+  sessionId: string,
+  input: StepInput,
+): Promise<StepVerdict> {
+  return request<StepVerdict>(
+    `/api/v1/sessions/${encodeURIComponent(sessionId)}/steps`,
     { method: "POST", body: JSON.stringify(input) },
   );
 }

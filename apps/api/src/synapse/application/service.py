@@ -9,7 +9,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from synapse.application.card_builder import build_diagnosis_card
-from synapse.application.commands import StartSessionCommand, SubmitAnswerCommand
+from synapse.application.commands import (
+    StartSessionCommand,
+    SubmitAnswerCommand,
+    VerifyStepCommand,
+)
 from synapse.application.commitment import Capabilities, capabilities_for
 from synapse.application.composer import ProbeComposer, ProbePrompt
 from synapse.application.factory import SessionFactory
@@ -19,9 +23,12 @@ from synapse.application.ports import (
     ProblemRepository,
     SessionRepository,
 )
+from synapse.application.subject import StudentStep, SubjectRegistry, Verdict
 from synapse.application.trace import tracing
+from synapse.application.work_check import EqualityChecker
 from synapse.domain.diagnosis.hint import StructureHint
 from synapse.domain.diagnosis.models import DiagnosisCard
+from synapse.domain.diagnosis.work import WorkFinding
 from synapse.domain.dialogue.events import DialogueEvent
 from synapse.domain.dialogue.session import DialogueSession, TurnRecord
 from synapse.domain.dialogue.states import DialogueState
@@ -60,6 +67,8 @@ class SessionService:
         composer: ProbeComposer,
         *,
         opening_composer: ProbeComposer | None = None,
+        equality_checker: EqualityChecker | None = None,
+        subjects: SubjectRegistry | None = None,
     ) -> None:
         self._sessions = sessions
         self._problems = problems
@@ -71,9 +80,21 @@ class SessionService:
         # composer as every other turn", which is what the rule baseline and
         # the tests get.
         self._opening_composer = opening_composer
+        # Off by default: ``None`` means the baseline path, byte-identical to
+        # the cards the golden set was measured against. The switch lives in the
+        # composition root (``api/deps.py``), not here.
+        self._equality_checker = equality_checker
+        # Step verification asks the subject plugin after the session exists, so
+        # the service needs the registry (the factory only exposes level_for).
+        self._subjects = subjects
 
     def start(self, command: StartSessionCommand) -> SessionView:
+        # Check the student's own equals signs before alignment: a provable
+        # finding is independent of whether a reference step was mentioned, and
+        # it must survive until the card is built (see ``work_findings``).
+        findings = self._check_work(command.work)
         session = self._factory.create(command)
+        session.work_findings = findings
         problem = self._problem(session.problem_id)
 
         capabilities = self._capabilities(problem)
@@ -189,6 +210,37 @@ class SessionService:
         return self._close(
             session,
             "已退出学习模式；本次不生成卡点卡，也不展示最终答案。",
+        )
+
+    def verify_step(self, session_id: str, command: VerifyStepCommand) -> Verdict:
+        """Verify one submitted step without advancing the dialogue.
+
+        This is deliberately read-only: a subject's ``verify()`` may say
+        ``pass``/``fail``/``unknown``, but it must never become a state
+        transition or a card. The student can ask about a step at any point;
+        only the plugin that owns the problem's subject is consulted.
+        """
+
+        session = self._get(session_id)
+        problem = self._problem(session.problem_id)
+        if self._subjects is None:
+            return Verdict(
+                status="unknown",
+                detail="没有注册学科插件，未对这一步作断言。",
+            )
+        plugin = self._subjects.for_subject(problem.subject)
+        if plugin is None:
+            return Verdict(
+                status="unknown",
+                detail=f"没有注册「{problem.subject}」的学科插件，未对这一步作断言。",
+            )
+        return plugin.verify(
+            StudentStep(
+                node_id=command.node_id,
+                text=command.text,
+                turn=session.turn,
+                data=command.data,
+            )
         )
 
     def _handle_unknown(
@@ -335,6 +387,13 @@ class SessionService:
         """What this subject's tier lets the dialogue promise (S7)."""
 
         return capabilities_for(self._factory.level_for(problem.subject))
+
+    def _check_work(self, work: str) -> tuple[WorkFinding, ...]:
+        """Run the optional equality checker; no checker means the old path."""
+
+        if self._equality_checker is None or not work.strip():
+            return ()
+        return self._equality_checker.findings(work)
 
     def _hint(self, session: DialogueSession) -> StructureHint | None:
         """Rebuild the structure hint for a NONE-tier session.

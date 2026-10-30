@@ -36,7 +36,9 @@ from synapse.application.ports import AnswerStore, ProblemRepository, SessionRep
 from synapse.application.problem_resolver import ProblemResolver
 from synapse.application.service import SessionService
 from synapse.application.subject import SubjectRegistry
+from synapse.application.work_check import EqualityChecker
 from synapse.domain.problem.alignment import RuleBasedAligner
+from synapse.infrastructure.features import FeatureFlags
 from synapse.infrastructure.guards import AnswerStoreLeakGuardFactory
 from synapse.infrastructure.in_memory import (
     InMemoryAnswerStore,
@@ -52,6 +54,7 @@ from synapse.infrastructure.subjects.chinese import ChinesePlugin
 from synapse.infrastructure.subjects.math import MathPlugin
 from synapse.infrastructure.subjects.physics import PhysicsPlugin
 from synapse.infrastructure.system import SystemClock, UuidSessionIdGenerator
+from synapse.infrastructure.verification.equalities import SympyEqualityChecker
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,16 +65,19 @@ class Container:
     service: SessionService
     settings: LLMSettings
     subjects: SubjectRegistry
+    features: FeatureFlags
 
 
 def build_container(
     settings: LLMSettings | None = None,
     *,
+    features: FeatureFlags | None = None,
     llm_client: LLMClient | None = None,
     auditor: CallAuditor | None = None,
     generator: GraphGenerator | None = None,
 ) -> Container:
     resolved = settings or LLMSettings.from_env()
+    flags = features or FeatureFlags.from_env()
     sessions = InMemorySessionRepository()
     problems = InMemoryProblemRepository()
     answers = InMemoryAnswerStore()
@@ -83,12 +89,21 @@ def build_container(
     warm = getattr(graph_generator, "warm", None)
     if callable(warm):
         warm()
+    # Opt-in (default off): verifying the student's own equals signs changes
+    # annotated baseline cards, so the golden path must not see it.
+    equality_checker: EqualityChecker | None = (
+        SympyEqualityChecker() if flags.equality_check else None
+    )
     # The plugin owns the generator; the repository owns the store, so a
     # generated problem can be served again on later turns (M2.5 S5 ②).
     problems.set_plugins(
         SubjectRegistry(
             (
-                MathPlugin(problems.catalog, generator=graph_generator),
+                MathPlugin(
+                    problems.catalog,
+                    generator=graph_generator,
+                    equality_checker=equality_checker,
+                ),
                 PhysicsPlugin(generator=graph_generator),
                 ChinesePlugin(generator=graph_generator),
             )
@@ -121,6 +136,8 @@ def build_container(
         planner=planner,
         composer=composer,
         opening_composer=opening,
+        equality_checker=equality_checker,
+        subjects=problems.plugins,
     )
     return Container(
         sessions=sessions,
@@ -129,6 +146,7 @@ def build_container(
         service=service,
         settings=resolved,
         subjects=problems.plugins,
+        features=flags,
     )
 
 

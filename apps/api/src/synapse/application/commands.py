@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 
@@ -22,3 +23,12 @@ class StartSessionCommand:
 class SubmitAnswerCommand:
     answer: str
     option_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class VerifyStepCommand:
+    """One free-text step; ``data`` is an optional subject-owned payload."""
+
+    text: str
+    node_id: str = ""
+    data: Mapping[str, object] | None = None

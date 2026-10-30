@@ -10,9 +10,15 @@ from synapse.api.schemas import (
     CreateSessionRequest,
     HealthOut,
     SessionOut,
+    StepRequest,
+    StepVerdictOut,
     TurnRequest,
 )
-from synapse.application.commands import StartSessionCommand, SubmitAnswerCommand
+from synapse.application.commands import (
+    StartSessionCommand,
+    SubmitAnswerCommand,
+    VerifyStepCommand,
+)
 from synapse.application.factory import ProblemNotSupported, UnsupportedMode
 from synapse.application.service import InvalidAnswer, SessionNotFound, SessionService
 from synapse.domain.dialogue.table import IllegalTransition
@@ -65,6 +71,28 @@ def get_session(
         service.problem_title(view.session.problem_id),
         service.problem_text(view.session.problem_id),
     )
+
+
+@router.post("/sessions/{session_id}/steps", response_model=StepVerdictOut)
+def verify_step(
+    session_id: str,
+    request: StepRequest,
+    service: SessionService = Depends(get_service),
+) -> StepVerdictOut:
+    """Verify one step; read-only, so it never advances the dialogue."""
+
+    try:
+        verdict = service.verify_step(
+            session_id,
+            VerifyStepCommand(
+                text=request.text,
+                node_id=request.node_id,
+                data=request.data,
+            ),
+        )
+    except SessionNotFound as exc:
+        raise HTTPException(status_code=404, detail="session not found") from exc
+    return StepVerdictOut(version="0.1", status=verdict.status, detail=verdict.detail)
 
 
 @router.post("/sessions/{session_id}/turns", response_model=SessionOut)

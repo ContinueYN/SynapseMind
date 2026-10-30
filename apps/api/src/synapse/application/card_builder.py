@@ -21,6 +21,45 @@ from synapse.domain.dialogue.session import DialogueSession
 from synapse.domain.problem.models import Problem, SolutionNode
 
 _FALLBACK_ONE_LINE = "当前最可能卡在这一步，仍需一道迁移题确认。"
+_ONE_LINE_MAX = 200  # CardOut.one_line is capped at 200 characters
+_FORMULA_MAX = 80
+
+
+def _clip(text: str, limit: int) -> str:
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1] + "…"
+
+
+def _work_one_line(session: DialogueSession) -> str:
+    """One sentence quoting the student's own broken equals sign, or ``""``.
+
+    Empty unless the equality-check flag put a finding on the session, so the
+    flag-off baseline never reaches this function's output.
+    """
+
+    if not session.work_findings:
+        return ""
+    finding = session.work_findings[0]
+    formula = _clip(f"{finding.left} = {finding.right}", _FORMULA_MAX)
+    summary = finding.summary or finding.counterexample
+    sentence = f"你写的「{formula}」这一步等号不成立"
+    if summary:
+        sentence += f"：{summary}"
+    return _clip(sentence + "。", _ONE_LINE_MAX)
+
+
+def _work_evidence(session: DialogueSession, limit: int = 2) -> tuple[str, ...]:
+    """The student's formula plus the concrete numbers behind the claim."""
+
+    lines: list[str] = []
+    for finding in session.work_findings[:limit]:
+        detail = finding.summary or finding.counterexample
+        line = f"等式：{finding.left} = {finding.right}"
+        if detail:
+            line += f"；{detail}"
+        lines.append(line)
+    return tuple(lines)
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,8 +101,14 @@ def _common(session: DialogueSession, problem: Problem) -> _Head:
     )
 
 
-def _evidence_lines(session: DialogueSession, extra: tuple[str, ...] = ()) -> tuple[str, ...]:
-    evidence = list(session.evidence.latest("probe", limit=1))
+def _evidence_lines(
+    session: DialogueSession,
+    *,
+    leading: tuple[str, ...] = (),
+    extra: tuple[str, ...] = (),
+) -> tuple[str, ...]:
+    evidence = list(leading)
+    evidence.extend(session.evidence.latest("probe", limit=1))
     evidence.extend(session.evidence.claims(limit=3))
     evidence.extend(extra)
     evidence = list(dict.fromkeys(evidence))[:4]
@@ -84,8 +129,8 @@ def _annotated_card(session: DialogueSession, problem: Problem) -> DiagnosisCard
         layer=head.layer,
         label=head.label,
         node_id=session.hypotheses.states[head.top_id].hypothesis.node_id,
-        one_line=_ONE_LINE.get(head.top_id, _FALLBACK_ONE_LINE),
-        evidence=_evidence_lines(session),
+        one_line=_work_one_line(session) or _ONE_LINE.get(head.top_id, _FALLBACK_ONE_LINE),
+        evidence=_evidence_lines(session, leading=_work_evidence(session)),
         excluded=_excluded_lines(session),
         confidence=round(head.confidence, 2),
         confidence_label=head.confidence_label,
@@ -114,20 +159,28 @@ def _generated_card(session: DialogueSession, problem: Problem) -> DiagnosisCard
     if node is None:
         one_line = _FALLBACK_ONE_LINE
         node_id = graph.nodes[0].id if graph.nodes else ""
-        evidence = _evidence_lines(session)
+        evidence = _evidence_lines(session, leading=_work_evidence(session))
     elif option_text:
         one_line = (
             f"你在「{node.text}」这一步选了「{option_text}」，"
             f"这道题更像是「{head.label}」层面的问题。"
         )
         node_id = node.id
-        evidence = _evidence_lines(session)
+        evidence = _evidence_lines(session, leading=_work_evidence(session))
     else:
         # Alignment only notices *omitted* steps, so the card must say exactly
         # that: the process does not show this step, not "you got it wrong".
         one_line = f"你的过程里没有出现「{node.text}」这一步，先回到这里确认，再往下走。"
         node_id = node.id
-        evidence = _evidence_lines(session, (f"对齐：{node.text}",))
+        evidence = _evidence_lines(
+            session,
+            leading=_work_evidence(session),
+            extra=(f"对齐：{node.text}",),
+        )
+
+    # A proved broken equals sign is more specific than "this step is missing";
+    # it becomes the one-line conclusion, with the formula kept in evidence.
+    one_line = _work_one_line(session) or one_line
 
     return DiagnosisCard(
         version="0.1",

@@ -14,6 +14,9 @@
 
 判不了就说判不了：读不懂的写法（`h台/h锥`）整段跳过，记 `notation_unsupported`。
 **宁可漏判，不误判**——把学生正确的一步判成错，比不判更伤。
+
+``SympyEqualityChecker`` 是这个模块对外的端口适配器；产品链路只认
+``application.work_check.EqualityChecker``，不直接 import 这个模块。
 """
 
 from __future__ import annotations
@@ -22,6 +25,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from synapse.domain.diagnosis.work import WorkFinding
 from synapse.infrastructure.verification.notation import free_symbols, normalize, parse
 
 _SEGMENT_SPLIT = re.compile(r"[。；;\n]+")
@@ -33,22 +37,11 @@ _NOISE = ("所以", "因为", "根号下", "即", "则", "故", "约", "下", "�
 _SAMPLES = (0.1, 0.3, 0.7, 1.0, 1.7, 2.3, 3.7, 5.0, -0.4, -1.3)
 
 
-@dataclass(frozen=True, slots=True)
-class Finding:
-    """一条「这一步等号不成立」的证据。"""
-
-    kind: str  # "identity" | "limit"
-    left: str
-    right: str
-    detail: str
-    counterexample: str = ""
-
-
 @dataclass
 class Report:
     chains: int = 0
     checked: int = 0
-    findings: list[Finding] = field(default_factory=list)
+    findings: list[WorkFinding] = field(default_factory=list)
     skipped: dict[str, int] = field(default_factory=dict)
 
     def skip(self, reason: str) -> None:
@@ -139,7 +132,7 @@ def _identity_verdict(left: Any, right: Any, symbols: set[str]) -> tuple[bool | 
         if a is None or b is None:
             continue
         if abs(a - b) > 1e-6:
-            return False, f"{names[0]}={sample:g}：左边 {a:.4g}，右边 {b:.4g}"
+            return False, f"{names[0]}={sample:g} 时左边 {a:.4g}、右边 {b:.4g}"
     return None, ""
 
 
@@ -159,13 +152,15 @@ def _check_pair(left: _Piece, right: _Piece, *, limit_point: float | None, repor
             return
         report.checked += 1
         if abs(a - b) > 1e-9:
+            summary = f"左边 {a:.6g}、右边 {b:.6g}"
             report.findings.append(
-                Finding(
+                WorkFinding(
                     kind="identity",
                     left=left.body,
                     right=right.body,
                     detail="这个等号不成立。",
                     counterexample=f"左边 {a:.6g}，右边 {b:.6g}",
+                    summary=summary,
                 )
             )
         return
@@ -173,7 +168,8 @@ def _check_pair(left: _Piece, right: _Piece, *, limit_point: float | None, repor
     if limit_point is not None and (left.is_limit or right.is_limit):
         import sympy
 
-        variable = sympy.Symbol(sorted(symbols)[0])
+        name = sorted(symbols)[0]
+        variable = sympy.Symbol(name)
         left_value = _limit_of(left_expr, variable, limit_point)
         right_value = _limit_of(right_expr, variable, limit_point)
         if left_value is None or right_value is None:
@@ -186,14 +182,14 @@ def _check_pair(left: _Piece, right: _Piece, *, limit_point: float | None, repor
         report.checked += 1
         if abs(a - b) > 1e-6:
             report.findings.append(
-                Finding(
+                WorkFinding(
                     kind="limit",
                     left=left.body,
                     right=right.body,
-                    detail=(
-                        f"这个等号不成立：{sorted(symbols)[0]}→{limit_point:g} 时两边极限不同。"
-                    ),
+                    detail=(f"这个等号不成立：{name}→{limit_point:g} 时两边极限不同。"),
                     counterexample=f"左边极限 {a:.6g}，右边极限 {b:.6g}",
+                    # 卡面直接用这一句：`x→0 时左边极限 0.5、右边 2`。
+                    summary=(f"{name}→{limit_point:g} 时左边极限 {a:.6g}、右边 {b:.6g}"),
                 )
             )
         return
@@ -209,12 +205,13 @@ def _check_pair(left: _Piece, right: _Piece, *, limit_point: float | None, repor
     report.checked += 1
     if verdict is False:
         report.findings.append(
-            Finding(
+            WorkFinding(
                 kind="identity",
                 left=left.body,
                 right=right.body,
                 detail="这个等号不成立：两边作为变量的函数不等价。",
                 counterexample=example,
+                summary=example,
             )
         )
 
@@ -242,3 +239,18 @@ def check_work(text: str) -> Report:
                 continue
             _check_pair(left, right, limit_point=point, report=report)
     return report
+
+
+class SympyEqualityChecker:
+    """Port adapter used by ``SessionService`` when the feature flag is on.
+
+    SymPy is an optional extra: a deployment without it must still start
+    sessions. Missing SymPy means "cannot judge", which is an empty finding
+    list — never an exception and never a guess.
+    """
+
+    def findings(self, work: str) -> tuple[WorkFinding, ...]:
+        try:
+            return tuple(check_work(work).findings)
+        except ImportError:
+            return ()

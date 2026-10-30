@@ -18,6 +18,8 @@ export type HintStep = Schemas["HintStepOut"];
 export type HistoryItem = Schemas["HistoryItemOut"];
 export type Progress = Schemas["ProgressOut"];
 export type TurnInput = Schemas["TurnRequest"];
+export type StepInput = Schemas["StepRequest"];
+export type StepVerdict = Schemas["StepVerdictOut"];
 
 export type SessionState =
   | "INGEST"

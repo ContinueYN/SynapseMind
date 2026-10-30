@@ -105,7 +105,10 @@ class StudentStep:
         Optional number, or ``{"relative": float, "absolute": float}``. The
         defaults are ``relative=1e-6`` and ``absolute=1e-9``.
 
-    Math ignores ``data`` and keeps its existing claim verifier.
+    Math reads ``text`` as an equality chain (when ``SYNAPSE_EQUALITY_CHECK``
+    is on) and ignores ``data``; graph claims are still verified by the
+    separate claim verifier. ``pass`` means "the checks that ran found no
+    inconsistency", never "this step is proved correct".
     """
 
     node_id: str
@@ -151,7 +154,9 @@ class SubjectPlugin(Protocol):
 
     def evidence_model(self, graph: SolutionGraph) -> EvidenceModel: ...
 
-    def verify(self, step: StudentStep) -> Verdict: ...
+    def verify(self, step: StudentStep) -> Verdict:
+        """Verify one step; read-only, never a state transition (S5 ⑥)."""
+        ...
 
 
 @dataclass(frozen=True, slots=True)

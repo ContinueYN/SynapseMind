@@ -6,7 +6,7 @@ FastAPI/Pydantic from leaking into the domain layer.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -153,6 +153,25 @@ class SessionOut(StrictModel):
 class TurnRequest(StrictModel):
     answer: str = Field(min_length=1, max_length=2000)
     option_id: str | None = Field(default=None, max_length=20)
+
+
+class StepRequest(StrictModel):
+    """One step to verify; ``data`` is a subject-owned structured payload.
+
+    The text is enough for math's equality-chain check. Physics needs
+    ``data`` (``equation``/``expression``, units, values); its parser owns the
+    validation and returns ``unknown`` for keys it cannot read.
+    """
+
+    text: str = Field(min_length=1, max_length=8000)
+    node_id: str = Field(default="", max_length=64)
+    data: dict[str, Any] | None = None
+
+
+class StepVerdictOut(StrictModel):
+    version: Literal["0.1"]
+    status: Literal["pass", "fail", "unknown"]
+    detail: str = Field(default="", max_length=1000)
 
 
 class HealthOut(StrictModel):

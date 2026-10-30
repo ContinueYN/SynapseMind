@@ -7,6 +7,7 @@ from datetime import datetime
 
 from synapse.domain.diagnosis.hypotheses import HypothesisSet
 from synapse.domain.diagnosis.models import DiagnosisCard
+from synapse.domain.diagnosis.work import WorkFinding
 from synapse.domain.dialogue.events import DialogueEvent
 from synapse.domain.dialogue.states import DialogueState
 from synapse.domain.dialogue.table import next_state
@@ -40,6 +41,9 @@ class DialogueSession:
     history: list[TurnRecord] = field(default_factory=list)
     evidence: EvidenceChain = field(default_factory=EvidenceChain)
     diagnosis: DiagnosisCard | None = None
+    # Filled at start, read when the card is built several turns later. Empty
+    # unless the equality-check flag is on (see application/work_check.py).
+    work_findings: tuple[WorkFinding, ...] = ()
 
     def advance(self, event: DialogueEvent) -> DialogueState:
         self.state = next_state(self.state, event)

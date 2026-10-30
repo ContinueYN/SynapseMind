@@ -66,6 +66,8 @@ def test_real_student_limit_chain_catches_the_broken_equality() -> None:
     # 正确答案是 1/2，学生算出 2；两边极限不同是这一步错的可机器复算的证据。
     assert "0.5" in finding.counterexample
     assert "2" in finding.counterexample
+    # The card quotes this exact sentence; it is built where the numbers are known.
+    assert finding.summary == "x→0 时左边极限 0.5、右边 2"
 
 
 def test_correct_limit_chain_is_not_flagged() -> None:

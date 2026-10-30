@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://synapsemind.dev/schemas/step-verification.schema.json",
+  "title": "StepVerdict",
+  "description": "单步验证结果（M2.5 S5 ⑥，v0.1）。POST /api/v1/sessions/{id}/steps 的响应；只验证提交的这一步，不推进对话、不生成卡点卡、不返回答案。pass 只表示实际跑过的检查没有发现不一致，不是证明；unknown 表示未启用、读不懂或没有可判的断言，不能写成“已核对”。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "status", "detail"],
+  "properties": {
+    "version": {"type": "string", "const": "0.1"},
+    "status": {
+      "type": "string",
+      "enum": ["pass", "fail", "unknown"],
+      "description": "fail 必须带具体反例/数值差；unknown 必须说明缺什么；pass 只表示跑过的检查没发现反例。"
+    },
+    "detail": {
+      "type": "string",
+      "maxLength": 1000,
+      "description": "给学生的具体说明；fail 要引用学生写的式子或两边数值，unknown 要说明未启用/读不懂/没发现可证的错误。"
+    }
+  }
+}

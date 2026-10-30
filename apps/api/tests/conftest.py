@@ -15,6 +15,9 @@ def _rule_mode_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
         "SYNAPSE_LLM_MODE",
         "SYNAPSE_LLM_API_KEY",
         "DEEPSEEK_API_KEY",
+        # The equality-chain switch changes card text; a developer's shell must
+        # not flip the golden baseline under pytest.
+        "SYNAPSE_EQUALITY_CHECK",
     ):
         monkeypatch.delenv(name, raising=False)
 

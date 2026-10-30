@@ -17,8 +17,10 @@ from synapse.domain.problem.models import (
     SolutionNode,
 )
 from synapse.infrastructure.seed import SAMPLE_PROBLEM
+from synapse.infrastructure.verification.equalities import SympyEqualityChecker
 
 EVIDENCE = {"p1": {"A": {"H_L2": 1.2}, "B": {"H_L1": 1.2}}}
+REAL_LIMIT_WORK = "=lim[sinX/(X+sinX/cosX)] =lim[sinX/X +cosX] =1+1 =2，有哪里错了么"
 
 
 def _problem(*, annotated: bool) -> Problem:
@@ -141,6 +143,23 @@ def test_a_generated_card_names_the_hypothesis_its_evidence_supports(top_option:
     expected = "条件转译 / 参数分类" if top_option == "A" else "概念不清：恒成立与最值"
     assert card.label == expected
     assert expected in card.one_line
+
+
+def test_a_proved_broken_equals_sign_reaches_the_card() -> None:
+    """P_PUB_002's real lim chain: the card must carry the two limit values."""
+
+    findings = SympyEqualityChecker().findings(REAL_LIMIT_WORK)
+    problem = _problem(annotated=False)
+    session = _session(problem)
+    session.work_findings = findings
+
+    card = build_diagnosis_card(session, problem)
+
+    assert len(findings) == 1
+    assert "x→0 时左边极限 0.5、右边 2" in card.one_line
+    assert any("x→0 时左边极限 0.5、右边 2" in line for line in card.evidence)
+    # The finding changes the conclusion, not which node the card points at.
+    assert card.node_id == "n2"
 
 
 def test_an_annotated_card_keeps_the_hand_written_line() -> None:

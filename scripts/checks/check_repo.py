@@ -33,6 +33,7 @@ PUBLIC_REQUIRED = [
     "specs/solution-graph.schema.json",
     "specs/diagnosis.schema.json",
     "specs/structure-hint.schema.json",
+    "specs/step-verification.schema.json",
 ]
 
 REQUIRED = PUBLIC_REQUIRED if PUBLIC else [
@@ -43,6 +44,7 @@ REQUIRED = PUBLIC_REQUIRED if PUBLIC else [
     "specs/solution-graph.schema.json",
     "specs/diagnosis.schema.json",
     "specs/structure-hint.schema.json",
+    "specs/step-verification.schema.json",
     "tools/generate_docx.py",
     "tools/merge_markdown.py",
     "tools/diagrams.py",

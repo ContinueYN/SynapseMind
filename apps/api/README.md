@@ -93,6 +93,7 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 | `POST` | `/api/v1/sessions` | 交题 + 过程，返回首问 |
 | `GET` | `/api/v1/sessions/{id}` | 恢复会话/当前问题 |
 | `POST` | `/api/v1/sessions/{id}/turns` | 回答当前探针 |
+| `POST` | `/api/v1/sessions/{id}/steps` | 验证一条步骤（只读，不推进会话） |
 | `POST` | `/api/v1/sessions/{id}/exit` | 显式退出学习模式 |
 
 约定：
@@ -101,6 +102,7 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 - `option_id` 为 `A`–`D` 或 `unknown`；文本答案也可匹配选项。
 - 一次只返回一个 `prompt.question`；最多 6 轮。
 - 后验 `≥0.80` 且领先 `≥0.25` 才出卡；到轮次上限仍 `<0.55` 明确不出确定卡点。
+- `/steps` 只验证提交的这一步（`specs/step-verification.schema.json`）：不推进状态、不出卡；`unknown` 表示未启用/读不懂/没有可判的断言，不是“这步正确”。
 
 ## LLM 追问（M2）
 
@@ -146,7 +148,7 @@ NONE 档会话在 `ALIGN` 之后直接收束到 `STOP → CLOSED`：不追问、
 | `aligner_for()` | 标注题 → `RuleBasedAligner`；生成题 → `TypeCueAligner` | `TypeCueAligner`（S6 基线不重标定） | `ClauseCueAligner`（分句重合，可报 `partial`） |
 | `probes_for()` | 返回节点自带探针 | 同左（`hypothesis_labels` 换物理词表） | 恒空 |
 | `evidence_model()` | 生成图读图内 `probe.evidence`；只有已标注种子图回退手写 `EVIDENCE` | 只读图内权重，不回退数学 `EVIDENCE` | 恒空 |
-| `verify()` | SymPy 反例搜索（`pass`/`fail`/`unknown`） | `StudentStep.data` 的量纲与数值回代；纯文本 `unknown` | 恒 `unknown`（NONE 档没有可自动验证的真值） |
+| `verify()` | 单步等式链：读 `text`，可证伪时 `fail`（带反例），否则 `unknown`；从不 `pass`，`data` 忽略。图顶层 `claim` 另由反例搜索核对（`pass`/`fail`/`unknown`） | `StudentStep.data` 的量纲与数值回代；纯文本 `unknown` | 恒 `unknown`（NONE 档没有可自动验证的真值） |
 
 `subject` 是显式声明：文本识别出的学科与声明不一致时返回 **422**，而不是静默按文本路由。三个插件共用同一套状态机与诊断门槛；对齐策略由插件给出（S8），`domain/dialogue/` 一行未改。
 

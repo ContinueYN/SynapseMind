@@ -100,10 +100,10 @@ def test_every_seed_probe_option_has_evidence() -> None:
             assert table[option], f"{probe.id} option {option} is empty"
 
 
-def test_verify_admits_it_has_no_verifier_yet() -> None:
+def test_verify_without_the_equality_flag_is_unknown() -> None:
     verdict = PLUGIN.verify(StudentStep(node_id="n3", text="a>0 时成立"))
     assert verdict.status == "unknown"
-    assert verdict.detail
+    assert "未启用" in verdict.detail
 
 
 def test_registry_routes_by_subject() -> None:

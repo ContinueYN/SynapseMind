@@ -6,7 +6,7 @@
 
 ## 一、当前状态（2026-10-30）
 
-> 下面各段里的 `pytest` 数字是**写成当时的快照**（307 → 308 → 327，随每轮新增测试递增），
+> 下面各段里的 `pytest` 数字是**写成当时的快照**（307 → 308 → 327 → 334 → 339，随每轮新增测试递增），
 > 不是互相矛盾的三个值；当前值以实跑为准。判断一条能力有没有落地，看它有没有自己的
 > 报告和测试，不要看这里的数字。
 
@@ -17,7 +17,7 @@
 | M1 walking skeleton | 落地 | 交题 → 对齐 → 2 轮探针 → L2 卡点卡；规则版，内存仓储 |
 | M2 窄口径 | 落地 | LLM 追问 + 校验/重试/降级 + 10 条 golden；默认 `SYNAPSE_LLM_MODE=off` |
 | M2.5 S4–S8 | 落地 | 生成图进主链路；物理 PARTIAL、语文 NONE；首问 p50 4.2s / p95 4.6s（预算 8s） |
-| S5 ⑥ 等式链校验 | **落地但未接线** | `notation.py` + `equalities.py` 只有测试引用，产品链路无调用方 |
+| S5 ⑥ 等式链校验 | **落地（默认关）** | `start()` 查首问过程并进卡面；`POST /sessions/{id}/steps` 单步验证；`SYNAPSE_EQUALITY_CHECK` 默认 `off` |
 | 题集 / 复盘 / 探针 | 落地 | 100 题带 `expected_answer`、4 条真实学生原话、构造真值的缺口探针 |
 | 包装层（门面、论文引用区） | **未开始** | 首页没有 CHC／突触／引用任何一处 |
 
@@ -83,12 +83,11 @@
    - **S7 已完成（2026-10-30）：NONE 档承诺降级，语文接入。** `ChinesePlugin`（`subject="chinese"`、`level=NONE`）与数学/物理共用同一个 `SessionService`、状态机和 `CompositeAligner`；`application/commitment.py` 的能力表是唯一开关，NONE 在 ALIGN 之后直接收束到 `STOP → CLOSED`，不调用探针规划器、不生成卡点卡。输出换成另一张契约（`specs/structure-hint.schema.json` / `domain/diagnosis/hint.py`）：`one_line` + `steps[{node_id,text,status}]` + `focus_node_id` + `next_step` + 固定 disclaimer，没有 layer/confidence/next_action/verify；提示由对齐结果派生，每次 `get()` 重建。语文 prompt `graph-v6-chinese` 只要求步骤，探针/claim 若被写出会被丢弃（`probes_dropped_unsupported` / `claim_dropped_unsupported`），`review(require_probes=False)` 允许无探针图。真实 6 题 × 2 段过程：建会话 12/12、结构提示 12/12、schema 合规 12/12、出卡 0/12、探针 0/12；同题复用同一张图 6/6，覆盖数 full ≥ partial 6/6、focus 后移 4/6；p50 2.3s / p95 3.2s。报告：`eval/reports/m2.5-s7-none-tier.md`。**已知低估**：整句 3-gram 覆盖率对多分句语文节点偏严，覆盖计数偏低（partial 1.0/8、full 1.7/8）；**S7 之后**该补的是分句级匹配或对齐器端口（S8 候选），不是调低门槛。物理 PARTIAL 验证器的量纲/数值回代已落地（需要 `StudentStep.data`）；矢量、微积分、不确定度与自然语言抽取仍未做。
    - **S8 已完成（2026-10-30）：对齐策略插件化 + 分句级匹配，契约 v0.2。** `SubjectPlugin.aligner_for(problem) -> StepAligner`；`SessionFactory` 先问插件，`CompositeAligner` 改按 `problem.annotated` 分发，`api/deps.py` 只留无插件回退。数学标注→`RuleBasedAligner`、生成→`TypeCueAligner`，物理 `TypeCueAligner`，语文 `ClauseCueAligner`（小句 ≥4 字、公共段 ≥4 字、覆盖 ≥75% 为 `covered` / ≥15% 为 `partial`）。`AlignmentResult` 加 `partial_node_ids`；`structure-hint.schema.json` 升 v0.2，`HintOut` 加 `partial`，前端计数「有写到的步数（含部分）」。6 题 × 3 段过程：建会话 18/18、schema 18/18、服务=直接调用 18/18、0 卡/0 探针、CLOSED 18/18；同一张图旧 full covered 均值 1.7 → 新 covered 1.7 + partial 2.3（加权 2.8），full≥partial 6/6、新≥旧 6/6、blank 全 missing 6/6。报告：`eval/reports/m2.5-s8-clause-alignment.md`。**边界**：字面重合不是语义匹配；`partial` 不是写错；数学/物理没有 opt-in；`domain/dialogue/` 未改。**S8 之后**仍没有语文标注题集/真实学生作答，18/18 是接线验收，不是诊断准确率。
 3. **待收口的既有问题**：`docs/design/plan/` 未入库；M2.5 题集已扩到 100 道数学（带 `expected_answer`）+ 6 物理 + 6 语文，但 `eval/golden/` 仍是 10 条，`eval/golden/README` 的 100 条配额未达（golden 是模拟对话，不是题集）。前端组件测试已补，但仍是组件级，不含浏览器端到端。
-4. **下一件要做的事（2026-10-30 深夜定，尚未开工）：把等式链校验接出孤岛。**
-   - **现状（已核实）**：`verification/notation.py` + `equalities.py` 全仓唯一引用方是 `tests/test_equalities.py`；`MathPlugin.verify()` 是占位（注释写着 has no implementation yet）；`SubjectPlugin.verify()` 在产品链路**零调用方**；`api/routes.py` 没有交步骤端点。所以现在能算出「这一步等号不成立」，但这句话到不了学生眼前。
-   - **方案 A（优先，最小）**：`SessionService.start()` 里 `command.work` 已在手，对齐之前跑 `check_work(work)`；`findings` 非空时把结论并进卡点卡的「一句话结论」与「依据」，用学生自己写的式子做证据。**必须加开关且默认关**：它会改动标注题基线，开着会破坏 golden 10/10 的逐字节比对。
-   - **方案 B（更正，但大）**：新增「交步骤」端点 + DTO，把 `SubjectPlugin.verify()` 真正接上，`MathPlugin.verify()` 从占位改成调 `check_work`。
-   - **验收**：`eval/problems/public-attempts-v0.1.jsonl` 里 `P_PUB_002` 那条 `lim` 链，卡面要出现「x→0 时左边极限 0.5、右边 2」；开关关闭时 golden 10/10 逐字节不变；`pytest` 全绿。
-   - **措辞纪律**：只说「这个等号不成立」＋ 具体反例，不说「你错了」「你理解偏了」；读不懂的式子跳过、不猜（误判比漏判更伤）。
+4. **等式链校验已接出孤岛（2026-10-30 深夜完成，方案 A + B；默认关）。**
+   - **已落地**：`SessionService.start()` 在 `factory.create()`（对齐）之前对 `command.work` 跑 `check_work`；finding 存进 `DialogueSession.work_findings`，`card_builder` 在标注/生成两张卡上把第一条 finding 写成「一句话结论」、公式与数值放进「依据」。端口是 `application/work_check.EqualityChecker`，实现是 `infrastructure/verification/equalities.SympyEqualityChecker`（缺 SymPy 时返回空，不抛异常）；开关 `SYNAPSE_EQUALITY_CHECK`（`infrastructure/features.py`，默认 `off`），也可用 `build_container(..., features=FeatureFlags(equality_check=True))` 显式打开。
+   - **验收（实跑）**：`public-attempts-v0.1.jsonl` 的 `P_PUB_002` 卡面出现「你写的「(sin(x)/(x+sin(x)/cos(x))) = (sin(x)/x+cos(x))」这一步等号不成立：x→0 时左边极限 0.5、右边 2。」；同批 4 条只命中这 1 条（`P_PUB_001/003/004` 无误报），报告 `eval/reports/m2.5-s5-student-review-public-equality.md`。开关关闭时 10 条 golden 卡面逐字节不变（`.tmp/golden-cards-before.json` 对照）、`m2_exit.py` **10/10**；`pytest` **334 全绿**；`ruff format --check`、`ruff check`、`mypy src`、import-linter 全过。
+   - **方案 B 已完成（2026-10-30 深夜）**：新增 `POST /api/v1/sessions/{session_id}/steps`（请求 `StepRequest`：`text` 必填，`node_id`/`data` 可选；响应 `StepVerdictOut`：`version`/`status`/`detail`）并登记 `specs/step-verification.schema.json`。`SessionService.verify_step()` 只查会话所属学科的插件，**不推进状态、不写仓储、不出卡**；未知会话 404。`MathPlugin.verify()` 不再占位：开关打开时调 `EqualityChecker.findings(step.text)`，有可证伪的等号就返回 `fail` 并带学生原句与反例（多条最多列 3 条、detail 截到 900 字），没找到、读不懂或开关关闭一律 `unknown`——**它从不返回 `pass`**，因为「没找到反例」不等于「这步正确」。物理仍走结构化 `data`（量纲/数值回代），纯文本 `unknown`。前端只加了 `verifyStep()` 客户端函数与生成类型，**页面还没有入口**。验收：`pytest` **339 全绿**（新增 5 条：端点默认关、带 flag 的反例、极限链反例、无发现不判对、404；反例用例同时断言会话状态未变）；`ruff check`、`ruff format --check`、`mypy src`、import-linter、`check_repo.py` 全过；开关关闭时 10 条 golden 卡面仍逐字节不变，`m2_exit.py` **10/10**；`npm run typecheck`/`lint`/`test` 通过。
+   - **仍未做**：前端「交步骤」输入区与结果展示；数学仍只查等号（赋值、定义、读不懂的式子跳过），物理前端没有结构化 `data` 表单；单步验证没有审计/限流，也没有把结果回写会话历史。措辞仍只写「这个等号不成立」＋具体反例。
 
 ---
 
@@ -222,6 +221,7 @@ python tools/merge_markdown.py
 | 前端测试跑的是 jsdom，不是浏览器 | `npm test` 用 `vitest.config.mts` + `src/test/setup.ts`；jsdom 没有 `matchMedia`/`rAF`，已在 setup 里垫片，`next/link` 在 `StructureHintView.test.tsx` 里被替换成 `<a>`。组件测试不覆盖真实布局、CSS 与动画，不能替代 `npm run build` 或浏览器 smoke；新增依赖后先跑 `npm ci --dry-run` 确认 lock 一致 |
 | 没有真数据时也有可机算的准确率：构造真值 | `scripts/eval/s5_gap_probe.py` 让模型扮演学生、**故意跳过第 k 步**并自报 `kept`，于是「哪一步该算没写」由构造决定。20 题（1 条泄漏剔除）：写了的步骤被认出 **59/98 = 60%**、缺口被认成 `missing` **13/19**、「首个 `missing` 就是被跳过那步」**4/19 = 21%**、卡点落在它 **4/18 = 22%**。前两个能干净归因到 `TypeCueAligner`（整句 3-gram 对口语改写几乎不命中）；最后那个含 `aligned` 策略代答的水分。`kept` 自报是防伪约定：模型把跳过的那步写了、或与节点文本有 6 字以上重合，就判泄漏并剔除（本轮 1/20）。改对齐器前后各跑一遍，比争论哪个匹配器更强可靠 |
 | 判学生写的式子：误判比漏判更伤 | `verification/notation.py` 只做机械转写（`2x`→`2*x`、`x²`→`x**2`、`sinX`→`sin(x)`、`根号（16）`→`sqrt(16)`），**读不懂就返回 `None`，绝不猜**；`equalities.py` 只在「两边都读得懂、自由符号相同、且都不是单个符号」时才判等号，`x=2`、`an=3^(n-1)` 这类赋值/定义不判。踩过的坑：`根号下（80/245）` 若被截成 `80/245`，会把学生**正确**的一步判成「等号不成立」——现在整段跳过并记 `notation_unsupported`。写这条链路的测试先测「不该报的没报」（`test_unreadable_heights_do_not_produce_a_false_alarm`），再测「该报的报了」 |
+| 等式链校验是 opt-in；卡片只查首问 | `SYNAPSE_EQUALITY_CHECK` 默认 `off`；打开后 finding 会替换标注题手写的 `one_line`（golden 的逐字节基线只保证在 `off` 下成立）。finding 在 `SessionService.start()` 写进 `session.work_findings`；后续步骤走 `POST /sessions/{id}/steps`（只读、不推进状态、不出卡），开关关闭时返回 `unknown`。数学 `MathPlugin.verify()` **只返回 `fail` 或 `unknown`，永不返回 `pass`**——没找到可证伪的等号不等于这步正确。生产环境缺 SymPy 时 `SympyEqualityChecker` 返回空 findings、不抛异常——空结果只是「没判」，不能写成「已核对」 |
 | 出卡率不是诊断准确率，命中率也不是 | `s5_session.py` 的 `aligned` 策略让模拟学生顺着对齐结论答题：20/20、100 题里 99/100 出卡只能证明接线。真实复盘跑 `s5_review.py`：它读学生原文，出卡与「期望卡点」做去空白子串匹配，`人工判断` 一列留空给老师。4 条 `public-web`（公开问答页里学生自己写的过程）拿到 4/4 出卡、4/4 节点在图内，但关键词命中只有 0/4（另一次 1/4）——**其中两三张卡其实指对了步骤**（`P_PUB_002`「代入基本极限 sin x/x→1」、`P_PUB_004`「用 a_n=S_n-S_{n-1} 消去 S」），是期望关键词「化简」「下标」没出现在节点文本里。**命中率比诊断本身更粗**，别拿它当准确率；卡点层仍 4/4 是 `L1`（层由「对齐发现的第一处缺失」决定，和题目语义无关） |
 | 生成题的卡面文案不能沿用种子题的主题 | 种子 `H_L1` 的 label 是「概念不清：恒成立与最值」，生成题早期直接复用它，于是 100 题里数列、立体几何、概率的卡都写着「恒成立与最值」。现在 `MathPlugin.labels_for(problem)` 按 `problem.annotated` 分档：标注题返回原表（种子卡逐字节不变），生成题用「概念不清：没抓住这一步的关键条件」；`SessionFactory._labels_for(problem)` 先问 `labels_for()` 再退回 `hypothesis_labels` 映射。物理/语文的 `hypothesis_labels` 不受影响。加卡面文案时先想清楚「这句话对任意主题的题都成立吗」 |
 | 复盘脚本的 `work` 会改变对齐结果 | `StartSessionCommand` 的 `work` 参与存在性对齐，`answer` 只用于泄漏守卫/展示。`s5_session.py` 默认灌 `SAMPLE_WORK["math"]`（「先确认题目的条件，再按参数分类讨论」），所以它对齐到的节点是那句模板话匹配到的；复盘时必须传学生原文，否则量到的是模板的卡点 |

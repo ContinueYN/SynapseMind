@@ -27,6 +27,7 @@ from synapse.application.subject import (
     Verdict,
     VerifiabilityLevel,
 )
+from synapse.application.work_check import EqualityChecker
 from synapse.domain.diagnosis.hypotheses import EVIDENCE, HYPOTHESES
 from synapse.domain.problem.alignment import (
     CompositeAligner,
@@ -83,10 +84,15 @@ class MathPlugin:
         generator: GraphGenerator | None = None,
         annotated_aligner: StepAligner | None = None,
         generated_aligner: StepAligner | None = None,
+        equality_checker: EqualityChecker | None = None,
     ) -> None:
         self._catalog = dict(catalog)
         self._identifier = identifier or TextProblemIdentifier(self._catalog)
         self._generator = generator
+        # Optional and off by default: without the checker ``verify()`` says
+        # "not checked" instead of guessing. The composition root installs it
+        # only when ``SYNAPSE_EQUALITY_CHECK`` is on.
+        self._equality_checker = equality_checker
         # The plugin owns the dispatch (S8). An annotated problem has a
         # hand-written reference and the rule aligner tuned against it; a
         # generated one only has node types and existence cues.
@@ -155,12 +161,38 @@ class MathPlugin:
         return EvidenceModel(weights={})
 
     def verify(self, step: StudentStep) -> Verdict:
-        # A STRONG subject without a step verifier must say so, never pretend.
-        # S5's verifier checks the graph's *answer claim*
-        # (``infrastructure/verification``); checking a student's free-text
-        # step is a different job and has no implementation yet.
-        del step
-        return Verdict(
-            status="unknown",
-            detail="学生步骤验证尚未实现；S5 只验证解法图里 claim 声明的答案区间，不对步骤作断言",
-        )
+        """Check the equals signs the student wrote in this step (S5 ⑥).
+
+        The checker is an optional falsifier: it can prove ``A = B`` false with
+        a concrete counterexample, but finding nothing does not prove the step
+        correct. So the honest outcomes are ``fail`` (with the counterexample)
+        and ``unknown`` (disabled, unreadable, or no broken equality found).
+        ``pass`` is never returned here; that would overclaim.
+        """
+
+        if self._equality_checker is None:
+            return Verdict(
+                status="unknown",
+                detail="等式链校验未启用（SYNAPSE_EQUALITY_CHECK=off）；没有对这一步作断言。",
+            )
+        text = step.text.strip()
+        if not text:
+            return Verdict(
+                status="unknown",
+                detail="这一步没有可读的式子，未作断言。",
+            )
+        findings = self._equality_checker.findings(text)
+        if not findings:
+            return Verdict(
+                status="unknown",
+                detail="没有找到可机器证明的等号错误；这不等于这一步正确（读不懂的式子会被跳过）。",
+            )
+        parts: list[str] = []
+        for finding in findings[:3]:
+            formula = f"{finding.left} = {finding.right}"
+            summary = finding.summary or finding.counterexample or finding.detail
+            parts.append(f"「{formula}」{summary}" if summary else f"「{formula}」")
+        detail = "这个等号不成立：" + "；".join(parts)
+        if len(detail) > 900:
+            detail = detail[:899] + "…"
+        return Verdict(status="fail", detail=detail)

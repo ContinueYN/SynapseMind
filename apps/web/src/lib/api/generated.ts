@@ -55,6 +55,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sessions/{session_id}/steps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify Step
+         * @description Verify one step; read-only, so it never advances the dialogue.
+         */
+        post: operations["verify_step_api_v1_sessions__session_id__steps_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sessions/{session_id}/turns": {
         parameters: {
             query?: never;
@@ -196,7 +216,12 @@ export interface components {
          *
          *     Kept separate from ``DiagnosisOut`` on purpose — it has no layer, no
          *     confidence and no ``next_action``/``verify``, so a client cannot render it
-         *     as a card by mistake (M2.5 S7, ``specs/structure-hint.schema.json``).
+         *     as a card by mistake (M2.5 S7; v0.2 since S8,
+         *     ``specs/structure-hint.schema.json``).
+         *
+         *     ``status="partial"`` means at least one clause matched but coverage stayed
+         *     below the covered threshold. It never means "wrong", and only the NONE
+         *     tier's clause aligner emits it.
          */
         HintOut: {
             /**
@@ -348,6 +373,45 @@ export interface components {
             /** History */
             history?: components["schemas"]["HistoryItemOut"][];
         };
+        /**
+         * StepRequest
+         * @description One step to verify; ``data`` is a subject-owned structured payload.
+         *
+         *     The text is enough for math's equality-chain check. Physics needs
+         *     ``data`` (``equation``/``expression``, units, values); its parser owns the
+         *     validation and returns ``unknown`` for keys it cannot read.
+         */
+        StepRequest: {
+            /** Text */
+            text: string;
+            /**
+             * Node Id
+             * @default
+             */
+            node_id: string;
+            /** Data */
+            data?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /** StepVerdictOut */
+        StepVerdictOut: {
+            /**
+             * Version
+             * @constant
+             */
+            version: "0.1";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pass" | "fail" | "unknown";
+            /**
+             * Detail
+             * @default
+             */
+            detail: string;
+        };
         /** TurnRequest */
         TurnRequest: {
             /** Answer */
@@ -460,6 +524,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    verify_step_api_v1_sessions__session_id__steps_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StepRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StepVerdictOut"];
                 };
             };
             /** @description Validation Error */
