@@ -133,6 +133,21 @@ class HintOut(StrictModel):
     disclaimer: str = Field(min_length=1, max_length=300)
 
 
+class ScaffoldStepOut(StrictModel):
+    label: str = Field(min_length=1, max_length=20)
+    text: str = Field(min_length=1, max_length=200)
+    node_id: str | None = Field(default=None, pattern=r"^n[0-9]+$")
+
+
+class ScaffoldOut(StrictModel):
+    """A blank-attempt example: at most two steps, never the final answer."""
+
+    steps: list[ScaffoldStepOut] = Field(min_length=1, max_length=2)
+    focus_node_id: str | None = Field(default=None, pattern=r"^n[0-9]+$")
+    next_step: str = Field(min_length=1, max_length=200)
+    disclaimer: str = Field(min_length=1, max_length=300)
+
+
 class SessionOut(StrictModel):
     session_id: str = Field(pattern=r"^S_[A-Z0-9]+$")
     state: str
@@ -146,6 +161,7 @@ class SessionOut(StrictModel):
     prompt: ProbeOut | None = None
     diagnosis: DiagnosisOut | None = None
     hint: HintOut | None = None
+    scaffold: ScaffoldOut | None = None
     notice: str | None = None
     progress: ProgressOut
     history: list[HistoryItemOut] = Field(default_factory=list)

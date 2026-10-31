@@ -31,6 +31,26 @@ const SESSIONS = {
       confidence: 0.45,
     },
   },
+  S_SCAFFOLD_E2E: {
+    problem_id: "P_E2E_SCAFFOLD",
+    problem_title: "恒成立与参数分类",
+    problem_text: "若对任意 x>0，ln x - a x ≤ 0 恒成立，求 a 的取值范围。",
+    subject: "math",
+    state: "SCAFFOLD",
+    prompt: null,
+    scaffold: {
+      steps: [
+        {
+          label: "第 1 步",
+          node_id: "n1",
+          text: "确认定义域 x>0，并识别“对所有 x>0 成立”。",
+        },
+      ],
+      focus_node_id: "n2",
+      next_step: "照着上面的写法，把你的下一行过程写出来；不用写最终答案。",
+      disclaimer: "示例只展示起步，不是本题答案；写出一行后继续诊断。",
+    },
+  },
   S_CARD_E2E: {
     problem_id: "P_E2E_CARD",
     problem_title: "恒成立与最值",
@@ -91,13 +111,14 @@ function sessionBody(id) {
   const diagnosis = preset.diagnosis ?? null;
   return {
     session_id: id,
-    state: diagnosis ? "DIAGNOSE" : "PROBE",
+    state: preset.state ?? (diagnosis ? "DIAGNOSE" : "PROBE"),
     ...preset,
     mode: "learning",
     turn: 0,
     max_turns: 6,
     diagnosis,
     hint: null,
+    scaffold: preset.scaffold ?? null,
     notice: null,
     progress: {
       turn: 0,
@@ -250,7 +271,7 @@ const server = createServer(async (req, res) => {
   }
 
   const match = url.pathname.match(
-    /^\/api\/v1\/sessions\/([^/]+)(\/steps)?$/,
+    /^\/api\/v1\/sessions\/([^/]+)(\/steps|\/turns)?$/,
   );
   if (!match) {
     send(res, 404, { detail: "not found" });
@@ -265,6 +286,35 @@ const server = createServer(async (req, res) => {
 
   if (req.method === "GET" && !match[2]) {
     send(res, 200, sessionBody(id));
+    return;
+  }
+
+  if (req.method === "POST" && match[2] === "/turns") {
+    let body;
+    try {
+      body = await readJson(req);
+    } catch {
+      send(res, 400, { detail: "invalid json" });
+      return;
+    }
+    if (id === "S_SCAFFOLD_E2E") {
+      send(res, 200, {
+        ...sessionBody(id),
+        state: "PROBE",
+        turn: 1,
+        scaffold: null,
+        prompt: {
+          action: "ask",
+          question: "定义域写出来之后，恒成立要转成什么？",
+          options: ["转成最值", "直接解方程", "先求导再分类"],
+          hint_level: 0,
+          reason_code: "DISCRIMINATE_HYPOTHESIS",
+          confidence: 0.52,
+        },
+      });
+      return;
+    }
+    send(res, 404, { detail: `no turn handler for ${id}: ${String(body.answer ?? "")}` });
     return;
   }
 

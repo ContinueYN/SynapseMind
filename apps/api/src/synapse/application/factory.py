@@ -137,6 +137,39 @@ class SessionFactory:
             return self._aligner
         return plugin.aligner_for(problem)
 
+    @staticmethod
+    def _supports_for(problem: Problem, alignment: AlignmentResult) -> tuple[str, ...]:
+        if not problem.annotated:
+            return ()
+        return _ALIGNMENT_SUPPORT.get(alignment.first_divergence, ())
+
+    def realign(
+        self,
+        session: DialogueSession,
+        problem: Problem,
+        attempt: StudentAttempt,
+    ) -> AlignmentResult:
+        """Re-align after a scaffold submission and append the new evidence.
+
+        Does not touch the hypothesis priors: those were set once in ``create``.
+        Only the alignment and its evidence change, so repeating a scaffold does
+        not double-count the same prior.
+        """
+
+        alignment = self._aligner_for(problem).align(problem, attempt)
+        session.alignment = alignment
+        supports = self._supports_for(problem, alignment)
+        for index, claim in enumerate(alignment.evidence):
+            session.evidence.add(
+                Evidence(
+                    id=f"scaffold:{session.scaffold_level}:{index}",
+                    source="alignment",
+                    claim=claim,
+                    supports=supports,
+                )
+            )
+        return alignment
+
     def create(self, command: StartSessionCommand) -> DialogueSession:
         if command.mode != "learning":
             raise UnsupportedMode(command.mode)
@@ -172,9 +205,7 @@ class SessionFactory:
         session.advance(DialogueEvent.PARSED)
         session.advance(DialogueEvent.ALIGNED)
 
-        supports = (
-            () if not problem.annotated else _ALIGNMENT_SUPPORT.get(alignment.first_divergence, ())
-        )
+        supports = self._supports_for(problem, alignment)
         for index, claim in enumerate(alignment.evidence):
             session.evidence.add(
                 Evidence(

@@ -10,6 +10,7 @@ import { KnowledgePanel } from "@/components/KnowledgePanel";
 import { Plane } from "@/components/Plane";
 import { PhysicsStepCheck } from "@/components/PhysicsStepCheck";
 import { ProblemBrief } from "@/components/ProblemBrief";
+import { ScaffoldView } from "@/components/ScaffoldView";
 import { StepCheck } from "@/components/StepCheck";
 import { StructureHintView } from "@/components/StructureHintView";
 import { Surface } from "@/components/Surface";
@@ -32,6 +33,7 @@ const PHASE: Record<string, string> = {
   NEED_INPUT: "等你补一句",
   ALIGN: "对齐",
   PROBE: "追问",
+  SCAFFOLD: "示例",
   DIAGNOSE: "定位",
   INTERVENE: "定位",
   VERIFY: "定位",
@@ -135,6 +137,27 @@ export default function DiagnosePage() {
     }
   }
 
+  async function sendScaffold(text: string) {
+    if (busy) return;
+    setPending({ answer: text, unknown: false });
+    setBusy(true);
+    setError(null);
+    try {
+      setSession(await submitTurn(sessionId, { answer: text }));
+    } catch (caught) {
+      if (isSessionConflict(caught)) {
+        await refreshAfterConflict("answer");
+      } else if (caught instanceof ApiError && caught.status === 422) {
+        setError("先写一行过程；不用写最终答案。");
+      } else {
+        setError(caught instanceof Error ? caught.message : "提交失败，请重试。");
+      }
+    } finally {
+      setBusy(false);
+      setPending(null);
+    }
+  }
+
   async function leave() {
     setBusy(true);
     setError(null);
@@ -188,6 +211,7 @@ export default function DiagnosePage() {
   const located = Boolean(session.diagnosis);
   /* NONE 档学科（语文/英语/历史）没有可自动验证的真值：只出结构提示 */
   const hint = session.hint ?? null;
+  const scaffold = session.scaffold ?? null;
   const hintSteps = hint?.steps ?? [];
   const hintTouched = hintSteps.filter((step) => step.status !== "missing").length;
   const confidence = Math.round((session.progress?.confidence ?? 0) * 100);
@@ -216,6 +240,13 @@ export default function DiagnosePage() {
       detail: `有写到 ${hintTouched}/${hintSteps.length} 步`,
       state: "stuck",
     });
+  } else if (scaffold) {
+    stops.push({
+      id: "scaffold",
+      label: "示例",
+      detail: "先照着写一行",
+      state: "stuck",
+    });
   } else if (session.prompt) {
     stops.push({
       id: "now",
@@ -234,7 +265,7 @@ export default function DiagnosePage() {
             <p className="sm-lab">诊断进度</p>
             <p className="sm-rail-turn">
               {session.turn}
-              <small>{hint ? "只给结构，不追问" : `/ ${session.max_turns} 轮`}</small>
+              <small>{scaffold ? "先看一步，不追问" : hint ? "只给结构，不追问" : `/ ${session.max_turns} 轮`}</small>
             </p>
             <p className="sm-rail-phase">{PHASE[session.state] ?? session.state}</p>
           </div>
@@ -242,7 +273,17 @@ export default function DiagnosePage() {
           <Dendrite step={46} stops={stops} />
 
           <div className="sm-signal">
-{hint ? (
+            {scaffold ? (
+              <>
+                <div className="sm-signal-top">
+                  <span className="sm-signal-lab">本轮输出</span>
+                  <span className="sm-signal-v">起步示例</span>
+                </div>
+                <p className="sm-signal-note">
+                  还没写过程，先给一步示例；不估算把握，也不判断卡点。
+                </p>
+              </>
+            ) : hint ? (
               <>
                 <div className="sm-signal-top">
                   <span className="sm-signal-lab">本轮输出</span>
@@ -281,7 +322,7 @@ export default function DiagnosePage() {
           <div className="sm-stage-head">
             <p className="sm-stage-title">{session.problem_title}</p>
 <span className="sm-stage-tag">
-              {hint ? "结构" : located ? "定位" : "追问"}
+              {scaffold ? "示例" : hint ? "结构" : located ? "定位" : "追问"}
             </span>
           </div>
 
@@ -300,6 +341,13 @@ export default function DiagnosePage() {
               </>
             ) : hint ? (
               <StructureHintView hint={hint} sessionId={sessionId} />
+            ) : scaffold ? (
+              <ScaffoldView
+                busy={busy}
+                onSubmit={sendScaffold}
+                scaffold={scaffold}
+                sessionId={sessionId}
+              />
             ) : session.prompt ? (
               <ProbeCard
                 busy={busy}
@@ -341,9 +389,11 @@ export default function DiagnosePage() {
           ) : null}
 
           <p className="sm-fine">
-            {hint
-              ? "这一轮的原则：只对照结构，不判断对错；想说“哪里没懂”，回交题页补一句过程。"
-              : "一次只问一个；问过的不会再问；前三轮不给答案。"}
+            {scaffold
+              ? "先照着示例写一行；示例只展示起步，不是本题答案。"
+              : hint
+                ? "这一轮的原则：只对照结构，不判断对错；想说“哪里没懂”，回交题页补一句过程。"
+                : "一次只问一个；问过的不会再问；前三轮不给答案。"}
           </p>
         </section>
       </div>

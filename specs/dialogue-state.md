@@ -1,4 +1,4 @@
-# 追问状态机 v0.1
+# 追问状态机 v0.2
 
 > 目标：LLM 只能在允许的状态里做允许的动作；状态转移由代码决定，不由模型自由发挥。
 
@@ -10,7 +10,8 @@
 | `PARSE` | 输入合法 | OCR、LaTeX 归一化、题型识别 | `ALIGN` 或 `NEED_INPUT` |
 | `NEED_INPUT` | 题目不清/缺答案 | 请用户确认题目、补一步过程 | `PARSE` |
 | `ALIGN` | 有解法图 + 学生步骤 | 步骤对齐、找第一处偏离 | `PROBE` / `DIAGNOSE` |
-| `PROBE` | 有 ≥2 个候选假设 | `ask` / `hint` / `confirm` | `PROBE` / `DIAGNOSE` |
+| `PROBE` | 有 ≥2 个候选假设 | `ask` / `hint` / `confirm` | `PROBE` / `DIAGNOSE` / `SCAFFOLD` |
+| `SCAFFOLD` | 完全没写或明确说“不会” | 给 1–2 步示例；不提问、不判卡点 | `PROBE` / `STOP` |
 | `DIAGNOSE` | 后验 ≥0.80 且 margin ≥0.25，或轮次=6 | `diagnose` | `INTERVENE` / `STOP` |
 | `INTERVENE` | 已出卡点卡 | 3 分钟讲解 + 同构题 | `VERIFY` |
 | `VERIFY` | 用户完成同构题 | 预约 24h/7d 迁移 | `CLOSED` |
@@ -21,6 +22,7 @@
 
 ```text
 INGEST → PARSE → ALIGN → PROBE ⇄ PROBE
+                         ├─→ SCAFFOLD（空白/不会）→ PROBE
                          ├─→ DIAGNOSE → INTERVENE → VERIFY → CLOSED
                          └─→ STOP → CLOSED
 PARSE → NEED_INPUT → PARSE
@@ -74,6 +76,7 @@ ALIGN → STOP（题目超纲/无法建图）
 6. **低置信不硬判**：`posterior < 0.55` → `stop` 或继续问；不得输出确定卡点。
 7. **轮次上限 6**：到 6 轮无论置信度，必须收束为“可能卡点 + 还缺什么证据”。
 8. **用户可退出**：`offer_answer_exit` 是合法动作；退出后不生成卡点卡。
+9. **空白先示例**：完全没有过程（或明确说“不会”）时先进入 `SCAFFOLD`，给 1–2 步示例，不提问、不出卡；示例不含最终答案。提交新过程后回到 `PROBE`；连续两次仍空白则 `STOP`，不硬判卡点。
 
 ## 答案泄漏防线
 

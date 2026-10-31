@@ -28,6 +28,7 @@ from synapse.application.ports import (
     SessionRepository,
 )
 from synapse.application.review import ReviewItem, ReviewQueue
+from synapse.application.scaffold import Scaffold, build_scaffold
 from synapse.application.subject import StudentStep, SubjectRegistry, Verdict
 from synapse.application.trace import tracing
 from synapse.application.work_check import EqualityChecker
@@ -39,7 +40,7 @@ from synapse.domain.dialogue.session import DialogueSession, TurnRecord
 from synapse.domain.dialogue.states import DialogueState
 from synapse.domain.evidence.models import Evidence
 from synapse.domain.problem.alignment import normalize
-from synapse.domain.problem.models import Probe, Problem
+from synapse.domain.problem.models import Probe, Problem, StudentAttempt
 
 
 class SessionNotFound(LookupError):
@@ -64,6 +65,9 @@ class SessionView:
     # The two are mutually exclusive by construction: the tier decides before a
     # probe is ever asked, and ``hint`` is derived, not stored.
     hint: StructureHint | None = None
+    # A blank attempt gets an example before any probe. Mutually exclusive with
+    # ``prompt`` and ``hint``: it is the only output of the SCAFFOLD state.
+    scaffold: Scaffold | None = None
 
 
 class SessionService:
@@ -129,6 +133,17 @@ class SessionService:
             self._sessions.add(session)
             return self._structure_only(session, problem, capabilities)
 
+        if command.knows_nothing and not command.work.strip():
+            # Blank/no-idea attempts start with an example, not a probe they
+            # cannot answer. The state machine makes the return path explicit.
+            session.advance(DialogueEvent.SCAFFOLD_READY)
+            session.scaffold_level = 1
+            self._sessions.add(session)
+            return SessionView(
+                session=session,
+                scaffold=build_scaffold(problem, session.scaffold_level),
+            )
+
         if session.alignment.first_divergence == "none":
             self._sessions.add(session)
             return self._close(
@@ -147,6 +162,12 @@ class SessionService:
 
     def get(self, session_id: str) -> SessionView:
         session = self._get(session_id)
+        if session.state is DialogueState.SCAFFOLD:
+            problem = self._problem(session.problem_id)
+            return SessionView(
+                session=session,
+                scaffold=build_scaffold(problem, session.scaffold_level),
+            )
         if session.state is DialogueState.PROBE and session.current_probe_id:
             problem = self._problem(session.problem_id)
             probe = problem.graph.probe(session.current_probe_id)
@@ -206,6 +227,8 @@ class SessionService:
             )
 
         problem = self._problem(session.problem_id)
+        if session.state is DialogueState.SCAFFOLD:
+            return self._submit_scaffold(session, problem, command)
         current_probe_id = session.current_probe_id
         if current_probe_id is None:
             return self._stop_without_card(session, "当前没有待回答的问题。")
@@ -360,6 +383,61 @@ class SessionService:
                 finding_count=0 if verdict is None else len(verdict.findings),
                 step_chars=len(command.text),
             )
+        )
+
+    def _submit_scaffold(
+        self,
+        session: DialogueSession,
+        problem: Problem,
+        command: SubmitAnswerCommand,
+    ) -> SessionView:
+        """Take work submitted from the SCAFFOLD state and re-enter the dialogue.
+
+        The answer is free text, not an option. It is appended to the work
+        accumulated so far so a student who writes one line at a time can keep
+        moving; the alignment is recomputed against the whole attempt.
+        """
+
+        text = command.answer.strip()
+        work = f"{session.scaffold_work}\n{text}".strip()
+        before = len(session.alignment.matched_node_ids)
+        alignment = self._factory.realign(
+            session,
+            problem,
+            StudentAttempt(answer=command.answer, work=work),
+        )
+        session.scaffold_work = work
+
+        if alignment.first_divergence == "none":
+            return self._close(
+                session,
+                "这次过程已经覆盖了参考步骤；本轮没有可诊断的断点。",
+            )
+
+        if len(alignment.matched_node_ids) > before:
+            session.advance(DialogueEvent.WORK_SUBMITTED)
+            probe = self._planner.next(session, problem.graph)
+            if probe is None:
+                return self._close(
+                    session,
+                    "过程已经接上；没有可用的探针，先不生成卡点卡。",
+                )
+            session.asked_probe_ids.append(probe.id)
+            prompt = self._compose(session, problem, probe)
+            self._sessions.save(session)
+            return SessionView(session=session, prompt=prompt)
+
+        if session.scaffold_level < 2:
+            session.scaffold_level += 1
+            self._sessions.save(session)
+            return SessionView(
+                session=session,
+                scaffold=build_scaffold(problem, session.scaffold_level),
+            )
+
+        return self._stop_without_card(
+            session,
+            "还是没有看到过程。先写一行——哪怕只写“定义域是 x>0”也可以，再回来诊断。",
         )
 
     def _handle_unknown(

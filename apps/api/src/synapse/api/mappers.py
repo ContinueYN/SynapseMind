@@ -20,6 +20,8 @@ from synapse.api.schemas import (
     ProgressOut,
     ReviewItemOut,
     ReviewItemsOut,
+    ScaffoldOut,
+    ScaffoldStepOut,
     SessionOut,
     StepFindingOut,
     StepVerdictOut,
@@ -28,6 +30,7 @@ from synapse.api.schemas import (
 from synapse.application.composer import ProbePrompt
 from synapse.application.knowledge import KnowledgeSearch
 from synapse.application.review import ReviewItem
+from synapse.application.scaffold import Scaffold
 from synapse.application.service import SessionView
 from synapse.application.subject import Verdict
 from synapse.domain.diagnosis.hint import StructureHint
@@ -139,6 +142,18 @@ def hint_out(hint: StructureHint) -> HintOut:
     )
 
 
+def scaffold_out(scaffold: Scaffold) -> ScaffoldOut:
+    return ScaffoldOut(
+        steps=[
+            ScaffoldStepOut(label=step.label, text=step.text, node_id=step.node_id)
+            for step in scaffold.steps
+        ],
+        focus_node_id=scaffold.focus_node_id,
+        next_step=scaffold.next_step,
+        disclaimer=scaffold.disclaimer,
+    )
+
+
 def _clip(value: str, limit: int) -> str:
     return value if len(value) <= limit else f"{value[: limit - 1]}…"
 
@@ -213,6 +228,7 @@ def session_out(
         prompt=probe_out(view.prompt) if view.prompt else None,
         diagnosis=diagnosis_out(view.diagnosis) if view.diagnosis else None,
         hint=hint_out(view.hint) if view.hint else None,
+        scaffold=scaffold_out(view.scaffold) if view.scaffold else None,
         notice=view.notice,
         progress=progress_out(session),
         history=[history_out(record) for record in session.history],

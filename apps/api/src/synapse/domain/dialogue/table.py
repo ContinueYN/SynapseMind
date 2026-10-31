@@ -27,6 +27,12 @@ TRANSITIONS: dict[Transition, DialogueState] = {
     (DialogueState.NEED_INPUT, DialogueEvent.INPUT_CONFIRMED): DialogueState.PARSE,
     (DialogueState.NEED_INPUT, DialogueEvent.ABORT): DialogueState.STOP,
     (DialogueState.ALIGN, DialogueEvent.ALIGNED): DialogueState.PROBE,
+    # The factory lands on PROBE after ALIGN. A blank attempt is diverted from
+    # there into SCAFFOLD; submitting work returns to PROBE.
+    (DialogueState.PROBE, DialogueEvent.SCAFFOLD_READY): DialogueState.SCAFFOLD,
+    (DialogueState.SCAFFOLD, DialogueEvent.WORK_SUBMITTED): DialogueState.PROBE,
+    (DialogueState.SCAFFOLD, DialogueEvent.ABORT): DialogueState.STOP,
+    (DialogueState.SCAFFOLD, DialogueEvent.CLOSE): DialogueState.CLOSED,
     (DialogueState.ALIGN, DialogueEvent.DIAGNOSIS_READY): DialogueState.DIAGNOSE,
     (DialogueState.ALIGN, DialogueEvent.ABORT): DialogueState.STOP,
     (DialogueState.PROBE, DialogueEvent.PROBE_ANSWERED): DialogueState.PROBE,

@@ -18,6 +18,17 @@ class StartSessionCommand:
     # Declared by the student; None means "let the identifier decide".
     subject: str | None = None
 
+    @property
+    def knows_nothing(self) -> bool:
+        """Mirror ``StudentAttempt.knows_nothing`` before the attempt exists."""
+
+        return self.self_report == "no_idea" or self.answer.strip() in {
+            "",
+            "不会",
+            "不知道",
+            "完全不会",
+        }
+
 
 @dataclass(frozen=True, slots=True)
 class SubmitAnswerCommand:

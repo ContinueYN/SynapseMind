@@ -15,6 +15,8 @@ export type Diagnosis = Schemas["DiagnosisOut"];
 export type DiagnosisCard = Schemas["CardOut"];
 export type StructureHint = Schemas["HintOut"];
 export type HintStep = Schemas["HintStepOut"];
+export type Scaffold = Schemas["ScaffoldOut"];
+export type ScaffoldStep = Schemas["ScaffoldStepOut"];
 export type HistoryItem = Schemas["HistoryItemOut"];
 export type Progress = Schemas["ProgressOut"];
 export type TurnInput = Schemas["TurnRequest"];
@@ -31,6 +33,7 @@ export type SessionState =
   | "NEED_INPUT"
   | "ALIGN"
   | "PROBE"
+  | "SCAFFOLD"
   | "DIAGNOSE"
   | "INTERVENE"
   | "VERIFY"

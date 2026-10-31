@@ -44,6 +44,11 @@ class DialogueSession:
     # Filled at start, read when the card is built several turns later. Empty
     # unless the equality-check flag is on (see application/work_check.py).
     work_findings: tuple[WorkFinding, ...] = ()
+    # Blank-attempt scaffolding: how many example steps have been shown (0
+    # means the session never entered SCAFFOLD) and the work accumulated across
+    # scaffold submissions. Persisted so a reload can continue the same ladder.
+    scaffold_level: int = 0
+    scaffold_work: str = ""
     # Optimistic-concurrency token owned by the repository adapter. 0 means
     # "not stored yet"; each successful save increments it. It is internal
     # storage metadata and is never exposed by the HTTP API.

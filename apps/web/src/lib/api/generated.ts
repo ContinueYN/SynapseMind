@@ -491,6 +491,29 @@ export interface components {
             /** Items */
             items: components["schemas"]["ReviewItemOut"][];
         };
+        /**
+         * ScaffoldOut
+         * @description A blank-attempt example: at most two steps, never the final answer.
+         */
+        ScaffoldOut: {
+            /** Steps */
+            steps: components["schemas"]["ScaffoldStepOut"][];
+            /** Focus Node Id */
+            focus_node_id?: string | null;
+            /** Next Step */
+            next_step: string;
+            /** Disclaimer */
+            disclaimer: string;
+        };
+        /** ScaffoldStepOut */
+        ScaffoldStepOut: {
+            /** Label */
+            label: string;
+            /** Text */
+            text: string;
+            /** Node Id */
+            node_id?: string | null;
+        };
         /** SessionOut */
         SessionOut: {
             /** Session Id */
@@ -514,6 +537,7 @@ export interface components {
             prompt?: components["schemas"]["ProbeOut"] | null;
             diagnosis?: components["schemas"]["DiagnosisOut"] | null;
             hint?: components["schemas"]["HintOut"] | null;
+            scaffold?: components["schemas"]["ScaffoldOut"] | null;
             /** Notice */
             notice?: string | null;
             progress: components["schemas"]["ProgressOut"];

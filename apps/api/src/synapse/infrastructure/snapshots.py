@@ -453,6 +453,8 @@ def encode_session(
             "evidence": {"items": [_evidence_to_json(item) for item in session.evidence.items]},
             "diagnosis": None if session.diagnosis is None else _card_to_json(session.diagnosis),
             "work_findings": [_work_finding_to_json(finding) for finding in session.work_findings],
+            "scaffold_level": session.scaffold_level,
+            "scaffold_work": session.scaffold_work,
         },
     }
 
@@ -491,6 +493,8 @@ def decode_session(snapshot: object) -> DialogueSession:
             _work_finding_from_json(item, f"session.work_findings[{index}]")
             for index, item in enumerate(_array(data.get("work_findings"), "session.work_findings"))
         ),
+        scaffold_level=_integer(data.get("scaffold_level", 0), "session.scaffold_level"),
+        scaffold_work=_text(data.get("scaffold_work", ""), "session.scaffold_work"),
         revision=_revision(data.get("revision"), "session.revision"),
     )
 

@@ -11,6 +11,8 @@ class DialogueEvent(StrEnum):
     NEED_INPUT = "need_input"
     INPUT_CONFIRMED = "input_confirmed"
     ALIGNED = "aligned"
+    SCAFFOLD_READY = "scaffold_ready"
+    WORK_SUBMITTED = "work_submitted"
     PROBE_ANSWERED = "probe_answered"
     DIAGNOSIS_READY = "diagnosis_ready"
     INTERVENTION_STARTED = "intervention_started"

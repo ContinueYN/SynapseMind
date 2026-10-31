@@ -186,7 +186,7 @@ Nginx（SSE 关闭缓冲、限流、超时）
 
 | 文档 | 内容 |
 |---|---|
-| [状态机规格](specs/dialogue-state.md) | 10 状态、转移图、8 条硬约束 |
+| [状态机规格](specs/dialogue-state.md) | 11 状态、转移图、9 条硬约束 |
 | [诊断卡契约](specs/diagnosis.schema.json) | 输出结构 |
 | [解法图契约](specs/solution-graph.schema.json) | 节点类型、七维需求、探针 |
 | [答案泄漏守卫](apps/api/src/synapse/domain/guard/leak.py) | 禁用词 + 5-gram 出口检测 |

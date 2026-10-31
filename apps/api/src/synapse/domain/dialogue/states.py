@@ -11,6 +11,10 @@ class DialogueState(StrEnum):
     NEED_INPUT = "NEED_INPUT"
     ALIGN = "ALIGN"
     PROBE = "PROBE"
+    # A blank attempt gets a 1–2 step example before any probe. It is a real
+    # dialogue state, not a hint: the student can submit work from here and the
+    # session returns to PROBE.
+    SCAFFOLD = "SCAFFOLD"
     DIAGNOSE = "DIAGNOSE"
     INTERVENE = "INTERVENE"
     VERIFY = "VERIFY"
