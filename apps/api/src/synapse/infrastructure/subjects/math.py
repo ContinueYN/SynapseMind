@@ -195,4 +195,4 @@ class MathPlugin:
         detail = "这个等号不成立：" + "；".join(parts)
         if len(detail) > 900:
             detail = detail[:899] + "…"
-        return Verdict(status="fail", detail=detail)
+        return Verdict(status="fail", detail=detail, findings=tuple(findings[:3]))

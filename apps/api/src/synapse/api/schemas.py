@@ -169,10 +169,21 @@ class StepRequest(StrictModel):
     data: dict[str, Any] | None = None
 
 
+class StepFindingOut(StrictModel):
+    """One broken equals sign, in a shape the client can lay out (v0.2)."""
+
+    kind: Literal["identity", "limit"]
+    left: str = Field(min_length=1, max_length=500)
+    right: str = Field(min_length=1, max_length=500)
+    summary: str = Field(min_length=1, max_length=300)
+    counterexample: str = Field(default="", max_length=300)
+
+
 class StepVerdictOut(StrictModel):
-    version: Literal["0.1"]
+    version: Literal["0.2"]
     status: Literal["pass", "fail", "unknown"]
     detail: str = Field(default="", max_length=1000)
+    findings: list[StepFindingOut] = Field(max_length=3)
 
 
 class HealthOut(StrictModel):

@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from synapse.api.deps import get_service
-from synapse.api.mappers import session_out
+from synapse.api.mappers import session_out, step_verdict_out
 from synapse.api.schemas import (
     CreateSessionRequest,
     HealthOut,
@@ -94,7 +94,7 @@ def verify_step(
         )
     except SessionNotFound as exc:
         raise HTTPException(status_code=404, detail="session not found") from exc
-    return StepVerdictOut(version="0.1", status=verdict.status, detail=verdict.detail)
+    return step_verdict_out(verdict)
 
 
 @router.post("/sessions/{session_id}/turns", response_model=SessionOut)

@@ -12,8 +12,12 @@ vi.mock("@/src/lib/api/client", () => ({
 
 const verify = vi.mocked(verifyStep);
 
-function verdict(status: StepVerdict["status"], detail: string): StepVerdict {
-  return { version: "0.1", status, detail };
+function verdict(
+  status: StepVerdict["status"],
+  detail: string,
+  findings: NonNullable<StepVerdict["findings"]> = [],
+): StepVerdict {
+  return { version: "0.2", status, detail, findings };
 }
 
 async function openAndType(text: string) {
@@ -44,9 +48,21 @@ describe("StepCheck", () => {
     );
   });
 
-  it("sends the trimmed step and shows the counterexample", async () => {
+  it("sends the trimmed step and shows the structured counterexample", async () => {
     verify.mockResolvedValue(
-      verdict("fail", "这个等号不成立：「x+1 = 2*x」x=0.1 时左边 1.1、右边 0.2"),
+      verdict(
+        "fail",
+        "这个等号不成立：「x+1 = 2*x」x=0.1 时左边 1.1、右边 0.2",
+        [
+          {
+            kind: "identity",
+            left: "x+1",
+            right: "2*x",
+            summary: "x=0.1 时左边 1.1、右边 0.2",
+            counterexample: "x=0.1 时左边 1.1、右边 0.2",
+          },
+        ],
+      ),
     );
     const user = await openAndType("  x+1=2x  ");
 
@@ -58,12 +74,13 @@ describe("StepCheck", () => {
         node_id: "",
       }),
     );
-    expect(
-      await screen.findByText("这个等号不成立", { exact: false }),
-    ).toBeInTheDocument();
-    expect(screen.getAllByText(/这个等号不成立/)).toHaveLength(1);
+    expect(await screen.findByText("这个等号不成立")).toBeInTheDocument();
+    expect(screen.getByText("x+1 = 2*x")).toBeInTheDocument();
     expect(screen.getByText(/x=0\.1 时左边 1\.1、右边 0\.2/)).toBeInTheDocument();
     expect(screen.getByText("有反例")).toBeInTheDocument();
+    // The formula and the counterexample are separate rows now; the client no
+    // longer strips the headline prefix out of the free-text detail.
+    expect(screen.queryByText(/这个等号不成立：/)).not.toBeInTheDocument();
   });
 
   it("does not turn an unknown verdict into a correctness claim", async () => {

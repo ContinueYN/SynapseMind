@@ -16,10 +16,13 @@ from synapse.api.schemas import (
     ProbeOut,
     ProgressOut,
     SessionOut,
+    StepFindingOut,
+    StepVerdictOut,
     VerifyOut,
 )
 from synapse.application.composer import ProbePrompt
 from synapse.application.service import SessionView
+from synapse.application.subject import Verdict
 from synapse.domain.diagnosis.hint import StructureHint
 from synapse.domain.diagnosis.models import DiagnosisCard
 from synapse.domain.dialogue.session import DialogueSession, TurnRecord
@@ -95,6 +98,38 @@ def hint_out(hint: StructureHint) -> HintOut:
         focus_node_id=hint.focus_node_id,
         next_step=hint.next_step,
         disclaimer=hint.disclaimer,
+    )
+
+
+def _clip(value: str, limit: int) -> str:
+    return value if len(value) <= limit else f"{value[: limit - 1]}…"
+
+
+def step_verdict_out(verdict: Verdict) -> StepVerdictOut:
+    """Map one verification result; ``findings`` is empty unless it failed.
+
+    The formulas come from the student's own text, so they are clipped to the
+    DTO limit here rather than letting a pathological chain fail response
+    validation.
+    """
+
+    return StepVerdictOut(
+        version="0.2",
+        status=verdict.status,
+        detail=_clip(verdict.detail, 1000),
+        findings=[
+            StepFindingOut(
+                kind=finding.kind,
+                left=_clip(finding.left, 500),
+                right=_clip(finding.right, 500),
+                summary=_clip(
+                    finding.summary or finding.counterexample or finding.detail or "这处等号不成立",
+                    300,
+                ),
+                counterexample=_clip(finding.counterexample, 300),
+            )
+            for finding in verdict.findings[:3]
+        ],
     )
 
 

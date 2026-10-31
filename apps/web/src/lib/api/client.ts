@@ -32,7 +32,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       },
     });
   } catch {
-    throw new ApiError(0, "连不上诊断服务，请确认 FastAPI 已在 8000 端口启动。");
+    throw new ApiError(
+      0,
+      "连不上诊断服务，请确认 FastAPI 已启动、端口与 NEXT_PUBLIC_API_BASE 一致。",
+    );
   }
 
   const text = await response.text();

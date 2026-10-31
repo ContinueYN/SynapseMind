@@ -126,7 +126,7 @@ export default function DiagnosePage() {
         <Plane>
           <p className="sm-kicker">会话没打开</p>
           <h1 className="sm-h1">{error}</h1>
-          <p className="sm-p">诊断服务可能在 8000 端口没起来；也可以先回到交题页。</p>
+          <p className="sm-p">诊断服务没有响应；请确认 API 已启动。</p>
           <p style={{ marginTop: 26 }}>
             <Link className="sm-cta" href="/">
               回到交题页

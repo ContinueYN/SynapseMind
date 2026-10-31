@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Literal, Protocol
 
+from synapse.domain.diagnosis.work import WorkFinding
 from synapse.domain.problem.alignment import StepAligner
 from synapse.domain.problem.models import (
     Probe,
@@ -124,6 +125,10 @@ VerdictStatus = Literal["pass", "fail", "unknown"]
 class Verdict:
     status: VerdictStatus
     detail: str = ""
+    #: Structured evidence for a ``fail``; empty for ``pass``/``unknown``.
+    #: Kept alongside ``detail`` so a client can lay out formula and
+    #: counterexample without parsing prose (contract v0.2).
+    findings: tuple[WorkFinding, ...] = ()
 
 
 class SubjectPlugin(Protocol):

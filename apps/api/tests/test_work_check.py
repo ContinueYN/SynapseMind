@@ -7,8 +7,12 @@ fact that a session keeps the finding until the card is built.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
+from jsonschema import Draft202012Validator
 
 from synapse.api.deps import build_container
 from synapse.api.main import create_app
@@ -18,6 +22,7 @@ from synapse.infrastructure.seed import SAMPLE_PROBLEM
 from synapse.infrastructure.verification.equalities import SympyEqualityChecker
 
 REAL_LIMIT_WORK = "=lim[sinX/(X+sinX/cosX)] =lim[sinX/X +cosX] =1+1 =2，有哪里错了么"
+SPEC_PATH = Path(__file__).resolve().parents[3] / "specs" / "step-verification.schema.json"
 
 
 def test_the_port_adapter_returns_the_limit_summary() -> None:
@@ -118,8 +123,9 @@ def test_step_endpoint_is_off_by_default(
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["version"] == "0.1"
+    assert body["version"] == "0.2"
     assert body["status"] == "unknown"
+    assert body["findings"] == []
     assert "未启用" in body["detail"]
 
 
@@ -139,6 +145,15 @@ def test_step_endpoint_returns_a_counterexample_with_the_flag_on(
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["status"] == "fail"
+    assert body["findings"] == [
+        {
+            "kind": "identity",
+            "left": "x+1",
+            "right": "2*x",
+            "summary": "x=0.1 时左边 1.1、右边 0.2",
+            "counterexample": "x=0.1 时左边 1.1、右边 0.2",
+        }
+    ]
     assert "x+1 = 2*x" in body["detail"]
     assert "x=0.1 时左边 1.1、右边 0.2" in body["detail"]
     assert "solution" not in str(body)
@@ -165,6 +180,7 @@ def test_step_endpoint_does_not_call_an_unreadable_chain_correct(
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["status"] == "unknown"
+    assert body["findings"] == []
     assert "不等于这一步正确" in body["detail"]
 
 
@@ -182,6 +198,8 @@ def test_step_endpoint_surfaces_the_limit_chain_counterexample(
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["status"] == "fail"
+    assert body["findings"][0]["kind"] == "limit"
+    assert body["findings"][0]["summary"] == "x→0 时左边极限 0.5、右边 2"
     assert "x→0 时左边极限 0.5、右边 2" in body["detail"]
 
 
@@ -192,3 +210,26 @@ def test_step_endpoint_is_404_for_an_unknown_session(client: TestClient) -> None
     )
 
     assert response.status_code == 404
+
+
+def test_step_verdict_conforms_to_the_public_schema(
+    sample_payload: dict[str, object],
+) -> None:
+    on_client = TestClient(create_app(build_container(features=FeatureFlags(equality_check=True))))
+    session_id = _start(on_client, sample_payload)
+
+    body = on_client.post(
+        f"/api/v1/sessions/{session_id}/steps",
+        json={"text": "x+1=2x"},
+    ).json()
+
+    spec = json.loads(SPEC_PATH.read_text(encoding="utf-8"))
+    validator = Draft202012Validator(spec)
+    validator.validate(body)
+
+    unknown = on_client.post(
+        f"/api/v1/sessions/{session_id}/steps",
+        json={"text": "x+1=1+x"},
+    ).json()
+    assert unknown["status"] == "unknown"
+    validator.validate(unknown)

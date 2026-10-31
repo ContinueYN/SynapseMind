@@ -376,6 +376,28 @@ export interface components {
             history?: components["schemas"]["HistoryItemOut"][];
         };
         /**
+         * StepFindingOut
+         * @description One broken equals sign, in a shape the client can lay out (v0.2).
+         */
+        StepFindingOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "identity" | "limit";
+            /** Left */
+            left: string;
+            /** Right */
+            right: string;
+            /** Summary */
+            summary: string;
+            /**
+             * Counterexample
+             * @default
+             */
+            counterexample: string;
+        };
+        /**
          * StepRequest
          * @description One step to verify; ``data`` is a subject-owned structured payload.
          *
@@ -402,7 +424,7 @@ export interface components {
              * Version
              * @constant
              */
-            version: "0.1";
+            version: "0.2";
             /**
              * Status
              * @enum {string}
@@ -413,6 +435,8 @@ export interface components {
              * @default
              */
             detail: string;
+            /** Findings */
+            findings: components["schemas"]["StepFindingOut"][];
         };
         /** TurnRequest */
         TurnRequest: {

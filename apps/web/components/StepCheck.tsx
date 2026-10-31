@@ -36,15 +36,6 @@ interface StepCheckProps {
   sessionId: string;
 }
 
-/** The API repeats the headline before its counterexample; don't print it twice. */
-function detailText(verdict: StepVerdict): string {
-  const prefix = "这个等号不成立：";
-  if (verdict.status === "fail" && verdict.detail.startsWith(prefix)) {
-    return verdict.detail.slice(prefix.length);
-  }
-  return verdict.detail;
-}
-
 export function StepCheck({ sessionId }: StepCheckProps) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
@@ -142,7 +133,20 @@ export function StepCheck({ sessionId }: StepCheckProps) {
                 <b>{STATUS_COPY[verdict.status].tag}</b>
                 <span>{verdict.status === "fail" ? "有反例" : "未证明"}</span>
               </div>
-              <p>{detailText(verdict)}</p>
+              {verdict.findings && verdict.findings.length > 0 ? (
+                <ul className="sm-stepcheck-findings">
+                  {verdict.findings.map((finding, index) => (
+                    <li key={`${finding.kind}-${finding.left}-${finding.right}-${index}`}>
+                      <code>
+                        {finding.left} = {finding.right}
+                      </code>
+                      <span>{finding.summary}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>{verdict.detail}</p>
+              )}
               <p className="sm-stepcheck-caveat">
                 {STATUS_COPY[verdict.status].caveat}
               </p>

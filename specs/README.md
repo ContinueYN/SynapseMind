@@ -29,7 +29,7 @@
 
 `structure-hint.schema.json` 是 NONE 档学科（语文/英语/历史）的唯一输出契约（M2.5 S7，v0.2 起为 S8）。它不是卡点卡的简化版，而是**另一种承诺**：`steps[].status`（`covered`/`partial`/`missing`）只描述“解法图里的这一步有没有被写到、是否只写到一部分”，由存在性对齐（线索词 + 分句重合）得出，不代表写得对错；`focus_node_id` 是“下一步先看哪里”（第一个没有完全写到的节点），不是卡点；`disclaimer` 必须写明该学科没有可自动验证的真值。NONE 档不进入 `PROBE`，也不生成卡点卡——`application/commitment.py` 是这条承诺的唯一开关。v0.2 只新增 `partial` 与 `version` 变化；`partial` 不是“写错”，也不改变卡点卡路径。
 
-`step-verification.schema.json` 是「交一步」的响应契约（M2.5 S5 ⑥，v0.1）。`POST /api/v1/sessions/{id}/steps` 只把这一条步骤交给会话所属学科的 `SubjectPlugin.verify()`，**不推进状态、不生成卡点卡、不返回答案**。`fail` 必须带学生自己写的式子或两边数值（例如 `x→0 时左边极限 0.5、右边 2`）；`unknown` 表示开关未开、式子读不懂、没发现可机器证明的错误，或该学科没有可判的真值——`unknown` 不是“这步对了”。数学的等式链校验由 `SYNAPSE_EQUALITY_CHECK` 控制，默认 `off`。
+`step-verification.schema.json` 是「交一步」的响应契约（M2.5 S5 ⑥，v0.2）。`POST /api/v1/sessions/{id}/steps` 只把这一条步骤交给会话所属学科的 `SubjectPlugin.verify()`，**不推进状态、不生成卡点卡、不返回答案**。`fail` 必须带学生自己写的式子或两边数值（例如 `x→0 时左边极限 0.5、右边 2`）；v0.2 起同时给出结构化 `findings`（`kind`/`left`/`right`/`summary`，必填、最多 3 条），`detail` 仍保留为一句可读说明，前端不必解析它来拆公式；schema 的 `if/then` 约束 `fail` 至少 1 条、`unknown`/`pass` 为空。`unknown` 表示开关未开、式子读不懂、没发现可机器证明的错误，或该学科没有可判的真值——`unknown` 不是“这步对了”，它的 `findings` 必须为空。数学的等式链校验由 `SYNAPSE_EQUALITY_CHECK` 控制，默认 `off`。
 
 图顶层的 `claim` 也是可选字段（M2.5 S5），把答案写成机器可证伪的形式：
 

@@ -2,12 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://synapsemind.dev/schemas/step-verification.schema.json",
   "title": "StepVerdict",
-  "description": "单步验证结果（M2.5 S5 ⑥，v0.1）。POST /api/v1/sessions/{id}/steps 的响应；只验证提交的这一步，不推进对话、不生成卡点卡、不返回答案。pass 只表示实际跑过的检查没有发现不一致，不是证明；unknown 表示未启用、读不懂或没有可判的断言，不能写成“已核对”。",
+  "description": "单步验证结果（M2.5 S5 ⑥，v0.2）。POST /api/v1/sessions/{id}/steps 的响应；只验证提交的这一步，不推进对话、不生成卡点卡、不返回答案。pass 只表示实际跑过的检查没有发现不一致，不是证明；unknown 表示未启用、读不懂或没有可判的断言，不能写成“已核对”。v0.2 起 fail 同时返回结构化 findings（左边/右边/反例摘要），detail 保留为一句可读说明；unknown/pass 的 findings 必须为空。",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "status", "detail"],
+  "required": ["version", "status", "detail", "findings"],
   "properties": {
-    "version": {"type": "string", "const": "0.1"},
+    "version": {"type": "string", "const": "0.2"},
     "status": {
       "type": "string",
       "enum": ["pass", "fail", "unknown"],
@@ -17,6 +17,50 @@
       "type": "string",
       "maxLength": 1000,
       "description": "给学生的具体说明；fail 要引用学生写的式子或两边数值，unknown 要说明未启用/读不懂/没发现可证的错误。"
+    },
+    "findings": {
+      "type": "array",
+      "maxItems": 3,
+      "default": [],
+      "description": "fail 时的结构化反例，按发现顺序最多 3 条；unknown/pass 必须为空数组。前端可用它分行显示公式与反例，不必解析 detail。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "left", "right", "summary"],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["identity", "limit"],
+            "description": "identity = 两边作为函数不等价；limit = 链里带 lim，两边的极限不相等。"
+          },
+          "left": {"type": "string", "minLength": 1, "maxLength": 500},
+          "right": {"type": "string", "minLength": 1, "maxLength": 500},
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "description": "具体反例摘要，例如“x=0.1 时左边 1.1、右边 0.2”或“x→0 时左边极限 0.5、右边 2”。"
+          },
+          "counterexample": {
+            "type": "string",
+            "maxLength": 300,
+            "description": "可选的代入值/极限点原文；summary 已包含时可为空。"
+          }
+        }
+      }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "fail"}}, "required": ["status"]},
+      "then": {"properties": {"findings": {"minItems": 1}}}
+    },
+    {
+      "if": {
+        "properties": {"status": {"enum": ["pass", "unknown"]}},
+        "required": ["status"]
+      },
+      "then": {"properties": {"findings": {"maxItems": 0}}}
+    }
+  ]
 }
