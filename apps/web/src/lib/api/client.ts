@@ -1,5 +1,6 @@
 import type {
   CreateSessionInput,
+  Diagnosis,
   SessionResponse,
   StepInput,
   StepVerdict,
@@ -94,6 +95,14 @@ export function verifyStep(
 export function exitSession(sessionId: string): Promise<SessionResponse> {
   return request<SessionResponse>(
     `/api/v1/sessions/${encodeURIComponent(sessionId)}/exit`,
+    { method: "POST" },
+  );
+}
+
+/** Record the student's disagreement; the diagnosis itself is not changed. */
+export function disagreeWithCard(sessionId: string): Promise<Diagnosis> {
+  return request<Diagnosis>(
+    `/api/v1/sessions/${encodeURIComponent(sessionId)}/card/disagree`,
     { method: "POST" },
   );
 }

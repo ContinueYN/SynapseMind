@@ -57,6 +57,44 @@ def test_two_answers_produce_l2_card(client: TestClient, sample_payload: dict[st
     assert "solution" not in json.dumps(second_body, ensure_ascii=False)
 
 
+def test_card_disagreement_is_persisted(
+    client: TestClient, sample_payload: dict[str, object]
+) -> None:
+    body = _start(client, sample_payload)
+    session_id = body["session_id"]
+
+    for answer in ("没有零点", "要，a=0 也在 a≤0 这一支里"):
+        response = client.post(
+            f"/api/v1/sessions/{session_id}/turns",
+            json={"answer": answer, "option_id": "A"},
+        )
+        assert response.status_code == 200, response.text
+    card = response.json()["diagnosis"]["card"]
+    assert card["disagree"] is False
+
+    disagreed = client.post(f"/api/v1/sessions/{session_id}/card/disagree")
+    assert disagreed.status_code == 200, disagreed.text
+    assert disagreed.json()["card"]["disagree"] is True
+    assert disagreed.json()["card"]["one_line"] == card["one_line"]
+
+    reloaded = client.get(f"/api/v1/sessions/{session_id}")
+    assert reloaded.status_code == 200, reloaded.text
+    assert reloaded.json()["diagnosis"]["card"]["disagree"] is True
+
+    again = client.post(f"/api/v1/sessions/{session_id}/card/disagree")
+    assert again.status_code == 200, again.text
+    assert again.json()["card"]["disagree"] is True
+
+
+def test_card_disagreement_requires_a_card(
+    client: TestClient, sample_payload: dict[str, object]
+) -> None:
+    body = _start(client, sample_payload)
+    response = client.post(f"/api/v1/sessions/{body['session_id']}/card/disagree")
+    assert response.status_code == 409
+    assert response.json()["detail"] == "卡点卡尚未生成，暂时不能记录异议。"
+
+
 def test_unknown_gets_a_different_hint(
     client: TestClient, sample_payload: dict[str, object]
 ) -> None:

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { Surface } from "@/components/Surface";
+import { ApiError, disagreeWithCard } from "@/src/lib/api/client";
 import type { DiagnosisCard } from "@/src/lib/api/types";
 
 interface DiagnosisCardViewProps {
@@ -23,13 +24,31 @@ export function DiagnosisCardView({
   sessionId,
   showCardLink = true,
 }: DiagnosisCardViewProps) {
-  const [disagreed, setDisagreed] = useState(false);
+  const [disagreed, setDisagreed] = useState(card.disagree);
+  const [recording, setRecording] = useState(false);
+  const [recordError, setRecordError] = useState<string | null>(null);
   const [shown, setShown] = useState(0);
 
   const minutes = card.next_action.duration_min ?? 3;
   const dueHours = card.verify?.due_hours ?? 24;
   const excluded = card.excluded ?? [];
   const confidence = Math.round((card.confidence ?? 0) * 100);
+
+  async function markDisagree() {
+    if (disagreed || recording) return;
+    setRecording(true);
+    setRecordError(null);
+    try {
+      const diagnosis = await disagreeWithCard(sessionId);
+      setDisagreed(diagnosis.card.disagree);
+    } catch (error) {
+      setRecordError(
+        error instanceof ApiError ? error.message : "记录失败，请稍后再试。",
+      );
+    } finally {
+      setRecording(false);
+    }
+  }
 
   /* 数字和尺上的刻线一起走到位：只看结论的人不该被一个跳变惊一下 */
   useEffect(() => {
@@ -133,12 +152,23 @@ export function DiagnosisCardView({
             ) : null}
             <button
               className="sm-link sm-link-quiet"
-              onClick={() => setDisagreed(true)}
+              disabled={disagreed || recording}
+              onClick={markDisagree}
               type="button"
             >
-              {disagreed ? "已记录，等待复核" : "我不同意这个判断"}
+              {recording
+                ? "正在记录…"
+                : disagreed
+                  ? "已记录你的反馈"
+                  : "我不同意这个判断"}
             </button>
           </div>
+
+          {recordError ? (
+            <p className="sm-fine" role="alert">
+              {recordError}
+            </p>
+          ) : null}
 
           <p className="sm-fine">
             本记录仅用于教学定位：不产出能力分数，不做智力或医学评估，不给提分承诺。

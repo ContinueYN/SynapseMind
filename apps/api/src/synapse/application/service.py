@@ -6,7 +6,7 @@ imports and no SQL/LLM calls.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from time import perf_counter
 
 from synapse.application.audit import AuditEntry, CallAuditor
@@ -42,6 +42,10 @@ from synapse.domain.problem.models import Probe, Problem
 
 class SessionNotFound(LookupError):
     pass
+
+
+class DiagnosisNotReady(LookupError):
+    """The session exists, but there is no card to disagree with yet."""
 
 
 class InvalidAnswer(ValueError):
@@ -144,6 +148,23 @@ class SessionService:
             diagnosis=session.diagnosis,
             hint=self._hint(session),
         )
+
+    def mark_card_disagree(self, session_id: str) -> DiagnosisCard:
+        """Persist the student's disagreement with the current card.
+
+        This is deliberately narrow: the card keeps its diagnosis, evidence and
+        confidence; only the ``disagree`` flag changes. The flag survives a
+        reload because it is stored with the session, but it is not a review
+        queue entry and does not alter the dialogue state.
+        """
+
+        session = self._get(session_id)
+        if session.diagnosis is None:
+            raise DiagnosisNotReady("diagnosis card is not ready")
+        card = replace(session.diagnosis, disagree=True)
+        session.diagnosis = card
+        self._sessions.save(session)
+        return card
 
     def submit(self, session_id: str, command: SubmitAnswerCommand) -> SessionView:
         session = self._get(session_id)

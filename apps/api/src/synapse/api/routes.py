@@ -7,9 +7,10 @@ from math import ceil
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from synapse.api.deps import get_service
-from synapse.api.mappers import session_out, step_verdict_out
+from synapse.api.mappers import diagnosis_out, session_out, step_verdict_out
 from synapse.api.schemas import (
     CreateSessionRequest,
+    DiagnosisOut,
     HealthOut,
     SessionOut,
     StepRequest,
@@ -23,7 +24,12 @@ from synapse.application.commands import (
 )
 from synapse.application.factory import ProblemNotSupported, UnsupportedMode
 from synapse.application.limits import StepRateLimited
-from synapse.application.service import InvalidAnswer, SessionNotFound, SessionService
+from synapse.application.service import (
+    DiagnosisNotReady,
+    InvalidAnswer,
+    SessionNotFound,
+    SessionService,
+)
 from synapse.domain.dialogue.table import IllegalTransition
 
 router = APIRouter(prefix="/api/v1")
@@ -130,6 +136,25 @@ def submit_turn(
         service.problem_text(view.session.problem_id),
         service.problem_subject(view.session.problem_id),
     )
+
+
+@router.post("/sessions/{session_id}/card/disagree", response_model=DiagnosisOut)
+def disagree_with_card(
+    session_id: str,
+    service: SessionService = Depends(get_service),
+) -> DiagnosisOut:
+    """Record a disagreement; the card itself is unchanged."""
+
+    try:
+        card = service.mark_card_disagree(session_id)
+    except SessionNotFound as exc:
+        raise HTTPException(status_code=404, detail="session not found") from exc
+    except DiagnosisNotReady as exc:
+        raise HTTPException(
+            status_code=409,
+            detail="卡点卡尚未生成，暂时不能记录异议。",
+        ) from exc
+    return diagnosis_out(card)
 
 
 @router.post("/sessions/{session_id}/exit", response_model=SessionOut)
