@@ -8,7 +8,8 @@ import { DiagnosisCardView } from "@/components/DiagnosisCardView";
 import { KnowledgePanel } from "@/components/KnowledgePanel";
 import { Plane } from "@/components/Plane";
 import { ProblemBrief } from "@/components/ProblemBrief";
-import { getSession } from "@/src/lib/api/client";
+import { Surface } from "@/components/Surface";
+import { exitSession, getSession } from "@/src/lib/api/client";
 import type { SessionResponse } from "@/src/lib/api/types";
 
 export default function CardPage() {
@@ -16,6 +17,10 @@ export default function CardPage() {
   const sessionId = params.sessionId;
   const [session, setSession] = useState<SessionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [revealed, setRevealed] = useState<SessionResponse | null>(null);
+  const [revealArmed, setRevealArmed] = useState(false);
+  const [revealing, setRevealing] = useState(false);
+  const [revealError, setRevealError] = useState<string | null>(null);
 
   useEffect(() => {
     getSession(sessionId)
@@ -24,6 +29,26 @@ export default function CardPage() {
         setError(caught instanceof Error ? caught.message : "加载卡点卡失败。"),
       );
   }, [sessionId]);
+
+  async function reveal() {
+    if (revealing) return;
+    if (!revealArmed) {
+      setRevealArmed(true);
+      return;
+    }
+    setRevealing(true);
+    setRevealError(null);
+    try {
+      setRevealed(await exitSession(sessionId, true));
+      setRevealArmed(false);
+    } catch (caught) {
+      setRevealError(
+        caught instanceof Error ? caught.message : "读取解法失败，请重试。",
+      );
+    } finally {
+      setRevealing(false);
+    }
+  }
 
   if (error) {
     return (
@@ -96,6 +121,19 @@ export default function CardPage() {
           <button className="sm-link" onClick={() => window.print()} type="button">
             打印 / 存为 PDF
           </button>
+          <button
+            className="sm-link sm-link-quiet"
+            data-armed={revealArmed}
+            disabled={revealing || Boolean(revealed?.answer)}
+            onClick={reveal}
+            type="button"
+          >
+            {revealed?.answer
+              ? "已显示完整解法"
+              : revealArmed
+                ? "再点一次：显示答案与完整解法"
+                : "看完整解法"}
+          </button>
         </div>
       </div>
 
@@ -110,6 +148,29 @@ export default function CardPage() {
         query={session.diagnosis.card.label}
         subject={session.subject}
       />
+
+      {revealed?.answer && revealed.solution ? (
+        <Surface>
+          <p className="sm-kicker">完整解法</p>
+          <h2 className="sm-h2">{revealed.answer}</h2>
+          <p className="sm-p" style={{ whiteSpace: "pre-wrap" }}>
+            {revealed.solution}
+          </p>
+          <p className="sm-fine">
+            只有你明确要求时才显示；这次退出不生成新的卡点卡。
+          </p>
+        </Surface>
+      ) : null}
+
+      {revealed && !revealed.answer ? (
+        <p className="sm-fine">{revealed.notice ?? "这题没有存储解法。"}</p>
+      ) : null}
+
+      {revealError ? (
+        <p className="sm-alert" role="alert">
+          {revealError}
+        </p>
+      ) : null}
     </div>
   );
 }
