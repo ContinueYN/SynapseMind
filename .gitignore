@@ -83,5 +83,6 @@ docs/design/
 docs/reference/
 # Root-only: the private evaluation material. `scripts/eval/` is tooling and
 # must stay tracked (an unanchored `eval/` also swallowed it once).
+# `eval/README.md` is force-added as the only public evaluation page.
 /eval/
 tools/

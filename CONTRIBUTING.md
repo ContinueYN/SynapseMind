@@ -36,13 +36,7 @@ docs(design): clarify answer-leak gates
 
 改 `docs/design/chapters/` 下的源文件；`docs/design/release/` 是本地生成物，不提交，也不直接改。
 
-```bash
-python -m pip install -r tools/requirements.txt
-python tools/diagrams.py
-python tools/merge_markdown.py
-python tools/generate_docx.py
-pwsh tools/update_toc_and_export.ps1   # Windows + Word
-```
+DOCX/PDF 的构建脚本与产物属于本地文档工作流，不随公开仓库发布；章节 Markdown 仍是唯一手写源。
 
 ## PR 检查清单
 

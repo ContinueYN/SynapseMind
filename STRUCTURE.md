@@ -15,13 +15,9 @@
 │  ├─ api/               # FastAPI：状态机、诊断、AI 编排、SSE
 │  └─ worker/            # Arq 部署入口；代码与 api 共用，不复制
 ├─ specs/                 # 契约源：状态机 + JSON Schema
-├─ eval/                  # 怎么证明诊断是准的
-│  ├─ golden/            # 双教师标注的黄金对话
-│  ├─ problems/          # 评测题集（题干 + expected_answer）＋ 学生作答样本
-│  └─ redteam/           # 诱导、边界、泄漏测试
+├─ eval/                  # 公开评测协议、指标与汇总证据
 ├─ infra/                 # Compose / Nginx / 可观测性配置（M1 落）
-├─ tools/                 # 文档生成与图，不是运行时依赖
-├─ scripts/               # 按职责分组：dev / contracts / checks / release
+├─ scripts/               # 按职责分组：dev / contracts / checks / eval / release
 ├─ docs/
 │  ├─ adr/               # 架构决策记录（为什么这样选）
 │  ├─ design/
@@ -40,6 +36,8 @@
 
 ```text
 _local/                   # 旧版归档；不进 Git
+eval/ 私有语料与逐题报告   # 本机保留，不进 Git
+tools/                    # 本地文档构建脚本；不进 Git
 docs/design/release/      # 合并 MD / DOCX / PDF；生成物，不进 Git
 .tmp/                     # 临时检查脚本
 ```
@@ -52,15 +50,12 @@ docs/design/release/      # 合并 MD / DOCX / PDF；生成物，不进 Git
 | `apps/api/` | `domain`（纯函数）、`application`（用例/ports）、`infrastructure`（LLM/RAG/DB）、`api`（路由/SSE）、`workers`（任务） | 前端页面、文档生成、部署脚本 | `src/synapse/`、`tests/`、`pyproject.toml` |
 | `apps/worker/` | 部署入口与任务说明；与 api 同镜像、不同 command | 第二份领域代码、第二套模型 | `README.md`；M2 起任务 |
 | `specs/` | 状态机转移表、输入/解法图/诊断卡 JSON Schema | 生成的 TS 类型、运行时代码、草稿 | 1 个状态机文档 + 4 个 JSON Schema（`problem-input`／`solution-graph`／`diagnosis`／`structure-hint` v0.2） |
-| `eval/golden/` | 黄金对话、双教师标注、评分 rubric | 真实学生隐私数据、生产日志 | `README.md`；完整 100 条本地/私有 |
-| `eval/problems/` | 评测题集：题干、主题标签、`expected_answer`；学生作答原文 | 人工解法图、隐私数据 | 100 道数学未见题（`unseen-v0.2.jsonl`）+ 6 物理 + 6 语文 + 作答样本（3 条 synthetic、4 条 public-web）+ `README.md` |
-| `eval/redteam/` | 诱导、越界、答案泄漏、提示注入用例 | 普通单元测试 | `README.md` |
+| `eval/` | 评测协议、指标定义与可公开的汇总证据 | 原始题集、学生原文、教师标注、逐题报告、生成图 | `README.md` |
 | `infra/` | `compose.yaml`、Dockerfile、Nginx、OTel 配置 | 业务代码、前端组件 | `README.md`；M2 起容器文件 |
-| `tools/` | `diagrams.py`、`merge_markdown.py`、`generate_docx.py`、TOC/PDF 脚本 | 运行时依赖、业务逻辑 | 5 个脚本 + `requirements.txt` |
 | `scripts/` | 按职责分组：`dev/` 启动、`contracts/` 契约、`checks/` 检查、`eval/` 评测、`release/` 可选导出 | 应用入口、部署脚本 | 5 组脚本 + `README.md` |
 | `docs/adr/` | 一个决策一个文件：背景、选项、评分、后果、改选条件 | 教程、会议记录、未决讨论 | `0001` 语言与代码架构 |
 | `docs/design/chapters/` | 第 0–14 章 + 附录 Markdown，按编号排序 | DOCX/PDF、合并稿、图片 | 16 个章节源文件 |
-| `docs/design/assets/` | 由 `tools/diagrams.py` 生成的 3 张 PNG | 手工改图、截图堆 | 3 张图 |
+| `docs/design/assets/` | 由本地文档工具生成的 3 张 PNG | 手工改图、截图堆 | 3 张图 |
 | `docs/reference/` | 原始能力清单、外部资料摘要 | 正式设计正文 | `skill.txt` |
 | `.github/workflows/` | CI：链接、JSON、skill 映射检查 | 本地脚本 | `ci.yml` |
 
@@ -88,7 +83,7 @@ specs/ 改契约 → 改 apps/api 的 Pydantic/转移表 → 生成 TS 类型 �
 - `tests/` 证明“代码没坏”；
 - `eval/` 证明“诊断说得准”。
 
-所以 `eval/` 与 `docs/` 平级，不塞进 `apps/api/tests/`。完整 golden 数据可能含题目/答案，默认本地或私有；公开仓库只放格式说明和少量合成样例。
+所以 `eval/` 与 `docs/` 平级，不塞进 `apps/api/tests/`。公开仓库只放评测协议与汇总证据；原始 golden、题集、学生作答和逐题报告留在本地或私有工作区，不随公开仓库发布。
 
 ## 说明文档索引
 
@@ -104,7 +99,6 @@ specs/ 改契约 → 改 apps/api 的 Pydantic/转移表 → 生成 TS 类型 �
 | 契约与 schema | [specs/README.md](specs/README.md) |
 | 评测怎么组织 | [eval/README.md](eval/README.md) |
 | 部署拓扑 | [infra/README.md](infra/README.md) |
-| 文档怎么生成 | [tools/README.md](tools/README.md) |
 | CI 检查什么 | [scripts/README.md](scripts/README.md) |
 | 设计文档怎么读 | [docs/README.md](docs/README.md) |
 | 设计章节源 | [docs/design/README.md](docs/design/README.md) |
@@ -126,7 +120,7 @@ specs/ 改契约 → 改 apps/api 的 Pydantic/转移表 → 生成 TS 类型 �
 - 目录/文件：小写 + 短横线；中文文件名只用于设计章节，保持编号前缀。
 - 章节：`NN-标题.md`，`NN` 两位；新增章节先改 `docs/design/README.md` 的阅读顺序。
 - ADR：`NNNN-短标题.md`，编号递增，不覆盖旧决策；被取代时改状态并链接新 ADR。
-- 图片：`NN-名称.png`，由 `tools/diagrams.py` 生成；不手工改 PNG。
+- 图片：`NN-名称.png`，由本地文档工具生成；不手工改 PNG。
 - 生成物：`docs/design/release/` 下同名覆盖；不提交、不手改。
 
 ---

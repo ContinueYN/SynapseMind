@@ -45,9 +45,6 @@ REQUIRED = PUBLIC_REQUIRED if PUBLIC else [
     "specs/diagnosis.schema.json",
     "specs/structure-hint.schema.json",
     "specs/step-verification.schema.json",
-    "tools/generate_docx.py",
-    "tools/merge_markdown.py",
-    "tools/diagrams.py",
 ]
 
 LINK_RE = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
@@ -95,7 +92,6 @@ def walk_markdown() -> list[Path]:
         ROOT / "eval",
         ROOT / "infra",
         ROOT / "scripts",
-        ROOT / "tools",
     ]
     if PUBLIC:
         roots = [

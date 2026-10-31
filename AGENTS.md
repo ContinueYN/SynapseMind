@@ -193,7 +193,7 @@ python tools/merge_markdown.py
 | `.venv\Scripts\mypy.exe` 静默 exit 1 | 本机 `mypy.exe --version` 都返回 1 且无输出，但 `.\.venv\Scripts\python.exe -m mypy src` 正常（70 files, no issues）。用模块方式跑，别把静默失败当成类型错误；CI 的 `mypy src` 不受影响 |
 | 8000 是默认端口，但可能被别的服务占用 | 脚本与前端默认都是 8000（`scripts/dev/run.py --api-port 8000`、`client.ts` 回退 `http://localhost:8000`）。先查 `Get-NetTCPConnection -State Listen -LocalPort 8000`；如果确实被 `cs-web-ai-backend-1` 之类的容器占用、uvicorn 报 `winerror 10013`，才临时改 `--api-port 8100`，并在 `apps/web/.env.local` 写 `NEXT_PUBLIC_API_BASE=http://localhost:8100`（该文件被 `*.local` 忽略）；改完要重启 `npm run dev`——`NEXT_PUBLIC_*` 在 dev 启动时就内联了，热更新换不掉。**端口空闲时不要照抄 8100。** |
 | 新增 Python 依赖要重装 venv | `pyproject.toml` 加了 `jsonschema`（运行时）与 `types-jsonschema`（dev）；旧 venv 没有时会 ImportError。`pip install -e ".[dev]"` 一次补齐 |
-| 根目录 `eval/` 在 `.gitignore` | 只忽略**根目录**的私有评测材料；`scripts/eval/` 是工具、必须入库（早先写成不带锚点的 `eval/`，把 `m2_exit.py` 一起吞了）。golden 数据仍需 `git add -f eval/golden/golden-v0.1.jsonl`，`eval/reports/` 是产物不入库 |
+| 根目录 `eval/` 在 `.gitignore` | 整个 `/eval/` 忽略，只有公开的 `eval/README.md` 用 `git add -f` 入库；`golden/`、`problems/`、`reports/` 都留在本地或私有工作区，不随公开仓库发布。`scripts/eval/` 是评测工具、必须入库（早先写成不带锚点的 `eval/`，把 `m2_exit.py` 一起吞了）。`tools/` 同样整目录忽略，只作本地文档构建；公开仓库不含文档构建脚本。 |
 | CI 跑 `ruff format --check` | 只跑 `ruff check` 会在 CI 挂（format 与 check 是两套规则）；写完先 `ruff format src tests`。文件末尾缺换行也算未格式化 |
 | 生成图 prompt 已升到 `graph-v9` | v2 起每个探针的每个选项都必须有 `evidence` 权重；v3 起可选 `claim`（参数区间）并把验证接进建图；v4 起要求每个探针至少一个权重达到 ±0.8~1.0、同一假设的选项差 ≥1.0、整图覆盖三个假设；v6 还要求检查 parameter=0、parameter<0、variable→±∞；**v7/v8/v9 是首问延迟治理的三版**（v7 探针 3 个 → 出卡掉到 15/20；v8 探针 4 个 → 16/20；v9 探针 4–5 个 + 每个假设两向权重 → 20/20）。旧图和旧报告先看报告头部的 prompt 版本。schema 里 `probe.evidence` 与 `claim` 都是可选，「生成图必须有 evidence」由 `graph_structure.review(require_evidence=True)` 强制 |
 | 物理/语文的 prompt 版本各自钉住 | `SYNAPSE_GRAPH_PROMPT_VERSION` 现在**只控制数学**（默认 `graph-v9`）；物理是 `_PROFILES` 里的常量 `graph-v9-physics`，语文是 `graph-v6-chinese`。它们的 prompt 文本没跟着数学改，标签就不能假装改了——`test_graph_build.py` 专门断言这三个值。改物理/语文 prompt 时改常量并同步测试，别指望环境变量 |
@@ -267,11 +267,8 @@ docs/vision/                 设想层：学习机理（诊断—归因—干预
 specs/                       机器可验证契约（JSON Schema + 状态机）
 apps/api/                    后端：domain / application / infrastructure / api 分层
 apps/web/                    前端：Next.js 15
-eval/golden/                 M2 金标准 10 条（入库，需 `git add -f`）
-eval/problems/               M2.5 题集：100 道数学（v0.2，带 expected_answer）+ 6 物理 + 6 语文
-                             + 学生作答样本（3 条 synthetic + 4 条 public-web，入库，需 `git add -f`）
-eval/reports/                评测报告与生成图（产物，不入库；INDEX.md 是基线索引）
-eval/redteam/                诱导／越界／泄漏用例（只有 README，未开工）
+eval/README.md               公开评测协议、指标与汇总证据（原始语料/逐题报告不入库）
+tools/                       本地文档构建脚本（不入库）
 scripts/release/             公开仓库导出：export_public.py + templates/（把本仓裁成对外树）
 ```
 

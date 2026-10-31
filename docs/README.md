@@ -20,7 +20,7 @@
 | [`adr/`](adr/README.md) | 决策记录：背景、选项、评分、后果、**改选条件** | ✅ | 做技术选型时新增一篇；旧篇只补「后来怎样」，不改写当时理由 |
 | [`design/chapters/`](design/chapters/) | 设计书唯一手写源：00 一页纸 … 14 视觉系统，15 附录 | ✅ | 设计变了改这里，**不要改 DOCX/PDF** |
 | `design/release/` | 合并稿 MD、DOCX、PDF、`openapi.json` | ❌ 生成物 | 改了章节后重建（见第五节） |
-| [`design/assets/`](design/assets/) | 3 张设计图，由 `tools/diagrams.py` 生成 | ✅ | 图变了重跑脚本，不要手改 PNG |
+| [`design/assets/`](design/assets/) | 3 张设计图，由本地文档工具生成 | ✅ | 图变了重跑本地脚本，不要手改 PNG |
 | [`vision/`](vision/) | 设想层：学习机理、CHC 归因、生物类比与文献 | ✅ | 只增不删；与实现冲突时**以实现为准** |
 | [`reference/`](reference/) | 外部原始材料（能力清单 `skill.txt`） | ✅ | 只读，是第 08 章逐条映射的依据 |
 | `design/plan/` | 本地详尽计划、未入库的取舍记录 | ❌ 本机 | 只在本地会话里用 |
@@ -31,7 +31,7 @@
 - **接手开发（2 小时）**：[AGENTS.md](../AGENTS.md) 全文 → [`specs/dialogue-state.md`](../specs/dialogue-state.md) → [ADR-0001](adr/0001-language-and-code-architecture.md) → [12 章 M2 交付计划](design/chapters/12-M2交付计划.md) → [13 章 学科插件](design/chapters/13-学科插件与可扩展架构.md)
 - **只改前端**：[14 章 视觉系统](design/chapters/14-视觉系统.md) ＋ `apps/web/`
 - **只改诊断**：[04 章 诊断引擎](design/chapters/04-诊断引擎.md) ＋ [`specs/solution-graph.schema.json`](../specs/solution-graph.schema.json)
-- **想知道“准不准”**：`eval/README.md` ＋ `eval/reports/INDEX.md`（哪份报告是当前基线）
+- **想知道“准不准”**：[eval/README.md](../eval/README.md)（公开评测协议与汇总；逐题报告留在本地）
 
 ## 四、阅读顺序（按依赖，不按编号）
 
@@ -48,16 +48,6 @@
 > 按需读：06（RAG，未实现的规划）、10（演示与问答）、11（子 Agent 设计过程，方法论存留）、
 > 14（视觉系统，改前端前必读）。
 
-## 五、构建设计书
+## 五、构建设计书（本地）
 
-```bash
-python -m pip install -r tools/requirements.txt
-python tools/diagrams.py
-python tools/merge_markdown.py
-python tools/generate_docx.py
-# Windows + Word 环境：更新目录并导出 PDF
-pwsh tools/update_toc_and_export.ps1
-```
-
-> 生成脚本会覆盖 `design/release/` 下的同名文件；该目录已忽略、不入库。
-> 改稿请改 `design/chapters/`，不要直接改 DOCX。
+`design/chapters/` 是唯一手写源。DOCX/PDF 的构建脚本与产物属于本地文档工作流，不随公开仓库发布；需要重建时在私有工作区运行，生成物写到已忽略的 `design/release/`，不要直接改中间稿或 DOCX。
