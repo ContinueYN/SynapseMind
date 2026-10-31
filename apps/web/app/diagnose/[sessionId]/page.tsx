@@ -58,6 +58,7 @@ export default function DiagnosePage() {
   );
   /* 指针停在哪一轮问答上，左轨对应的节点跟着亮 */
   const [hotTurn, setHotTurn] = useState<number | null>(null);
+  const [revealArmed, setRevealArmed] = useState(false);
 
   const probeRef = useRef<HTMLDivElement>(null);
   const lastTurn = useRef<number | null>(null);
@@ -163,12 +164,33 @@ export default function DiagnosePage() {
     setError(null);
     try {
       setSession(await exitSession(sessionId));
+      setRevealArmed(false);
     } catch (caught) {
       if (isSessionConflict(caught)) {
         await refreshAfterConflict("exit");
       } else {
         setError(caught instanceof Error ? caught.message : "退出失败，请重试。");
       }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function revealSolution() {
+    if (busy) return;
+    if (!revealArmed) {
+      setRevealArmed(true);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      setSession(await exitSession(sessionId, true));
+      setRevealArmed(false);
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "读取解法失败，请重试。",
+      );
     } finally {
       setBusy(false);
     }
@@ -357,6 +379,25 @@ export default function DiagnosePage() {
                 probe={session.prompt}
                 turn={session.turn + 1}
               />
+            ) : session.answer && session.solution ? (
+              <Surface>
+                <p className="sm-kicker">完整解法</p>
+                <h2 className="sm-h2">{session.answer}</h2>
+                <p className="sm-p" style={{ whiteSpace: "pre-wrap" }}>
+                  {session.solution}
+                </p>
+                <p className="sm-fine">
+                  只有你明确要求时才显示；本次会话不生成卡点卡。
+                </p>
+                <p style={{ marginTop: 24 }}>
+                  <Link className="sm-cta" href="/">
+                    重新交一道题
+                    <span aria-hidden="true" className="sm-ar">
+                      →
+                    </span>
+                  </Link>
+                </p>
+              </Surface>
             ) : (
               <Surface>
                 <p className="sm-kicker">本轮结束</p>
@@ -365,7 +406,19 @@ export default function DiagnosePage() {
                   没有足够证据时，系统不硬判卡点。回交题页补一步更具体的过程，会让定位更准。
                 </p>
                 <p style={{ marginTop: 24 }}>
-                  <Link className="sm-cta" href="/">
+                  <button
+                    className="sm-link"
+                    disabled={busy || session.notice?.includes("没有存储解法")}
+                    onClick={revealSolution}
+                    type="button"
+                  >
+                    {revealArmed
+                      ? "再点一次：显示答案与完整解法"
+                      : "看完整解法"}
+                  </button>
+                </p>
+                <p style={{ marginTop: 12 }}>
+                  <Link className="sm-link sm-link-quiet" href="/">
                     重新交一道题
                     <span aria-hidden="true" className="sm-ar">
                       →

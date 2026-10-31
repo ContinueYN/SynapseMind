@@ -166,6 +166,11 @@ class SessionOut(StrictModel):
     hint: HintOut | None = None
     scaffold: ScaffoldOut | None = None
     notice: str | None = None
+    # Only populated by an explicit exit-with-reveal request. Learning-mode
+    # responses omit the keys entirely (``exclude_if``), so a regression test can
+    # keep asserting that no "solution" key exists on a probe turn.
+    answer: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    solution: str | None = Field(default=None, exclude_if=lambda value: value is None)
     progress: ProgressOut
     history: list[HistoryItemOut] = Field(default_factory=list)
 
@@ -173,6 +178,12 @@ class SessionOut(StrictModel):
 class TurnRequest(StrictModel):
     answer: str = Field(min_length=1, max_length=2000)
     option_id: str | None = Field(default=None, max_length=20)
+
+
+class ExitRequest(StrictModel):
+    """Explicit opt-in to the answer store; the default exit reveals nothing."""
+
+    reveal: bool = False
 
 
 class StepRequest(StrictModel):

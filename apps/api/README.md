@@ -104,7 +104,7 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 | `POST` | `/api/v1/sessions/{id}/card/disagree` | 记录卡点卡异议（写回会话 + 本地复核队列） |
 | `GET` | `/api/v1/review/items` | 只读列出异议队列（不含学生原文） |
 | `GET` | `/api/v1/knowledge/search` | 只读知识卡检索（可选 RAG，不含学生原文） |
-| `POST` | `/api/v1/sessions/{id}/exit` | 显式退出学习模式 |
+| `POST` | `/api/v1/sessions/{id}/exit` | 显式退出学习模式；可选 body `{"reveal": true}` 在退出后返回标注题答案与完整解法（生成题返回 notice，不编造） |
 
 约定：
 

@@ -103,10 +103,16 @@ export function verifyStep(
   );
 }
 
-export function exitSession(sessionId: string): Promise<SessionResponse> {
+export function exitSession(
+  sessionId: string,
+  reveal = false,
+): Promise<SessionResponse> {
   return request<SessionResponse>(
     `/api/v1/sessions/${encodeURIComponent(sessionId)}/exit`,
-    { method: "POST" },
+    {
+      method: "POST",
+      body: JSON.stringify({ reveal }),
+    },
   );
 }
 

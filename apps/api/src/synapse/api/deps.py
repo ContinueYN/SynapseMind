@@ -191,6 +191,7 @@ def build_container(
         auditor=sink,
         step_limiter=limiter,
         review_queue=review_queue,
+        answers=answers,
     )
     knowledge_service = (
         knowledge if knowledge is not None else build_knowledge_service(enabled=flags.rag)

@@ -229,7 +229,11 @@ def session_out(
         diagnosis=diagnosis_out(view.diagnosis) if view.diagnosis else None,
         hint=hint_out(view.hint) if view.hint else None,
         scaffold=scaffold_out(view.scaffold) if view.scaffold else None,
-        notice=view.notice,
+        notice=(
+            view.reveal.notice if view.reveal is not None and view.reveal.notice else view.notice
+        ),
+        answer=view.reveal.answer if view.reveal else None,
+        solution=view.reveal.solution if view.reveal else None,
         progress=progress_out(session),
         history=[history_out(record) for record in session.history],
     )

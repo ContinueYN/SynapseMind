@@ -262,6 +262,17 @@ export interface components {
             problem_id: string;
             card: components["schemas"]["CardOut"];
         };
+        /**
+         * ExitRequest
+         * @description Explicit opt-in to the answer store; the default exit reveals nothing.
+         */
+        ExitRequest: {
+            /**
+             * Reveal
+             * @default false
+             */
+            reveal: boolean;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -539,6 +550,10 @@ export interface components {
             scaffold?: components["schemas"]["ScaffoldOut"] | null;
             /** Notice */
             notice?: string | null;
+            /** Answer */
+            answer?: string | null;
+            /** Solution */
+            solution?: string | null;
             progress: components["schemas"]["ProgressOut"];
             /** History */
             history?: components["schemas"]["HistoryItemOut"][];
@@ -894,7 +909,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ExitRequest"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

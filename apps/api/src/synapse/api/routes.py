@@ -18,6 +18,7 @@ from synapse.api.mappers import (
 from synapse.api.schemas import (
     CreateSessionRequest,
     DiagnosisOut,
+    ExitRequest,
     HealthOut,
     KnowledgeSearchOut,
     ReviewItemsOut,
@@ -225,10 +226,11 @@ def disagree_with_card(
 @router.post("/sessions/{session_id}/exit", response_model=SessionOut)
 def exit_session(
     session_id: str,
+    request: ExitRequest | None = None,
     service: SessionService = Depends(get_service),
 ) -> SessionOut:
     try:
-        view = service.exit(session_id)
+        view = service.exit(session_id, reveal=bool(request and request.reveal))
     except SessionNotFound as exc:
         raise HTTPException(status_code=404, detail="session not found") from exc
     except SessionConflict as exc:

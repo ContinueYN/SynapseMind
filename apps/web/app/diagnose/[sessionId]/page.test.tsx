@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import DiagnosePage from "./page";
-import { ApiError, getSession, submitTurn } from "@/src/lib/api/client";
+import { ApiError, exitSession, getSession, submitTurn } from "@/src/lib/api/client";
 import type { SessionResponse } from "@/src/lib/api/types";
 
 vi.mock("next/navigation", () => ({
@@ -105,10 +105,18 @@ const LATEST: SessionResponse = {
   ],
 };
 
+const CLOSED: SessionResponse = {
+  ...FIRST,
+  state: "CLOSED",
+  prompt: null,
+  notice: "已退出学习模式；本次不生成卡点卡，也不展示最终答案。",
+};
+
 describe("DiagnosePage conflict recovery", () => {
   beforeEach(() => {
     vi.mocked(getSession).mockReset();
     vi.mocked(submitTurn).mockReset();
+    vi.mocked(exitSession).mockReset();
     Element.prototype.scrollIntoView = vi.fn();
   });
 
@@ -131,5 +139,30 @@ describe("DiagnosePage conflict recovery", () => {
     );
     expect(screen.getByText("第二问：合并同类项之后呢？")).toBeInTheDocument();
     expect(submitTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it("reveals the stored solution only after a second explicit click", async () => {
+    vi.mocked(getSession).mockResolvedValueOnce(CLOSED);
+    vi.mocked(exitSession).mockResolvedValueOnce({
+      ...CLOSED,
+      answer: "a∈[1/e,+∞)",
+      solution: "定义域 x>0。分 a≤0 与 a>0 讨论。",
+    });
+
+    const user = userEvent.setup();
+    render(<DiagnosePage />);
+
+    const button = await screen.findByRole("button", { name: "看完整解法" });
+    expect(exitSession).not.toHaveBeenCalled();
+
+    await user.click(button);
+    expect(screen.getByRole("button", { name: /再点一次/ })).toBeInTheDocument();
+    expect(exitSession).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: /再点一次/ }));
+
+    expect(exitSession).toHaveBeenCalledWith("S_CONFLICT", true);
+    expect(await screen.findByText("a∈[1/e,+∞)")).toBeInTheDocument();
+    expect(screen.getByText(/定义域 x>0/)).toBeInTheDocument();
   });
 });

@@ -24,6 +24,7 @@ from synapse.application.hint_builder import build_structure_hint
 from synapse.application.limits import StepRateLimited, StepRateLimiter
 from synapse.application.planner import ProbePlanner
 from synapse.application.ports import (
+    AnswerStore,
     ProblemRepository,
     SessionRepository,
 )
@@ -56,6 +57,15 @@ class InvalidAnswer(ValueError):
 
 
 @dataclass(frozen=True, slots=True)
+class Reveal:
+    """Only produced for an explicit exit request; never part of a probe turn."""
+
+    answer: str | None = None
+    solution: str | None = None
+    notice: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class SessionView:
     session: DialogueSession
     prompt: ProbePrompt | None = None
@@ -68,6 +78,8 @@ class SessionView:
     # A blank attempt gets an example before any probe. Mutually exclusive with
     # ``prompt`` and ``hint``: it is the only output of the SCAFFOLD state.
     scaffold: Scaffold | None = None
+    # Explicit exit-with-reveal. Learning-mode views never set this.
+    reveal: Reveal | None = None
 
 
 class SessionService:
@@ -85,6 +97,7 @@ class SessionService:
         auditor: CallAuditor | None = None,
         step_limiter: StepRateLimiter | None = None,
         review_queue: ReviewQueue | None = None,
+        answers: AnswerStore | None = None,
     ) -> None:
         self._sessions = sessions
         self._problems = problems
@@ -113,6 +126,7 @@ class SessionService:
         # Optional local review queue. Disagreeing with a card is the only writer;
         # the queue stores the card's conclusion, never the student's work.
         self._review_queue = review_queue
+        self._answers = answers
 
     def start(self, command: StartSessionCommand) -> SessionView:
         # Check the student's own equals signs before alignment: a provable
@@ -282,14 +296,42 @@ class SessionService:
         self._sessions.save(session)
         return SessionView(session=session, prompt=prompt)
 
-    def exit(self, session_id: str) -> SessionView:
+    def exit(self, session_id: str, *, reveal: bool = False) -> SessionView:
         session = self._get(session_id)
         if session.state is DialogueState.CLOSED:
-            return SessionView(session=session, notice="会话已关闭。")
-        return self._close(
-            session,
-            "已退出学习模式；本次不生成卡点卡，也不展示最终答案。",
-        )
+            view = SessionView(session=session, notice="会话已关闭。")
+        else:
+            view = self._close(
+                session,
+                "已退出学习模式；本次不生成卡点卡。解法只在这次显式请求里返回。"
+                if reveal
+                else "已退出学习模式；本次不生成卡点卡，也不展示最终答案。",
+            )
+        if not reveal:
+            return view
+        return replace(view, reveal=self._reveal(session.problem_id))
+
+    def _reveal(self, problem_id: str) -> Reveal:
+        """Read the answer store only for an explicit post-exit request.
+
+        The method is deliberately not called from ``start``/``submit``/
+        ``get``: the learning path cannot reach it by accident. Generated
+        problems have no stored solution, and the response says so instead of
+        inventing one.
+        """
+
+        problem = self._problem(problem_id)
+        if not problem.annotated:
+            return Reveal(notice="这题没有存储解法；生成题不编造答案。")
+        if self._answers is None:
+            return Reveal(notice="答案库未接入；本次不展示解法。")
+        try:
+            return Reveal(
+                answer=self._answers.answer_for(problem.id),
+                solution=self._answers.solution_for(problem.id),
+            )
+        except KeyError:
+            return Reveal(notice="这道题没有存储答案；本次不展示解法。")
 
     def verify_step(self, session_id: str, command: VerifyStepCommand) -> Verdict:
         """Verify one submitted step without advancing the dialogue.

@@ -81,6 +81,15 @@ const SESSIONS = {
       },
     },
   },
+  S_REVEAL_E2E: {
+    problem_id: "P_E2E_REVEAL",
+    problem_title: "恒成立与参数分类",
+    problem_text: "已知函数 f(x)=ln x - a x，求 a 的取值范围。",
+    subject: "math",
+    state: "CLOSED",
+    prompt: null,
+    notice: "已退出学习模式；本次不生成卡点卡，也不展示最终答案。",
+  },
 };
 
 const REVIEW_ITEMS = [
@@ -271,7 +280,7 @@ const server = createServer(async (req, res) => {
   }
 
   const match = url.pathname.match(
-    /^\/api\/v1\/sessions\/([^/]+)(\/steps|\/turns)?$/,
+    /^\/api\/v1\/sessions\/([^/]+)(\/steps|\/turns|\/exit)?$/,
   );
   if (!match) {
     send(res, 404, { detail: "not found" });
@@ -286,6 +295,33 @@ const server = createServer(async (req, res) => {
 
   if (req.method === "GET" && !match[2]) {
     send(res, 200, sessionBody(id));
+    return;
+  }
+
+  if (req.method === "POST" && match[2] === "/exit") {
+    let body;
+    try {
+      body = await readJson(req);
+    } catch {
+      send(res, 400, { detail: "invalid json" });
+      return;
+    }
+    const base = {
+      ...sessionBody(id),
+      state: "CLOSED",
+      prompt: null,
+      notice: "已退出学习模式；本次不生成卡点卡，也不展示最终答案。",
+    };
+    if (!body.reveal) {
+      send(res, 200, base);
+      return;
+    }
+    send(res, 200, {
+      ...base,
+      notice: "已退出学习模式；本次不生成卡点卡。解法只在这次显式请求里返回。",
+      answer: "a∈[1/e,+∞)",
+      solution: "定义域 x>0。分 a≤0 与 a>0 讨论，最大值为 -ln a-1，令其≤0 得 a≥1/e。",
+    });
     return;
   }
 
