@@ -27,7 +27,7 @@ describe("AboutPage", () => {
     render(<AboutPage />);
 
     const links = screen.getAllByRole("link", { name: /doi:/i });
-    expect(links).toHaveLength(3);
+    expect(links).toHaveLength(5);
     expect(links[0]).toHaveAttribute(
       "href",
       "https://doi.org/10.1017/CBO9780511571312",

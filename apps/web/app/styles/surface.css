@@ -1414,6 +1414,61 @@ html[data-read="done"] .sm-orb-fill {
   line-height: 1.8;
 }
 
+.sm-grounds {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: var(--s5);
+}
+
+.sm-ground {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 17px 18px 16px;
+  color: var(--ink-2);
+  text-decoration: none;
+  transition:
+    border-color var(--t-fast) linear,
+    box-shadow var(--t-base) linear,
+    transform var(--t-base) var(--ease-out);
+}
+
+.sm-ground:hover {
+  border-color: rgba(154, 190, 235, 0.85);
+  box-shadow: var(--lift-plane), var(--glass-rim), var(--glass-rim-lo);
+  transform: translateY(-2px);
+}
+
+.sm-ground-k {
+  color: var(--azure-ink);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+}
+
+.sm-ground b {
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.sm-ground > span:not(.sm-ground-k) {
+  color: var(--ink-3);
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
+.sm-ground em {
+  margin-top: 2px;
+  color: var(--ink-3);
+  font-size: 10.5px;
+  font-style: normal;
+  letter-spacing: 0.02em;
+  overflow-wrap: anywhere;
+}
+
 /* 索引：一块凹进去的玻璃底板，四条引线把字段名连到它回答的问题 */
 .sm-index {
   display: grid;
@@ -3756,6 +3811,11 @@ html[data-read="done"] .sm-orb-fill {
   .sm-note-item {
     grid-template-columns: minmax(0, 1fr);
     gap: 4px;
+  }
+
+  .sm-grounds {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
   }
 
   /* 板上留白收一档，但页签仍然探出板边 */

@@ -23,8 +23,29 @@ const LOOP = [
 
 const EDGE = [
   ["给你", "卡在哪一步，依据是你写过的哪几句，下次先练什么。"],
-  ["不给", "最终解法、分数、排名，以及任何能力或医学评估。"],
+  ["不给", "过程中的最终解法、分数、排名，以及任何能力或医学评估。"],
   ["要你", "题目、一个答案、写到的那一行。空着的格子会标出来。"],
+] as const;
+
+const GROUNDS = [
+  {
+    tag: "突触可塑性",
+    authors: "Citri & Malenka (2008)",
+    text: "只借「成功提取会强化通路」的形状，不做脑测量。",
+    doi: "10.1038/sj.npp.1301559",
+  },
+  {
+    tag: "认知负荷",
+    authors: "Sweller (1988)",
+    text: "先降低外在负荷，再一次只给一个最小动作。",
+    doi: "10.1207/s15516709cog1202_4",
+  },
+  {
+    tag: "反馈",
+    authors: "Hattie & Timperley (2007)",
+    text: "反馈指向任务与下一步，不指向「你这个人」。",
+    doi: "10.3102/003465430298487",
+  },
 ] as const;
 
 const META = [
@@ -79,7 +100,7 @@ export default function HomePage() {
         <Plane className="sm-hero-lead">
           <p className="sm-eyebrow">
             <span aria-hidden="true" className="sm-dot" />
-            高中数学 · 函数与导数
+            数学 · 物理 · 语文 · 自动识别
           </p>
 
           <h1 className="sm-display">
@@ -206,6 +227,38 @@ export default function HomePage() {
               ))}
             </dl>
           </div>
+        </Plane>
+      </Reveal>
+    <Reveal className="sm-flow sm-flow--narrow">
+        <Plane>
+          <h2 className="sm-label">
+            <em>05</em>
+            依据
+          </h2>
+
+          <p className="sm-statement">类比有出处，效果不借背书。</p>
+
+          <div className="sm-grounds">
+            {GROUNDS.map((ground) => (
+              <a
+                className="sm-ground sm-tile"
+                href={`https://doi.org/${ground.doi}`}
+                key={ground.doi}
+                rel="noreferrer"
+                target="_blank"
+              >
+                <span className="sm-ground-k">{ground.tag}</span>
+                <b>{ground.authors}</b>
+                <span>{ground.text}</span>
+                <em>doi:{ground.doi}</em>
+              </a>
+            ))}
+          </div>
+
+          <p className="sm-fine">
+            这些文献只解释设计形状：怎么降低负荷、怎么给反馈、为什么用「强化」作类比。
+            我们没有做对照实验，也没有延迟正确率；不把类比写成神经测量，也不承诺提分。
+          </p>
         </Plane>
       </Reveal>
     </div>

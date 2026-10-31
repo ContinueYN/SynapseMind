@@ -67,6 +67,19 @@ const REFERENCES = [
     source: "Review of Educational Research, 77(1), 81–112.",
     doi: "10.3102/003465430298487",
   },
+  {
+    authors: "Kandel, E. R. (2001).",
+    title:
+      "The molecular biology of memory storage: A dialogue between genes and synapses.",
+    source: "Science, 294(5544), 1030–1038.",
+    doi: "10.1126/science.1067020",
+  },
+  {
+    authors: "Citri, A., & Malenka, R. C. (2008).",
+    title: "Synaptic plasticity: Multiple forms, functions, and mechanisms.",
+    source: "Neuropsychopharmacology, 33(1), 18–41.",
+    doi: "10.1038/sj.npp.1301559",
+  },
 ] as const;
 
 export default function AboutPage() {
@@ -150,7 +163,7 @@ export default function AboutPage() {
           </div>
 
           <p className="sm-fine">
-            当前版本里，这套标注还只是解法图节点上的字段，没有进入诊断结论，也没有用来选探针。
+            当前版本里，这套标注默认关闭；打开 `SYNAPSE_CHC_ATTRIBUTION` 后，卡面只显示本题 focus 节点需求最高的两维，措辞是「题目需求标签，不是能力测评」。它仍不更新后验，也没有用来选探针。
             我们不输出 IQ、百分位或「能力分」；单题也不足以断言任何一项能力。
           </p>
         </Plane>
@@ -213,8 +226,8 @@ export default function AboutPage() {
           </ol>
 
           <p className="sm-fine">
-            这些文献是能力分类、认知负荷与反馈机制的来源。它们不是对本产品效果的背书：
-            我们没有做对照实验，也没有延迟正确率。
+            这些文献是能力分类、认知负荷、反馈机制与突触可塑性的来源。它们不是对本产品效果的背书：
+            我们没有做对照实验，也没有延迟正确率；神经科学只借「成功提取会强化通路」的形状，不是脑测量。
           </p>
 
           <p className="sm-about-oath">
