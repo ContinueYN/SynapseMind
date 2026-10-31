@@ -9,6 +9,7 @@ const base = {
   valuesText: "",
   expectedText: "",
   toleranceText: "",
+  absoluteToleranceText: "",
 };
 
 describe("buildPhysicsStepPayload", () => {
@@ -80,10 +81,37 @@ describe("buildPhysicsStepPayload", () => {
     });
   });
 
+  it("adds an absolute tolerance, alone or with a relative one", () => {
+    const absoluteOnly = buildPhysicsStepPayload({
+      ...base,
+      unit: "N",
+      expectedText: "6",
+      absoluteToleranceText: "0.05",
+    });
+    expect(absoluteOnly).toMatchObject({
+      data: { tolerance: { absolute: 0.05 } },
+    });
+
+    const both = buildPhysicsStepPayload({
+      ...base,
+      unit: "N",
+      expectedText: "6",
+      toleranceText: "1",
+      absoluteToleranceText: "0.05",
+    });
+    expect(both).toMatchObject({
+      data: { tolerance: { relative: 0.01, absolute: 0.05 } },
+    });
+  });
+
   it("rejects a declared result without a unit and an out-of-range tolerance", () => {
     expect(
       buildPhysicsStepPayload({ ...base, expectedText: "6" }),
     ).toMatchObject({ error: expect.stringContaining("结果单位") });
+
+    expect(
+      buildPhysicsStepPayload({ ...base, unit: "N", toleranceText: "1" }),
+    ).toMatchObject({ error: expect.stringContaining("你写的结果") });
 
     expect(
       buildPhysicsStepPayload({
@@ -97,6 +125,15 @@ describe("buildPhysicsStepPayload", () => {
     expect(
       buildPhysicsStepPayload({ ...base, unit: "N", expectedText: "six" }),
     ).toMatchObject({ error: expect.stringContaining("要写数字") });
+
+    expect(
+      buildPhysicsStepPayload({
+        ...base,
+        unit: "N",
+        expectedText: "6",
+        absoluteToleranceText: "-0.1",
+      }),
+    ).toMatchObject({ error: expect.stringContaining("绝对容差") });
   });
 
   it("rejects malformed unit and numeric lines before calling the API", () => {

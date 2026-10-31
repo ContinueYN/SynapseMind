@@ -16,6 +16,7 @@ export interface PhysicsStepFields {
   valuesText: string;
   expectedText: string;
   toleranceText: string;
+  absoluteToleranceText: string;
 }
 
 export type PhysicsStepPayload =
@@ -96,6 +97,12 @@ export function buildPhysicsStepPayload(fields: PhysicsStepFields): PhysicsStepP
   if (fields.expectedText.trim() && !unit) {
     return { error: "填了「你写的结果」时，要填结果单位，例如 N。" };
   }
+  if (
+    !fields.expectedText.trim() &&
+    Boolean(fields.toleranceText.trim() || fields.absoluteToleranceText.trim())
+  ) {
+    return { error: "填了容差，就也要填「你写的结果」；容差只用来比对声明结果。" };
+  }
 
   const parsedUnits = parseUnits(fields.unitsText);
   if ("error" in parsedUnits) return parsedUnits;
@@ -111,13 +118,24 @@ export function buildPhysicsStepPayload(fields: PhysicsStepFields): PhysicsStepP
     expected = { value, unit };
   }
 
-  let tolerance: { relative: number } | null = null;
+  let tolerance: { relative?: number; absolute?: number } | null = null;
+  const toleranceSpec: { relative?: number; absolute?: number } = {};
   if (fields.toleranceText.trim()) {
     const percent = Number(fields.toleranceText.trim());
     if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
       return { error: "相对容差要写 0 到 100 之间的数字，单位是 %。" };
     }
-    tolerance = { relative: percent / 100 };
+    toleranceSpec.relative = percent / 100;
+  }
+  if (fields.absoluteToleranceText.trim()) {
+    const absolute = Number(fields.absoluteToleranceText.trim());
+    if (!Number.isFinite(absolute) || absolute < 0) {
+      return { error: "绝对容差要写 0 或正数，单位跟结果单位一致。" };
+    }
+    toleranceSpec.absolute = absolute;
+  }
+  if (Object.keys(toleranceSpec).length > 0) {
+    tolerance = toleranceSpec;
   }
 
   const data: Record<string, unknown> = {

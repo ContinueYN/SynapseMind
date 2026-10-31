@@ -3167,6 +3167,10 @@ html[data-read="done"] .sm-orb-fill {
   gap: 12px;
 }
 
+.sm-stepcheck-grid--wide-first > .sm-f:first-child {
+  grid-column: 1 / -1;
+}
+
 .sm-stepcheck-actions {
   display: flex;
   align-items: center;

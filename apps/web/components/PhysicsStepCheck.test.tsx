@@ -93,6 +93,51 @@ describe("PhysicsStepCheck", () => {
     );
   });
 
+  it("sends an absolute tolerance in the result unit", async () => {
+    verify.mockResolvedValue(verdict("pass", "声明结果值与单位一致。"));
+    const user = await open();
+
+    await user.type(screen.getByLabelText("这一步"), "m*a");
+    await user.type(screen.getByLabelText("结果单位"), "N");
+    fireEvent.change(screen.getByLabelText("符号单位"), {
+      target: { value: "m=kg\na=m/s^2" },
+    });
+    fireEvent.change(screen.getByLabelText("数值"), {
+      target: { value: "m=2\na=3" },
+    });
+    await user.type(screen.getByLabelText("你写的结果"), "6");
+    await user.type(screen.getByLabelText("绝对容差"), "0.05");
+
+    await user.click(screen.getByRole("button", { name: "检查这一步" }));
+
+    await waitFor(() =>
+      expect(verify).toHaveBeenCalledWith("S_PHY123456789", {
+        text: "m*a",
+        node_id: "",
+        data: {
+          expression: "m*a",
+          unit: "N",
+          units: { m: "kg", a: "m/s^2" },
+          values: { m: 2, a: 3 },
+          expected: { value: 6, unit: "N" },
+          tolerance: { absolute: 0.05 },
+        },
+      }),
+    );
+  });
+
+  it("rejects a tolerance without a declared result before calling the API", async () => {
+    const user = await open();
+
+    await user.type(screen.getByLabelText("这一步"), "m*a");
+    await user.type(screen.getByLabelText("结果单位"), "N");
+    await user.type(screen.getByLabelText("绝对容差"), "0.05");
+    await user.click(screen.getByRole("button", { name: "检查这一步" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("你写的结果");
+    expect(verify).not.toHaveBeenCalled();
+  });
+
   it("stops a local shape error before calling the API", async () => {
     const user = await open();
 

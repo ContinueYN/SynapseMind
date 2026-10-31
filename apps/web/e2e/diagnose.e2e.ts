@@ -43,6 +43,7 @@ test("physics step check sends declared result/tolerance and survives 390px", as
   await page.getByLabel("结果单位").fill("m/s");
   await page.getByLabel("你写的结果").fill("6.3246");
   await page.getByLabel("相对容差").fill("1");
+  await page.getByLabel("绝对容差").fill("0.01");
   await page.getByRole("button", { name: "检查这一步" }).click();
 
   const result = page.locator(".sm-stepcheck-result");

@@ -47,6 +47,7 @@ export function PhysicsStepCheck({ sessionId }: PhysicsStepCheckProps) {
   const [valuesText, setValuesText] = useState("");
   const [expectedText, setExpectedText] = useState("");
   const [toleranceText, setToleranceText] = useState("");
+  const [absoluteToleranceText, setAbsoluteToleranceText] = useState("");
   const [busy, setBusy] = useState(false);
   const [verdict, setVerdict] = useState<StepVerdict | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -62,6 +63,7 @@ export function PhysicsStepCheck({ sessionId }: PhysicsStepCheckProps) {
       valuesText,
       expectedText,
       toleranceText,
+      absoluteToleranceText,
     });
     if ("error" in payload) {
       setVerdict(null);
@@ -186,7 +188,7 @@ export function PhysicsStepCheck({ sessionId }: PhysicsStepCheckProps) {
               />
             </label>
 
-            <div className="sm-stepcheck-grid">
+            <div className="sm-stepcheck-grid sm-stepcheck-grid--wide-first">
               <label className="sm-f">
                 <span className="sm-f-label">
                   你写的结果
@@ -224,6 +226,25 @@ export function PhysicsStepCheck({ sessionId }: PhysicsStepCheckProps) {
                   value={toleranceText}
                 />
               </label>
+
+              <label className="sm-f">
+                <span className="sm-f-label">
+                  绝对容差
+                  <em>和结果单位相同，可选</em>
+                </span>
+                <input
+                  aria-label="绝对容差"
+                  disabled={busy}
+                  inputMode="decimal"
+                  onChange={(event) => {
+                    setAbsoluteToleranceText(event.target.value);
+                    setVerdict(null);
+                  }}
+                  placeholder="例如：0.05"
+                  type="text"
+                  value={absoluteToleranceText}
+                />
+              </label>
             </div>
 
             <div className="sm-stepcheck-actions">
@@ -238,7 +259,7 @@ export function PhysicsStepCheck({ sessionId }: PhysicsStepCheckProps) {
                 </span>
               </button>
               <span className="sm-stepcheck-aside">
-                单位写成 m=kg、a=m/s^2；无量纲写 mu=。没填数值时只做量纲检查；容差 1 表示 1%。
+                单位写成 m=kg、a=m/s^2；无量纲写 mu=。没填数值时只做量纲检查；容差 1 表示 1%，绝对容差和结果单位相同；两项都填时同时生效，只填一项时另一项用默认。
               </span>
             </div>
           </form>

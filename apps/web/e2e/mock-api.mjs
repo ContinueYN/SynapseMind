@@ -100,13 +100,14 @@ function physicsVerdict(body) {
     data?.values?.h === 2 &&
     expected?.unit === "m/s" &&
     typeof expected?.value === "number" &&
-    tolerance?.relative === 0.01;
+    tolerance?.relative === 0.01 &&
+    tolerance?.absolute === 0.01;
   if (!shapeOk) {
     return {
       status: 400,
       body: {
         detail:
-          "mock API expected expression sqrt(2*g*h), g=10, h=2, expected m/s and relative tolerance 0.01.",
+          "mock API expected expression sqrt(2*g*h), g=10, h=2, expected m/s and relative/absolute tolerance 0.01.",
       },
     };
   }
