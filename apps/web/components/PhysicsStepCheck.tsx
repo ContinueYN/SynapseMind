@@ -45,6 +45,8 @@ export function PhysicsStepCheck({ sessionId }: PhysicsStepCheckProps) {
   const [unit, setUnit] = useState("");
   const [unitsText, setUnitsText] = useState("");
   const [valuesText, setValuesText] = useState("");
+  const [expectedText, setExpectedText] = useState("");
+  const [toleranceText, setToleranceText] = useState("");
   const [busy, setBusy] = useState(false);
   const [verdict, setVerdict] = useState<StepVerdict | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +60,8 @@ export function PhysicsStepCheck({ sessionId }: PhysicsStepCheckProps) {
       unit,
       unitsText,
       valuesText,
+      expectedText,
+      toleranceText,
     });
     if ("error" in payload) {
       setVerdict(null);
@@ -104,7 +108,7 @@ export function PhysicsStepCheck({ sessionId }: PhysicsStepCheckProps) {
           <p className="sm-kicker">物理单步检查</p>
           <h2 className="sm-h2">把这一步写成等式。</h2>
           <p className="sm-p">
-            系统先看两边量纲，再在你填了数值时回代。读不懂、缺单位或缺数值时返回「没判出来」，不猜。
+            系统先看两边量纲，再在你填了数值时回代；填了结果时，还会把等式右边或表达式的值和你写的答案比。读不懂、缺单位或缺数值时返回「没判出来」，不猜。
           </p>
 
           <form onSubmit={submit}>
@@ -167,7 +171,7 @@ export function PhysicsStepCheck({ sessionId }: PhysicsStepCheckProps) {
             <label className="sm-f">
               <span className="sm-f-label">
                 结果单位
-                <em>只写一个量时必填</em>
+                <em>只写一个量或声明结果时必填</em>
               </span>
               <input
                 aria-label="结果单位"
@@ -182,6 +186,46 @@ export function PhysicsStepCheck({ sessionId }: PhysicsStepCheckProps) {
               />
             </label>
 
+            <div className="sm-stepcheck-grid">
+              <label className="sm-f">
+                <span className="sm-f-label">
+                  你写的结果
+                  <em>可选，和右边/表达式的值比对</em>
+                </span>
+                <input
+                  aria-label="你写的结果"
+                  disabled={busy}
+                  inputMode="decimal"
+                  onChange={(event) => {
+                    setExpectedText(event.target.value);
+                    setVerdict(null);
+                  }}
+                  placeholder="例如：6"
+                  type="text"
+                  value={expectedText}
+                />
+              </label>
+
+              <label className="sm-f">
+                <span className="sm-f-label">
+                  相对容差
+                  <em>%，可选</em>
+                </span>
+                <input
+                  aria-label="相对容差"
+                  disabled={busy}
+                  inputMode="decimal"
+                  onChange={(event) => {
+                    setToleranceText(event.target.value);
+                    setVerdict(null);
+                  }}
+                  placeholder="例如：1"
+                  type="text"
+                  value={toleranceText}
+                />
+              </label>
+            </div>
+
             <div className="sm-stepcheck-actions">
               <button
                 className="sm-cta"
@@ -194,7 +238,7 @@ export function PhysicsStepCheck({ sessionId }: PhysicsStepCheckProps) {
                 </span>
               </button>
               <span className="sm-stepcheck-aside">
-                单位写成 m=kg、a=m/s^2；无量纲写 mu=。没填数值时只做量纲检查。
+                单位写成 m=kg、a=m/s^2；无量纲写 mu=。没填数值时只做量纲检查；容差 1 表示 1%。
               </span>
             </div>
           </form>

@@ -14,6 +14,8 @@ export interface PhysicsStepFields {
   unit: string;
   unitsText: string;
   valuesText: string;
+  expectedText: string;
+  toleranceText: string;
 }
 
 export type PhysicsStepPayload =
@@ -91,11 +93,32 @@ export function buildPhysicsStepPayload(fields: PhysicsStepFields): PhysicsStepP
   if (!isEquation && !unit) {
     return { error: "只写一个量时，要填它的结果单位，例如 N。" };
   }
+  if (fields.expectedText.trim() && !unit) {
+    return { error: "填了「你写的结果」时，要填结果单位，例如 N。" };
+  }
 
   const parsedUnits = parseUnits(fields.unitsText);
   if ("error" in parsedUnits) return parsedUnits;
   const parsedValues = parseValues(fields.valuesText);
   if ("error" in parsedValues) return parsedValues;
+
+  let expected: { value: number; unit: string } | null = null;
+  if (fields.expectedText.trim()) {
+    const value = Number(fields.expectedText.trim());
+    if (!Number.isFinite(value)) {
+      return { error: "「你写的结果」要写数字，例如 6、0.5、1e-3。" };
+    }
+    expected = { value, unit };
+  }
+
+  let tolerance: { relative: number } | null = null;
+  if (fields.toleranceText.trim()) {
+    const percent = Number(fields.toleranceText.trim());
+    if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
+      return { error: "相对容差要写 0 到 100 之间的数字，单位是 %。" };
+    }
+    tolerance = { relative: percent / 100 };
+  }
 
   const data: Record<string, unknown> = {
     [isEquation ? "equation" : "expression"]: text,
@@ -105,5 +128,7 @@ export function buildPhysicsStepPayload(fields: PhysicsStepFields): PhysicsStepP
   if (Object.keys(parsedValues.values).length > 0) {
     data.values = parsedValues.values;
   }
+  if (expected) data.expected = expected;
+  if (tolerance) data.tolerance = tolerance;
   return { text, data };
 }

@@ -7,6 +7,8 @@ const base = {
   unit: "",
   unitsText: "",
   valuesText: "",
+  expectedText: "",
+  toleranceText: "",
 };
 
 describe("buildPhysicsStepPayload", () => {
@@ -56,6 +58,45 @@ describe("buildPhysicsStepPayload", () => {
     });
 
     expect(result).toMatchObject({ data: { units: { mu: "" } } });
+  });
+
+  it("adds a declared result and a relative tolerance", () => {
+    const result = buildPhysicsStepPayload({
+      ...base,
+      unit: "N",
+      unitsText: "F=N\nm=kg\na=m/s^2\nmu=",
+      valuesText: "F=10\nm=2\na=3\nmu=0.2",
+      expectedText: "6",
+      toleranceText: "1",
+    });
+
+    expect(result).toMatchObject({
+      data: {
+        equation: "F - mu*N = m*a",
+        unit: "N",
+        expected: { value: 6, unit: "N" },
+        tolerance: { relative: 0.01 },
+      },
+    });
+  });
+
+  it("rejects a declared result without a unit and an out-of-range tolerance", () => {
+    expect(
+      buildPhysicsStepPayload({ ...base, expectedText: "6" }),
+    ).toMatchObject({ error: expect.stringContaining("结果单位") });
+
+    expect(
+      buildPhysicsStepPayload({
+        ...base,
+        unit: "N",
+        expectedText: "6",
+        toleranceText: "101",
+      }),
+    ).toMatchObject({ error: expect.stringContaining("0 到 100") });
+
+    expect(
+      buildPhysicsStepPayload({ ...base, unit: "N", expectedText: "six" }),
+    ).toMatchObject({ error: expect.stringContaining("要写数字") });
   });
 
   it("rejects malformed unit and numeric lines before calling the API", () => {

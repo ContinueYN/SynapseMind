@@ -60,6 +60,39 @@ describe("PhysicsStepCheck", () => {
     ).toBeInTheDocument();
   });
 
+  it("sends a declared result and relative tolerance with the numeric replay", async () => {
+    verify.mockResolvedValue(verdict("pass", "声明结果值与单位一致。"));
+    const user = await open();
+
+    await user.type(screen.getByLabelText("这一步"), "m*a");
+    await user.type(screen.getByLabelText("结果单位"), "N");
+    fireEvent.change(screen.getByLabelText("符号单位"), {
+      target: { value: "m=kg\na=m/s^2" },
+    });
+    fireEvent.change(screen.getByLabelText("数值"), {
+      target: { value: "m=2\na=3" },
+    });
+    await user.type(screen.getByLabelText("你写的结果"), "6");
+    await user.type(screen.getByLabelText("相对容差"), "1");
+
+    await user.click(screen.getByRole("button", { name: "检查这一步" }));
+
+    await waitFor(() =>
+      expect(verify).toHaveBeenCalledWith("S_PHY123456789", {
+        text: "m*a",
+        node_id: "",
+        data: {
+          expression: "m*a",
+          unit: "N",
+          units: { m: "kg", a: "m/s^2" },
+          values: { m: 2, a: 3 },
+          expected: { value: 6, unit: "N" },
+          tolerance: { relative: 0.01 },
+        },
+      }),
+    );
+  });
+
   it("stops a local shape error before calling the API", async () => {
     const user = await open();
 
