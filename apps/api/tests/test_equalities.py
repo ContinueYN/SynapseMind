@@ -23,6 +23,9 @@ REAL_FRUSTUM_WORK = (
         ("sinX", "sin(x)"),
         ("（x+1）（x-1）", "(x + 1)*(x - 1)"),
         ("根号（16）", "4"),
+        ("√2", "sqrt(2)"),
+        ("根号2", "sqrt(2)"),
+        ("√2/2", "sqrt(2)/2"),
     ],
 )
 def test_student_notation_is_translated(source: str, expected: str) -> None:
@@ -31,7 +34,7 @@ def test_student_notation_is_translated(source: str, expected: str) -> None:
     assert str(value) == str(parse(expected))
 
 
-@pytest.mark.parametrize("source", ["h台/h锥", "有哪里错了么", "", "an", "x20"])
+@pytest.mark.parametrize("source", ["h台/h锥", "有哪里错了么", "", "an", "x20", "√2x"])
 def test_unreadable_notation_returns_none(source: str) -> None:
     assert parse(source) is None
 
@@ -73,6 +76,12 @@ def test_real_student_limit_chain_catches_the_broken_equality() -> None:
 def test_correct_limit_chain_is_not_flagged() -> None:
     report = check_work("=lim[sinX/(X+tanX)] =lim[1/(1+1/cosX)] =1/2")
     assert report.findings == []
+
+
+def test_bare_radical_is_read_when_unambiguous() -> None:
+    report = check_work("√2/2 = 1/√2")
+    assert report.findings == []
+    assert report.checked == 1
 
 
 def test_unreadable_heights_do_not_produce_a_false_alarm() -> None:

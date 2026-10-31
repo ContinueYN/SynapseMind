@@ -53,6 +53,9 @@ _ALLOWED = {
 }
 
 _FUNCTION_CALL = re.compile(r"(?<![a-z])(sin|cos|tan|log|sqrt|abs|exp)\s*([a-z])")
+# `√2`/`根号2` 变换后是 `sqrt2`；只在后面不是字母/数字/小数点时补括号。
+# `√2x` 可能是 `sqrt(2)*x`，也可能是 `sqrt(2x)`，有歧义，保持读不懂。
+_SQRT_NUMBER = re.compile(r"(?<![a-z])sqrt\s*(\d+(?:\.\d+)?)(?![\w.])")
 _IMPLICIT_DIGIT = re.compile(r"(\d)\s*([a-z(])")
 _IMPLICIT_PAREN = re.compile(r"\)\s*(\d|[a-z](?![a-z])|\()")
 _IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
@@ -68,6 +71,7 @@ def normalize(source: str) -> str:
     # 学生常把自变量写成大写 X；函数名已经替换完，这里统一成小写。
     text = text.replace("X", "x")
     text = _FUNCTION_CALL.sub(r"\1(\2)", text)
+    text = _SQRT_NUMBER.sub(r"sqrt(\1)", text)
     text = _IMPLICIT_DIGIT.sub(r"\1*\2", text)
     text = _IMPLICIT_PAREN.sub(r")*\1", text)
     return re.sub(r"\s+", "", text)
