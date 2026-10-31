@@ -99,7 +99,9 @@ class ProblemResolver:
             if exc.reason == "disabled":
                 # "disabled" is exactly "this deployment cannot build graphs".
                 raise ProblemNotSupported(_NO_GENERATOR) from exc
-            raise ProblemNotSupported(f"建图失败：{exc.reason}{_detail(exc)}") from exc
+            raise ProblemNotSupported(
+                _GENERATION_FAILURES.get(exc.reason, f"建图失败：{exc.reason}")
+            ) from exc
 
         problem = Problem(
             id=problem_id,
@@ -115,10 +117,14 @@ class ProblemResolver:
 
 _NO_GENERATOR = "这道题没有标注解法图，当前环境也不能建图（SYNAPSE_LLM_MODE=off 或缺少 API key）"
 _LOW_CONFIDENCE = "无法可靠识别这道题的学科；请在题面里补一句学科线索（如“函数/受力/阅读”）"
-
-
-def _detail(exc: GraphBuildFailed) -> str:
-    return f": {exc.detail}" if getattr(exc, "detail", "") else ""
+_GENERATION_FAILURES = {
+    "timeout": "建图超时：模型没在预算内返回；这道题暂时不能拆成可验证步骤。",
+    "transport": "建图服务暂时不可达：这是环境问题，不是题目本身；稍后再试。",
+    "bad_json": "建图失败：模型返回的格式不合法；这道题暂时不能拆成可验证步骤。",
+    "schema_invalid": "建图失败：生成的步骤不满足结构约束；先不生成卡点。",
+    "degenerate": "这道题拆不出足够可验证的步骤；先不生成卡点。",
+    "invalid_draft": "建图失败：题目标识不合法；没有生成卡点。",
+}
 
 
 def _title(text: str) -> str:
