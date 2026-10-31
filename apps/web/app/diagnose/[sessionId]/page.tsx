@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { Dendrite, type DendriteStop } from "@/components/Dendrite";
 import { DiagnosisCardView } from "@/components/DiagnosisCardView";
 import { Plane } from "@/components/Plane";
+import { PhysicsStepCheck } from "@/components/PhysicsStepCheck";
 import { ProblemBrief } from "@/components/ProblemBrief";
 import { StepCheck } from "@/components/StepCheck";
 import { StructureHintView } from "@/components/StructureHintView";
@@ -291,7 +292,11 @@ export default function DiagnosePage() {
             )}
           </div>
 
-          {session.subject === "math" ? <StepCheck sessionId={sessionId} /> : null}
+          {session.subject === "math" ? (
+            <StepCheck sessionId={sessionId} />
+          ) : session.subject === "physics" ? (
+            <PhysicsStepCheck sessionId={sessionId} />
+          ) : null}
 
           {error ? (
             <p className="sm-alert" role="alert" style={{ marginTop: 18 }}>

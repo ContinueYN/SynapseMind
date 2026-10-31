@@ -3152,6 +3152,21 @@ html[data-read="done"] .sm-orb-fill {
   margin-top: var(--s4);
 }
 
+.sm-stepcheck-panel form > .sm-f,
+.sm-stepcheck-panel form > .sm-stepcheck-grid {
+  margin-top: 12px;
+}
+
+.sm-stepcheck-panel form > .sm-f:first-child {
+  margin-top: 0;
+}
+
+.sm-stepcheck-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .sm-stepcheck-actions {
   display: flex;
   align-items: center;
@@ -3727,6 +3742,10 @@ html[data-read="done"] .sm-orb-fill {
   .sm-stepcheck-actions .sm-cta {
     width: 100%;
     justify-content: center;
+  }
+
+  .sm-stepcheck-grid {
+    grid-template-columns: 1fr;
   }
 }
 

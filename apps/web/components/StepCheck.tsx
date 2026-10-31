@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 
 import { Surface } from "@/components/Surface";
+import { StepVerdictView } from "@/components/StepVerdictView";
 import { verifyStep } from "@/src/lib/api/client";
 import type { StepVerdict } from "@/src/lib/api/types";
 
@@ -10,24 +11,27 @@ import type { StepVerdict } from "@/src/lib/api/types";
  * 单步检查：只回答「这个等号成不成立」。
  *
  * 它是只读动作——不推进对话、不生成卡点卡，也不把 `unknown` 说成正确。
- * 页面上只在数学题里出现：物理需要结构化的量纲/数值载荷，语文没有可自动
- * 验证的真值，把这个入口摆给它们是空承诺。
+ * 这个组件只给数学用（一行等式）；物理走需要结构化载荷的
+ * `PhysicsStepCheck`，语文没有可自动验证的真值，不摆这个入口。
  */
 
 const STATUS_COPY: Record<
   StepVerdict["status"],
-  { tag: string; caveat: string }
+  { tag: string; badge: string; caveat: string }
 > = {
   fail: {
     tag: "这个等号不成立",
+    badge: "有反例",
     caveat: "只否定这一个等号，不代表整道题都错。",
   },
   unknown: {
     tag: "这一步没判出来",
+    badge: "未证明",
     caveat: "没判出来不等于这一步正确；系统只检查它能读懂的等号。",
   },
   pass: {
     tag: "没发现不一致",
+    badge: "未证明",
     caveat: "只说明检查过的部分没有矛盾，不是整步证明。",
   },
 };
@@ -123,34 +127,7 @@ export function StepCheck({ sessionId }: StepCheckProps) {
           ) : null}
 
           {verdict ? (
-            <div
-              aria-live="polite"
-              className="sm-stepcheck-result"
-              data-status={verdict.status}
-              role="status"
-            >
-              <div className="sm-stepcheck-result-head">
-                <b>{STATUS_COPY[verdict.status].tag}</b>
-                <span>{verdict.status === "fail" ? "有反例" : "未证明"}</span>
-              </div>
-              {verdict.findings && verdict.findings.length > 0 ? (
-                <ul className="sm-stepcheck-findings">
-                  {verdict.findings.map((finding, index) => (
-                    <li key={`${finding.kind}-${finding.left}-${finding.right}-${index}`}>
-                      <code>
-                        {finding.left} = {finding.right}
-                      </code>
-                      <span>{finding.summary}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p>{verdict.detail}</p>
-              )}
-              <p className="sm-stepcheck-caveat">
-                {STATUS_COPY[verdict.status].caveat}
-              </p>
-            </div>
+            <StepVerdictView copy={STATUS_COPY} verdict={verdict} />
           ) : null}
         </Surface>
       ) : null}
