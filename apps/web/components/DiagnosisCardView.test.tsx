@@ -99,4 +99,36 @@ describe("DiagnosisCardView", () => {
 
     expect(screen.getByRole("button", { name: "已记录你的反馈" })).toBeDisabled();
   });
+
+  it("hides the CHC block when the card has no attribution", () => {
+    render(<DiagnosisCardView card={CARD} sessionId="S_ABC123456789" />);
+
+    expect(screen.queryByText("本题的认知需求")).not.toBeInTheDocument();
+  });
+
+  it("shows the problem-side CHC tags without an ability score", () => {
+    render(
+      <DiagnosisCardView
+        card={{
+          ...CARD,
+          attribution: {
+            dimensions: [
+              { key: "Gf", label: "流体推理", weight: 0.7 },
+              { key: "WM", label: "工作记忆", weight: 0.5 },
+            ],
+            note: "题目需求标签，不是能力测评；单题不足以断言。",
+          },
+        }}
+        sessionId="S_ABC123456789"
+      />,
+    );
+
+    expect(screen.getByText("本题的认知需求")).toBeInTheDocument();
+    expect(screen.getByText("流体推理")).toBeInTheDocument();
+    expect(screen.getByText("0.70")).toBeInTheDocument();
+    expect(
+      screen.getByText("题目需求标签，不是能力测评；单题不足以断言。"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/你的.*能力/)).not.toBeInTheDocument();
+  });
 });

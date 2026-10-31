@@ -27,6 +27,9 @@ class FeatureFlags:
     # Read-only knowledge retrieval. Off by default because turning it on loads
     # an optional ONNX embedding model; the rule diagnosis path never needs it.
     rag: bool = False
+    # Put the focus node's top-2 CHC demand tags on the card. Off by default:
+    # it changes the public card shape (v0.2) and must not touch golden bytes.
+    chc_attribution: bool = False
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> FeatureFlags:
@@ -37,6 +40,10 @@ class FeatureFlags:
                 source.get("SYNAPSE_EQUALITY_CHECK", "off"),
             ),
             rag=_parse_flag("SYNAPSE_RAG", source.get("SYNAPSE_RAG", "off")),
+            chc_attribution=_parse_flag(
+                "SYNAPSE_CHC_ATTRIBUTION",
+                source.get("SYNAPSE_CHC_ATTRIBUTION", "off"),
+            ),
         )
 
 

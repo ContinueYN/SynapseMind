@@ -7,7 +7,7 @@
   "additionalProperties": false,
   "required": ["version", "session_id", "problem_id", "card"],
   "properties": {
-    "version": {"type": "string", "const": "0.1"},
+    "version": {"type": "string", "enum": ["0.1", "0.2"]},
     "session_id": {"type": "string", "pattern": "^S_[A-Z0-9]+$"},
     "problem_id": {"type": "string", "pattern": "^P_[A-Z0-9_]+$"},
     "card": {
@@ -74,7 +74,31 @@
             "item_id": {"type": "string"}
           }
         },
-        "disagree": {"type": "boolean"}
+        "disagree": {"type": "boolean"},
+        "attribution": {
+          "type": "object",
+          "description": "题目侧认知需求标签，不是能力测评；flag off 时不出现。",
+          "additionalProperties": false,
+          "required": ["dimensions", "note"],
+          "properties": {
+            "dimensions": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 2,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["key", "label", "weight"],
+                "properties": {
+                  "key": {"type": "string", "minLength": 1, "maxLength": 16},
+                  "label": {"type": "string", "minLength": 1, "maxLength": 20},
+                  "weight": {"type": "number", "minimum": 0, "maximum": 1}
+                }
+              }
+            },
+            "note": {"type": "string", "minLength": 1, "maxLength": 100}
+          }
+        }
       }
     }
   }

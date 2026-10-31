@@ -192,6 +192,7 @@ def build_container(
         step_limiter=limiter,
         review_queue=review_queue,
         answers=answers,
+        chc_attribution=flags.chc_attribution,
     )
     knowledge_service = (
         knowledge if knowledge is not None else build_knowledge_service(enabled=flags.rag)

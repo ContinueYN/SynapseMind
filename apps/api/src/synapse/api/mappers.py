@@ -7,6 +7,8 @@ reachable from here.
 from __future__ import annotations
 
 from synapse.api.schemas import (
+    AttributionDimensionOut,
+    AttributionOut,
     CardOut,
     DiagnosisOut,
     HintOut,
@@ -118,6 +120,21 @@ def diagnosis_out(card: DiagnosisCard) -> DiagnosisOut:
             next_action=NextActionOut.model_validate(card.next_action),
             verify=VerifyOut.model_validate(card.verify),
             disagree=card.disagree,
+            attribution=(
+                AttributionOut(
+                    dimensions=[
+                        AttributionDimensionOut(
+                            key=dimension.key,
+                            label=dimension.label,
+                            weight=dimension.weight,
+                        )
+                        for dimension in card.attribution.dimensions
+                    ],
+                    note=card.attribution.note,
+                )
+                if card.attribution is not None
+                else None
+            ),
         ),
     )
 

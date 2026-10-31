@@ -84,6 +84,17 @@ class VerifyOut(StrictModel):
     item_id: str | None = None
 
 
+class AttributionDimensionOut(StrictModel):
+    key: str = Field(min_length=1, max_length=16)
+    label: str = Field(min_length=1, max_length=20)
+    weight: float = Field(ge=0, le=1)
+
+
+class AttributionOut(StrictModel):
+    dimensions: list[AttributionDimensionOut] = Field(min_length=1, max_length=2)
+    note: str = Field(min_length=1, max_length=100)
+
+
 class CardOut(StrictModel):
     layer: Literal["L0", "L1", "L2", "L3", "L4", "L5", "L6"]
     label: str = Field(max_length=40)
@@ -96,10 +107,12 @@ class CardOut(StrictModel):
     next_action: NextActionOut
     verify: VerifyOut
     disagree: bool = False
+    # Present only when the CHC flag is on and the focus node has demand tags.
+    attribution: AttributionOut | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class DiagnosisOut(StrictModel):
-    version: Literal["0.1"]
+    version: Literal["0.1", "0.2"]
     session_id: str = Field(pattern=r"^S_[A-Z0-9]+$")
     problem_id: str = Field(pattern=r"^P_[A-Z0-9_]+$")
     card: CardOut

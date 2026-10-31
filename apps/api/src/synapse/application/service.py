@@ -98,6 +98,7 @@ class SessionService:
         step_limiter: StepRateLimiter | None = None,
         review_queue: ReviewQueue | None = None,
         answers: AnswerStore | None = None,
+        chc_attribution: bool = False,
     ) -> None:
         self._sessions = sessions
         self._problems = problems
@@ -127,6 +128,7 @@ class SessionService:
         # the queue stores the card's conclusion, never the student's work.
         self._review_queue = review_queue
         self._answers = answers
+        self._chc_attribution = chc_attribution
 
     def start(self, command: StartSessionCommand) -> SessionView:
         # Check the student's own equals signs before alignment: a provable
@@ -271,7 +273,11 @@ class SessionService:
 
         decision = session.hypotheses.decide(session.turn, session.max_turns)
         if decision.kind == "diagnose":
-            card = build_diagnosis_card(session, problem)
+            card = build_diagnosis_card(
+                session,
+                problem,
+                chc_attribution=self._chc_attribution,
+            )
             session.advance(DialogueEvent.DIAGNOSIS_READY)
             session.diagnosis = card
             self._sessions.save(session)

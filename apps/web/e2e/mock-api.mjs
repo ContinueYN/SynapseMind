@@ -58,7 +58,7 @@ const SESSIONS = {
     subject: "math",
     prompt: null,
     diagnosis: {
-      version: "0.1",
+      version: "0.2",
       session_id: "S_CARD_E2E",
       problem_id: "P_E2E_CARD",
       card: {
@@ -78,6 +78,13 @@ const SESSIONS = {
         },
         verify: { type: "transfer", due_hours: 24, item_id: null },
         disagree: false,
+        attribution: {
+          dimensions: [
+            { key: "Gf", label: "流体推理", weight: 0.7 },
+            { key: "WM", label: "工作记忆", weight: 0.5 },
+          ],
+          note: "题目需求标签，不是能力测评；单题不足以断言。",
+        },
       },
     },
   },

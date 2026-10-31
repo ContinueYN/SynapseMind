@@ -13,10 +13,15 @@ Two shapes, one entry point:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal
 
-from synapse.domain.diagnosis.models import DiagnosisCard, Layer
+from synapse.domain.diagnosis.models import (
+    Attribution,
+    AttributionDimension,
+    DiagnosisCard,
+    Layer,
+)
 from synapse.domain.dialogue.session import DialogueSession
 from synapse.domain.problem.models import Problem, SolutionNode
 
@@ -79,11 +84,59 @@ _ONE_LINE = {
     "H_L4": ("思路方向是对的，但最值计算/等号处理有一处执行错误；先回代检查临界点。"),
 }
 
+_CHC_LABELS = {
+    "V": "言语理解",
+    "Gf": "流体推理",
+    "Gv": "视觉空间",
+    "WM": "工作记忆",
+    "Gs": "加工速度",
+    "LTS": "长时存取",
+    "M": "元认知",
+}
+_CHC_NOTE = "题目需求标签，不是能力测评；单题不足以断言。"
 
-def build_diagnosis_card(session: DialogueSession, problem: Problem) -> DiagnosisCard:
-    if problem.annotated:
-        return _annotated_card(session, problem)
-    return _generated_card(session, problem)
+
+def _attribution(problem: Problem, node_id: str) -> Attribution | None:
+    node = next((item for item in problem.graph.nodes if item.id == node_id), None)
+    if node is None or not node.demand:
+        return None
+    ranked = sorted(
+        node.demand.items(),
+        key=lambda item: (-item[1], item[0]),
+    )[:2]
+    dimensions = tuple(
+        AttributionDimension(
+            key=key,
+            label=_CHC_LABELS.get(key, key),
+            weight=round(min(max(value, 0.0), 1.0), 2),
+        )
+        for key, value in ranked
+        if value > 0
+    )
+    if not dimensions:
+        return None
+    return Attribution(dimensions=dimensions, note=_CHC_NOTE)
+
+
+def build_diagnosis_card(
+    session: DialogueSession,
+    problem: Problem,
+    *,
+    chc_attribution: bool = False,
+) -> DiagnosisCard:
+    card = (
+        _annotated_card(session, problem)
+        if problem.annotated
+        else _generated_card(session, problem)
+    )
+    if not chc_attribution:
+        return card
+    attribution = _attribution(problem, card.node_id)
+    if attribution is None:
+        return card
+    # v0.2 only when the optional block is actually present; off and
+    # no-demand nodes keep the exact v0.1 bytes the golden set compares.
+    return replace(card, version="0.2", attribution=attribution)
 
 
 def _common(session: DialogueSession, problem: Problem) -> _Head:

@@ -6,7 +6,7 @@
 |---|---|---|
 | [`problem-input.schema.json`](problem-input.schema.json) | 交题入口 | Web、API |
 | [`solution-graph.schema.json`](solution-graph.schema.json) | 题目解法图 | API（生成物运行时严格校验）、内容后台 |
-| [`diagnosis.schema.json`](diagnosis.schema.json) | 卡点卡输出 | API、Web、评测 |
+| [`diagnosis.schema.json`](diagnosis.schema.json) | 卡点卡输出（v0.1；`SYNAPSE_CHC_ATTRIBUTION=on` 时 v0.2 追加可选 `card.attribution`） | API、Web、评测 |
 | [`structure-hint.schema.json`](structure-hint.schema.json) | 结构提示输出（NONE 档学科） | API、Web、评测 |
 | [`step-verification.schema.json`](step-verification.schema.json) | 单步验证输出（`POST /sessions/{id}/steps`） | API、Web |
 | [`review-queue.schema.json`](review-queue.schema.json) | 异议复核只读列表（`GET /review/items`） | API、Web |
@@ -17,7 +17,7 @@
 
 1. 先改 spec，再改代码；破坏性变更升 `version`。
 2. JSON 使用 UTF-8、`snake_case`、时间为 ISO 8601 UTC。
-3. 学习模式的响应中**不允许有 `solution` 字段**；这是硬约束，不是建议。
+3. 学习模式的响应中**不允许有 `solution` 字段**；这是硬约束，不是建议。唯一的例外是用户显式 `POST /sessions/{id}/exit` 且 body 为 `{"reveal": true}`：此时才读 `AnswerStore`，标注题返回答案与完整解法，生成题只返回「没有存储解法」。
 4. `confidence < 0.55` 时只能输出“可能卡点”，不能下确定结论。
 5. 所有 `id` 用稳定字符串，不用自增整数做外部契约。
 

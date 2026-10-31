@@ -108,6 +108,19 @@ export function DiagnosisCardView({
           <h2 className="sm-card-h">{card.label}</h2>
           <p className="sm-card-sub">{card.one_line}</p>
 
+          {card.attribution && card.attribution.dimensions.length > 0 ? (
+            <div className="sm-attr">
+              <span className="sm-attr-k">本题的认知需求</span>
+              {card.attribution.dimensions.map((dimension) => (
+                <span className="sm-attr-chip" key={dimension.key}>
+                  <b>{dimension.label}</b>
+                  <i>{dimension.weight.toFixed(2)}</i>
+                </span>
+              ))}
+              <p className="sm-attr-note">{card.attribution.note}</p>
+            </div>
+          ) : null}
+
           <p className="sm-lab" style={{ marginTop: 30 }}>
             依据你自己的话
           </p>

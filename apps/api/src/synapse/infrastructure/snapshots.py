@@ -20,7 +20,13 @@ from synapse.domain.diagnosis.hypotheses import (
     HypothesisSet,
     HypothesisState,
 )
-from synapse.domain.diagnosis.models import DiagnosisCard, Hypothesis, Layer
+from synapse.domain.diagnosis.models import (
+    Attribution,
+    AttributionDimension,
+    DiagnosisCard,
+    Hypothesis,
+    Layer,
+)
 from synapse.domain.diagnosis.work import FindingKind, WorkFinding
 from synapse.domain.dialogue.session import DialogueSession, TurnRecord
 from synapse.domain.dialogue.states import DialogueState
@@ -312,7 +318,7 @@ def _hypotheses_from_json(value: object, where: str) -> HypothesisSet:
 
 
 def _card_to_json(card: DiagnosisCard) -> dict[str, object]:
-    return {
+    data: dict[str, object] = {
         "version": card.version,
         "session_id": card.session_id,
         "problem_id": card.problem_id,
@@ -328,15 +334,55 @@ def _card_to_json(card: DiagnosisCard) -> dict[str, object]:
         "verify": dict(card.verify),
         "disagree": card.disagree,
     }
+    if card.attribution is not None:
+        data["attribution"] = {
+            "dimensions": [
+                {
+                    "key": dimension.key,
+                    "label": dimension.label,
+                    "weight": dimension.weight,
+                }
+                for dimension in card.attribution.dimensions
+            ],
+            "note": card.attribution.note,
+        }
+    return data
+
+
+def _attribution_from_json(value: object, where: str) -> Attribution:
+    data = _object(value, where)
+    raw_dimensions = _array(data.get("dimensions"), f"{where}.dimensions")
+    if not 1 <= len(raw_dimensions) <= 2:
+        raise SnapshotError(f"{where}.dimensions: expected 1 or 2 items")
+    dimensions = tuple(
+        AttributionDimension(
+            key=_text(item.get("key"), f"{where}.dimensions[{index}].key"),
+            label=_text(item.get("label"), f"{where}.dimensions[{index}].label"),
+            weight=_number(item.get("weight"), f"{where}.dimensions[{index}].weight"),
+        )
+        for index, raw in enumerate(raw_dimensions)
+        for item in (_object(raw, f"{where}.dimensions[{index}]"),)
+    )
+    return Attribution(
+        dimensions=dimensions,
+        note=_text(data.get("note"), f"{where}.note"),
+    )
 
 
 def _card_from_json(value: object, where: str) -> DiagnosisCard:
     data = _object(value, where)
     version = _text(data.get("version"), f"{where}.version")
-    if version != "0.1":
+    if version not in {"0.1", "0.2"}:
         raise SnapshotError(f"{where}.version: unsupported card version {version!r}")
+    attribution = (
+        None
+        if data.get("attribution") is None
+        else _attribution_from_json(data["attribution"], f"{where}.attribution")
+    )
+    if version == "0.2" and attribution is None:
+        raise SnapshotError(f"{where}: version 0.2 requires attribution")
     return DiagnosisCard(
-        version="0.1",
+        version=cast(Literal["0.1", "0.2"], version),
         session_id=_text(data.get("session_id"), f"{where}.session_id"),
         problem_id=_text(data.get("problem_id"), f"{where}.problem_id"),
         layer=_layer(data.get("layer"), f"{where}.layer"),
@@ -352,6 +398,7 @@ def _card_from_json(value: object, where: str) -> DiagnosisCard:
         next_action=_object(data.get("next_action"), f"{where}.next_action"),
         verify=_object(data.get("verify"), f"{where}.verify"),
         disagree=_flag(data.get("disagree"), f"{where}.disagree"),
+        attribution=attribution,
     )
 
 

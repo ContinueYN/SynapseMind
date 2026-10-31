@@ -200,6 +200,22 @@ export interface components {
             /** Self Report */
             self_report?: ("no_idea" | "wrong" | "unsure" | "correct_but_guessed") | null;
         };
+        /** AttributionDimensionOut */
+        AttributionDimensionOut: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Weight */
+            weight: number;
+        };
+        /** AttributionOut */
+        AttributionOut: {
+            /** Dimensions */
+            dimensions: components["schemas"]["AttributionDimensionOut"][];
+            /** Note */
+            note: string;
+        };
         /** CardOut */
         CardOut: {
             /**
@@ -231,6 +247,7 @@ export interface components {
              * @default false
              */
             disagree: boolean;
+            attribution?: components["schemas"]["AttributionOut"] | null;
         };
         /** CreateSessionRequest */
         CreateSessionRequest: {
@@ -253,9 +270,9 @@ export interface components {
         DiagnosisOut: {
             /**
              * Version
-             * @constant
+             * @enum {string}
              */
-            version: "0.1";
+            version: "0.1" | "0.2";
             /** Session Id */
             session_id: string;
             /** Problem Id */

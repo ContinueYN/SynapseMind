@@ -2993,6 +2993,54 @@ html[data-read="done"] .sm-orb-fill {
   line-height: 1.8;
 }
 
+.sm-attr {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin: var(--s3) 0 0;
+}
+
+.sm-attr-k {
+  color: var(--ink-3);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+}
+
+.sm-attr-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 5px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.94);
+  border-radius: var(--r-pill);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.88), rgba(227, 240, 254, 0.58));
+  box-shadow: var(--glass-hi);
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.sm-attr-chip b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.sm-attr-chip i {
+  color: var(--azure-ink);
+  font-size: 10.5px;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+.sm-attr-note {
+  flex-basis: 100%;
+  margin: 1px 0 0;
+  color: var(--ink-3);
+  font-size: 11px;
+  line-height: 1.65;
+}
+
 .sm-ev {
   display: grid;
   gap: 11px;
