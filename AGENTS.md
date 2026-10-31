@@ -19,7 +19,7 @@
 | M2.5 S4–S8 | 落地 | 生成图进主链路；物理 PARTIAL、语文 NONE；首问 p50 4.2s / p95 4.6s（预算 8s） |
 | S5 ⑥ 等式链校验 | **落地（默认关）** | `start()` 查首问过程并进卡面；`POST /sessions/{id}/steps` 单步验证；数学诊断页有折叠式「交步骤」入口；`SYNAPSE_EQUALITY_CHECK` 默认 `off` |
 | 题集 / 复盘 / 探针 | 落地 | 100 题带 `expected_answer`、4 条真实学生原话、构造真值的缺口探针 |
-| 包装层（门面、论文引用区） | **未开始** | 首页没有 CHC／突触／引用任何一处 |
+| 包装层（门面、论文引用区） | **起步** | 新增 `/about`：突触类比、CHC 标签空间、验证边界、3 条 DOI 引用；首页页脚入口 |
 
 下一步与优先级见第三节。
 
@@ -88,6 +88,11 @@
    - **验收（实跑）**：`public-attempts-v0.1.jsonl` 的 `P_PUB_002` 卡面出现「你写的「(sin(x)/(x+sin(x)/cos(x))) = (sin(x)/x+cos(x))」这一步等号不成立：x→0 时左边极限 0.5、右边 2。」；同批 4 条只命中这 1 条（`P_PUB_001/003/004` 无误报），报告 `eval/reports/m2.5-s5-student-review-public-equality.md`。开关关闭时 10 条 golden 卡面逐字节不变（`.tmp/golden-cards-before.json` 对照）、`m2_exit.py` **10/10**；`pytest` **334 全绿**；`ruff format --check`、`ruff check`、`mypy src`、import-linter 全过。
    - **方案 B 已完成（2026-10-30 深夜）**：新增 `POST /api/v1/sessions/{session_id}/steps`（请求 `StepRequest`：`text` 必填，`node_id`/`data` 可选；响应 `StepVerdictOut`：`version`/`status`/`detail`）并登记 `specs/step-verification.schema.json`。`SessionService.verify_step()` 只查会话所属学科的插件，**不推进状态、不写仓储、不出卡**；未知会话 404。`MathPlugin.verify()` 不再占位：开关打开时调 `EqualityChecker.findings(step.text)`，有可证伪的等号就返回 `fail` 并带学生原句与反例（多条最多列 3 条、detail 截到 900 字），没找到、读不懂或开关关闭一律 `unknown`——**它从不返回 `pass`**，因为「没找到反例」不等于「这步正确」。物理仍走结构化 `data`（量纲/数值回代），纯文本 `unknown`。**前端入口已完成（2026-10-31）**：`SessionOut` 新增 `subject`，数学诊断页多一个折叠式「有一步拿不准？」的 `StepCheck`（`apps/web/components/StepCheck.tsx`），贴一行式子即调 `verifyStep()`；结果按 `fail`/`unknown` 分色显示，`fail` 去掉接口重复的标题前缀，`unknown` 明确写「没判出来不等于这一步正确」。语文、物理不显示该入口（语文没有可判真值，物理需要结构化载荷，摆出来是空承诺）。验收：`pytest` **339 全绿**（新增 5 条：端点默认关、带 flag 的反例、极限链反例、无发现不判对、404；反例用例同时断言会话状态未变）；`ruff check`、`ruff format --check`、`mypy src`、import-linter、`check_repo.py` 全过；开关关闭时 10 条 golden 卡面仍逐字节不变，`m2_exit.py` **10/10**；前端 `npm run typecheck`/`lint`/`test`（3 文件 13 测试）/`build` 通过，并用浏览器 smoke 跑通 `fail` 与 `unknown` 两条路径、390px 无横向溢出。
    - **仍未做**：数学仍只查等号（赋值、定义、读不懂的式子跳过），物理前端没有结构化 `data` 表单；单步验证没有审计/限流，也没有把结果回写会话历史。措辞仍只写「这个等号不成立」＋具体反例。
+5. **包装层已起步（2026-10-31）：`/about` 把类比、标签与边界写清楚。**
+   - **页面**：`apps/web/app/about/page.tsx`，从页脚「为什么这样设计」进入，不放进交题主路径。四段：① 突触是类比，只约束模型形状（成功提取增强、久不用衰减），不宣称神经测量；② CHC 只做标签空间，`demand` 目前仍是图节点字段，**未进入结论、也未用来选探针**；③ 验证边界五项（存在性对齐、等号反例、图结构、归因、延迟正确率），前两项有可复现验收、第三四项只有小样本或构造真值、第五项没有数据；④ 三条 DOI 引用。
+   - **引用**：Carroll（1993，CHC 能力分类）、Sweller（1988，认知负荷）、Hattie & Timperley（2007，反馈）。每条的 DOI 都用 Crossref 核过；页面写明「设计概念的来源，不是效果背书」。
+   - **顺手修正**：`README.md` 第 2 节原来写「七维决定下一个问题问什么」，但代码里 `demand` 只被结构校验与审计序列化读取；已改成「尚未用它更新后验或选择探针」。这条比页面本身重要——文档不能比代码多走一步。
+   - **验收**：`typecheck` / `lint` / `test`（4 文件 16 测试，新增 `/about` 3 条）/ `build` 全过；浏览器在 1440 与 390 宽下均无横向溢出，390px 时两列卡片折成一列、页脚入口可点。**边界**：没有对照实验与延迟正确率；`/about` 是设计说明，不是效果报告。
 
 ---
 

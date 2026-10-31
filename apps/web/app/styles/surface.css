@@ -808,6 +808,7 @@ html[data-read="done"] .sm-orb-fill {
 
 .sm-foot {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
@@ -815,6 +816,26 @@ html[data-read="done"] .sm-orb-fill {
   color: var(--ink-3);
   font-size: var(--fs-meta);
   letter-spacing: 0.05em;
+}
+
+.sm-foot-links {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.sm-foot-link {
+  color: var(--ink-3);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(63, 134, 224, 0.28);
+  transition:
+    color var(--t-base) linear,
+    border-color var(--t-base) linear;
+}
+
+.sm-foot-link:hover {
+  color: var(--azure-ink);
+  border-bottom-color: var(--azure);
 }
 
 /* ───────────────────────── 换页 ─────────────────────────
@@ -3654,6 +3675,10 @@ html[data-read="done"] .sm-orb-fill {
     gap: 6px;
   }
 
+  .sm-foot-links {
+    flex-wrap: wrap;
+  }
+
   .sm-sheet,
   .sm-probe {
     border-radius: 18px;
@@ -3796,6 +3821,214 @@ html[data-read="done"] .sm-orb-fill {
   color: var(--ink);
   font-size: var(--fs-body);
   font-weight: 600;
+}
+
+/* ───────────────────────── 设计说明页 ─────────────────────────
+ * 它不是第二个首页：没有交题板，只有四段解释与一张边界表。
+ * 版式沿用段落玻璃板，窄一点、读得慢一点；引用行用一条细线分开，像论文的脚注。
+ */
+
+.sm-about-hero {
+  padding-top: 6px;
+}
+
+.sm-about-hero > .sm-plane-wrap {
+  max-width: 920px;
+  margin: 0 auto;
+}
+
+.sm-about-hero .sm-lede {
+  max-width: 34em;
+}
+
+.sm-about-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: var(--s6);
+}
+
+.sm-about-card {
+  padding: 20px 22px 22px;
+}
+
+.sm-about-card b {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--azure-ink);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+}
+
+.sm-about-card p {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+  line-height: 1.8;
+}
+
+.sm-about-card--quiet {
+  background-image: var(--glass-tile);
+}
+
+.sm-about-terms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: var(--s5);
+}
+
+.sm-about-term {
+  padding: 5px 13px;
+  color: var(--ink-2);
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+}
+
+.sm-about-checks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: var(--s6);
+}
+
+.sm-about-check {
+  padding: 16px 18px 17px;
+}
+
+.sm-about-check header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.sm-about-check header b {
+  color: var(--ink);
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+
+.sm-about-state {
+  flex: none;
+  padding: 2px 9px;
+  border-radius: var(--r-pill);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+}
+
+.sm-about-state[data-state="done"] {
+  background: rgba(63, 134, 224, 0.12);
+  color: var(--azure-ink);
+}
+
+.sm-about-state[data-state="partial"] {
+  background: rgba(196, 142, 42, 0.12);
+  color: #8a5d0a;
+}
+
+.sm-about-state[data-state="todo"] {
+  background: rgba(90, 104, 122, 0.1);
+  color: var(--ink-3);
+}
+
+.sm-about-check p {
+  margin: 9px 0 0;
+  color: var(--ink-2);
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+}
+
+.sm-about-check small {
+  display: block;
+  margin-top: 6px;
+  color: var(--ink-3);
+  font-size: var(--fs-small);
+  line-height: 1.72;
+}
+
+.sm-about-refs {
+  display: grid;
+  gap: 0;
+  margin: var(--s5) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sm-about-refs li {
+  padding: 14px 0;
+  border-top: 1px solid rgba(90, 130, 180, 0.16);
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+  line-height: 1.8;
+}
+
+.sm-about-refs li:first-child {
+  border-top: 0;
+}
+
+.sm-about-refs cite {
+  color: var(--ink);
+  font-style: normal;
+}
+
+.sm-about-refs a {
+  display: inline-block;
+  margin-left: 6px;
+  color: var(--azure-ink);
+  font-size: 11px;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(63, 134, 224, 0.28);
+  overflow-wrap: anywhere;
+}
+
+.sm-about-refs a:hover {
+  border-bottom-color: var(--azure);
+}
+
+.sm-about-oath {
+  margin: var(--s6) 0 0;
+  padding: 14px 18px;
+  border-left: 2px solid var(--azure);
+  border-radius: 0 var(--r-2) var(--r-2) 0;
+  background: rgba(255, 255, 255, 0.46);
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+  line-height: 1.8;
+}
+
+.sm-about-back {
+  margin: var(--s5) 0 0;
+}
+
+.sm-about-back a {
+  color: var(--azure-ink);
+  font-size: var(--fs-small);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(63, 134, 224, 0.28);
+}
+
+.sm-about-back a:hover {
+  border-bottom-color: var(--azure);
+}
+
+/* 这一页的窄屏规则必须放在基础规则之后：媒体查询不提高优先级，
+ * 放到前面的 @media 块里会被后面的 grid-template-columns 覆盖。 */
+@media (max-width: 620px) {
+  .sm-about-hero {
+    padding-top: 0;
+  }
+
+  .sm-about-split,
+  .sm-about-checks {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sm-about-refs a {
+    display: block;
+    margin: 4px 0 0;
+  }
 }
 
 /* ───────────────────────── 会呼吸的边 ─────────────────────────

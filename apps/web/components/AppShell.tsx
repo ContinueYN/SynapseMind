@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 
 import { BrandOrb } from "@/components/BrandOrb";
 import { Ground } from "@/components/Ground";
@@ -22,7 +23,12 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="sm-shell">
         <footer className="sm-foot">
           <span>目前只支持一道示例题：高中数学 · 函数与导数</span>
-          <span>SynapseMind</span>
+          <span className="sm-foot-links">
+            <Link className="sm-foot-link" href="/about">
+              为什么这样设计
+            </Link>
+            <span>SynapseMind</span>
+          </span>
         </footer>
       </div>
     </div>
