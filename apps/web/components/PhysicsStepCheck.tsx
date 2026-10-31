@@ -110,7 +110,7 @@ export function PhysicsStepCheck({ sessionId }: PhysicsStepCheckProps) {
           <p className="sm-kicker">物理单步检查</p>
           <h2 className="sm-h2">把这一步写成等式。</h2>
           <p className="sm-p">
-            系统先看两边量纲，再在你填了数值时回代；填了结果时，还会把等式右边或表达式的值和你写的答案比。读不懂、缺单位或缺数值时返回「没判出来」，不猜。
+            系统先看两边量纲，再在你填了数值时回代；填了结果时，还会把等式右边或表达式的值和你写的答案比。结果可以写单值、6.32±0.01 或 [6.3, 6.4]；后两种按声明范围判定。读不懂、缺单位或缺数值时返回「没判出来」，不猜。
           </p>
 
           <form onSubmit={submit}>
@@ -192,17 +192,16 @@ export function PhysicsStepCheck({ sessionId }: PhysicsStepCheckProps) {
               <label className="sm-f">
                 <span className="sm-f-label">
                   你写的结果
-                  <em>可选，和右边/表达式的值比对</em>
+                  <em>可选，单值 / a±u / 区间</em>
                 </span>
                 <input
                   aria-label="你写的结果"
                   disabled={busy}
-                  inputMode="decimal"
                   onChange={(event) => {
                     setExpectedText(event.target.value);
                     setVerdict(null);
                   }}
-                  placeholder="例如：6"
+                  placeholder="例如：6、6.32±0.01、[6.3, 6.4]"
                   type="text"
                   value={expectedText}
                 />
@@ -259,7 +258,7 @@ export function PhysicsStepCheck({ sessionId }: PhysicsStepCheckProps) {
                 </span>
               </button>
               <span className="sm-stepcheck-aside">
-                单位写成 m=kg、a=m/s^2；无量纲写 mu=。没填数值时只做量纲检查；容差 1 表示 1%，绝对容差和结果单位相同；两项都填时同时生效，只填一项时另一项用默认。
+                单位写成 m=kg、a=m/s^2；无量纲写 mu=。没填数值时只做量纲检查；结果写 6.32、6.32±0.01 或 [6.3, 6.4]，后两种按范围判定；容差 1 表示 1%，只用于标量结果和声明范围的边界，绝对容差和结果单位相同；两项都填时同时生效，只填一项时另一项用默认。
               </span>
             </div>
           </form>

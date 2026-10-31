@@ -254,6 +254,113 @@ def test_an_expected_result_without_values_is_unknown_not_passed() -> None:
     assert "无法回代" in _detail(data)
 
 
+def test_an_uncertainty_range_accepts_a_reference_inside_it() -> None:
+    data = {
+        "expression": "v",
+        "unit": "m/s",
+        "units": {"v": "m/s"},
+        "values": {"v": 5},
+        "expected": {"value": 5.2, "uncertainty": 0.3, "unit": "m/s"},
+    }
+
+    assert _verdict(data) == "pass"
+    assert "声明结果落在不确定度内" in _detail(data)
+
+
+def test_an_uncertainty_range_fails_when_the_reference_is_outside() -> None:
+    data = {
+        "expression": "v",
+        "unit": "m/s",
+        "units": {"v": "m/s"},
+        "values": {"v": 5.2},
+        "expected": {"value": 5, "uncertainty": 0.1, "unit": "m/s"},
+    }
+
+    detail = _detail(data)
+
+    assert _verdict(data) == "fail"
+    assert "不在声明范围" in detail
+    assert "高于上界" in detail
+    assert "5 ± 0.1 m/s" in detail
+
+
+def test_an_interval_is_converted_to_si_before_comparison() -> None:
+    data = {
+        "expression": "v",
+        "unit": "m/s",
+        "units": {"v": "m/s"},
+        "values": {"v": 5},
+        "expected": {"lower": 490, "upper": 510, "unit": "cm/s"},
+    }
+
+    assert _verdict(data) == "pass"
+    assert "声明结果落在区间内" in _detail(data)
+
+
+@pytest.mark.parametrize(
+    ("lower", "upper", "side"),
+    [(6.0, 7.0, "低于下界"), (3.0, 4.0, "高于上界")],
+)
+def test_an_interval_outside_its_bounds_fails_below_or_above(
+    lower: float,
+    upper: float,
+    side: str,
+) -> None:
+    data = {
+        "expression": "v",
+        "unit": "m/s",
+        "units": {"v": "m/s"},
+        "values": {"v": 5},
+        "expected": {"lower": lower, "upper": upper, "unit": "m/s"},
+    }
+
+    detail = _detail(data)
+
+    assert _verdict(data) == "fail"
+    assert "不在声明范围" in detail
+    assert side in detail
+
+
+def test_an_interval_without_values_is_unknown_not_passed() -> None:
+    data = {
+        "expression": "v",
+        "unit": "m/s",
+        "units": {"v": "m/s"},
+        "expected": {"lower": 4, "upper": 6, "unit": "m/s"},
+    }
+
+    assert _verdict(data) == "unknown"
+    assert "无法回代" in _detail(data)
+
+
+def test_an_equation_accepts_a_declared_interval() -> None:
+    data = dict(FORCE_EQUATION)
+    data["unit"] = "N"
+    data["expected"] = {"lower": 2.9, "upper": 3.1, "unit": "N"}
+
+    assert _verdict(data) == "pass"
+    assert "声明结果落在区间内" in _detail(data)
+
+
+def test_malformed_expected_shapes_are_unknown() -> None:
+    cases = (
+        {"value": 5, "uncertainty": -0.1, "unit": "m/s"},
+        {"lower": 6, "upper": 5, "unit": "m/s"},
+        {"lower": 4, "unit": "m/s"},
+        {"value": 5, "lower": 4, "upper": 6, "unit": "m/s"},
+    )
+    for expected in cases:
+        data = {
+            "expression": "v",
+            "unit": "m/s",
+            "units": {"v": "m/s"},
+            "values": {"v": 5},
+            "expected": expected,
+        }
+        assert _verdict(data) == "unknown", expected
+        assert "expected" in _detail(data), expected
+
+
 def test_an_expression_must_match_its_declared_unit() -> None:
     data = {
         "expression": "v",

@@ -23,6 +23,53 @@ export type PhysicsStepPayload =
   | { text: string; data: Record<string, unknown> }
   | { error: string };
 
+type ParsedExpected =
+  | { value: number; unit: string; uncertainty?: number }
+  | { lower: number; upper: number; unit: string };
+
+function parseExpected(raw: string, unit: string): ParsedExpected | { error: string } {
+  const trimmed = raw.trim();
+  const parts = trimmed.split(/\s*(?:±|\+\/-)\s*/);
+  if (parts.length > 1) {
+    if (parts.length !== 2 || !parts[0].trim() || !parts[1].trim()) {
+      return { error: "不确定度只写一个 ±，例如 6.32±0.01。" };
+    }
+    const value = Number(parts[0]);
+    const uncertainty = Number(parts[1]);
+    if (!Number.isFinite(value) || !Number.isFinite(uncertainty)) {
+      return { error: "「你写的结果」和 ± 后的不确定度都要写数字。" };
+    }
+    if (uncertainty < 0) {
+      return { error: "不确定度要写 0 或正数，例如 6.32±0.01。" };
+    }
+    return { value, uncertainty, unit };
+  }
+
+  if (trimmed.startsWith("[") || trimmed.endsWith("]")) {
+    const match = trimmed.match(/^\[\s*([^,，]+?)\s*[,，]\s*([^\]\s]+?)\s*\]$/);
+    if (!match) {
+      return { error: "区间要写成 [下限, 上限]，例如 [6.3, 6.4]。" };
+    }
+    const lower = Number(match[1]);
+    const upper = Number(match[2]);
+    if (!Number.isFinite(lower) || !Number.isFinite(upper)) {
+      return { error: "区间上下限都要写数字，例如 [6.3, 6.4]。" };
+    }
+    if (lower > upper) {
+      return { error: "区间下限不能大于上限。" };
+    }
+    return { lower, upper, unit };
+  }
+
+  const value = Number(trimmed);
+  if (!Number.isFinite(value)) {
+    return {
+      error: "「你写的结果」要写数字、a±u 或 [下限, 上限]，例如 6、6.32±0.01、[6.3, 6.4]。",
+    };
+  }
+  return { value, unit };
+}
+
 function entries(raw: string): string[] {
   return raw
     .split(/[\n,，;；]+/)
@@ -109,13 +156,11 @@ export function buildPhysicsStepPayload(fields: PhysicsStepFields): PhysicsStepP
   const parsedValues = parseValues(fields.valuesText);
   if ("error" in parsedValues) return parsedValues;
 
-  let expected: { value: number; unit: string } | null = null;
+  let expected: ParsedExpected | null = null;
   if (fields.expectedText.trim()) {
-    const value = Number(fields.expectedText.trim());
-    if (!Number.isFinite(value)) {
-      return { error: "「你写的结果」要写数字，例如 6、0.5、1e-3。" };
-    }
-    expected = { value, unit };
+    const parsedExpected = parseExpected(fields.expectedText, unit);
+    if ("error" in parsedExpected) return parsedExpected;
+    expected = parsedExpected;
   }
 
   let tolerance: { relative?: number; absolute?: number } | null = null;

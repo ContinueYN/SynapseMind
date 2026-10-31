@@ -81,6 +81,34 @@ describe("buildPhysicsStepPayload", () => {
     });
   });
 
+  it("turns a ± result into a declared uncertainty", () => {
+    const result = buildPhysicsStepPayload({
+      ...base,
+      unit: "m/s",
+      expectedText: "6.32±0.01",
+    });
+
+    expect(result).toMatchObject({
+      data: {
+        expected: { value: 6.32, uncertainty: 0.01, unit: "m/s" },
+      },
+    });
+  });
+
+  it("turns [lower, upper] into an interval, including a Chinese comma", () => {
+    const result = buildPhysicsStepPayload({
+      ...base,
+      unit: "m/s",
+      expectedText: "[6.3，6.4]",
+    });
+
+    expect(result).toMatchObject({
+      data: {
+        expected: { lower: 6.3, upper: 6.4, unit: "m/s" },
+      },
+    });
+  });
+
   it("adds an absolute tolerance, alone or with a relative one", () => {
     const absoluteOnly = buildPhysicsStepPayload({
       ...base,
@@ -134,6 +162,40 @@ describe("buildPhysicsStepPayload", () => {
         absoluteToleranceText: "-0.1",
       }),
     ).toMatchObject({ error: expect.stringContaining("绝对容差") });
+  });
+
+  it("rejects malformed result ranges before calling the API", () => {
+    expect(
+      buildPhysicsStepPayload({
+        ...base,
+        unit: "m/s",
+        expectedText: "[6.4, 6.3]",
+      }),
+    ).toMatchObject({ error: expect.stringContaining("下限") });
+
+    expect(
+      buildPhysicsStepPayload({
+        ...base,
+        unit: "m/s",
+        expectedText: "6±-1",
+      }),
+    ).toMatchObject({ error: expect.stringContaining("不确定度") });
+
+    expect(
+      buildPhysicsStepPayload({
+        ...base,
+        unit: "m/s",
+        expectedText: "[6.3]",
+      }),
+    ).toMatchObject({ error: expect.stringContaining("区间") });
+
+    expect(
+      buildPhysicsStepPayload({
+        ...base,
+        unit: "m/s",
+        expectedText: "6±0.1±0.2",
+      }),
+    ).toMatchObject({ error: expect.stringContaining("只写一个") });
   });
 
   it("rejects malformed unit and numeric lines before calling the API", () => {

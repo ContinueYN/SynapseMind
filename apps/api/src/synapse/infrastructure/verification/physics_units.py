@@ -5,6 +5,11 @@ The PARTIAL promise in chapter 13 §13.3 is narrower than math's STRONG tier:
 * a scalar equation is dimensionally consistent, and
 * substituting the student's values into both sides agrees within tolerance.
 
+A declared result may be a point, ``value ± uncertainty`` or ``[lower, upper]``;
+a range is checked by containment (tolerance only widens its boundaries). This
+is still a falsifier: it can reject a reference outside the declared range, not
+prove the student's measurement correct.
+
 Both checks are falsifiers. ``pass`` means "no inconsistency was found in the
 checks that actually ran", not "the physics is proved". Missing symbols or
 units produce ``unknown`` with a concrete reason; when values are missing only
@@ -99,6 +104,31 @@ class Unit:
 class _Tolerance:
     relative: float = 1e-6
     absolute: float = 1e-9
+
+
+@dataclass(frozen=True, slots=True)
+class _Expected:
+    """A student-declared result, as a point or a range.
+
+    ``lower``/``upper`` are set for an explicit interval; ``uncertainty`` is set
+    for the ``value ± u`` spelling. The values are in the declared unit; the
+    unit's SI scale is applied only when comparing with the expression.
+    """
+
+    unit: Unit
+    unit_text: str
+    value: float | None = None
+    uncertainty: float | None = None
+    lower: float | None = None
+    upper: float | None = None
+
+    @property
+    def is_interval(self) -> bool:
+        return self.lower is not None
+
+    @property
+    def is_uncertainty(self) -> bool:
+        return self.uncertainty is not None
 
 
 def _dimension(
@@ -662,18 +692,115 @@ def _tolerance_text(tolerance: _Tolerance) -> str:
     return f"绝对 {tolerance.absolute:g} / 相对 {tolerance.relative:g}"
 
 
-def _parse_expected(raw: object) -> tuple[float, Unit, str]:
+def _parse_expected(raw: object) -> _Expected:
     expected = _as_mapping(raw, "expected")
-    value = _number(expected.get("value"), "expected.value")
     unit_text = expected.get("unit")
     if not isinstance(unit_text, str):
         raise _UnitError("expected.unit 必须是单位字符串")
-    return value, parse_unit(unit_text), unit_text
+
+    has_lower = "lower" in expected
+    has_upper = "upper" in expected
+    if has_lower or has_upper:
+        if "value" in expected or "uncertainty" in expected:
+            raise _UnitError("expected 不能同时给 value/uncertainty 和 lower/upper")
+        if not (has_lower and has_upper):
+            raise _UnitError("expected 区间要同时给 lower 和 upper")
+        lower = _number(expected["lower"], "expected.lower")
+        upper = _number(expected["upper"], "expected.upper")
+        if lower > upper:
+            raise _UnitError("expected.lower 不能大于 expected.upper")
+        return _Expected(
+            unit=parse_unit(unit_text),
+            unit_text=unit_text,
+            lower=lower,
+            upper=upper,
+        )
+
+    value = _number(expected.get("value"), "expected.value")
+    uncertainty: float | None = None
+    if "uncertainty" in expected:
+        uncertainty = _number(expected["uncertainty"], "expected.uncertainty")
+        if uncertainty < 0:
+            raise _UnitError("expected.uncertainty 不能为负数")
+    return _Expected(
+        unit=parse_unit(unit_text),
+        unit_text=unit_text,
+        value=value,
+        uncertainty=uncertainty,
+    )
+
+
+def _expected_bounds(expected: _Expected) -> tuple[float, float, bool]:
+    """Return SI bounds and whether this is an exact point (not a range)."""
+
+    scale = expected.unit.scale
+    if expected.is_interval:
+        lower_raw = expected.lower
+        upper_raw = expected.upper
+        if lower_raw is None or upper_raw is None:
+            raise _UnitError("expected 区间缺少 lower 或 upper")
+        lower = lower_raw * scale
+        upper = upper_raw * scale
+        exact = False
+    else:
+        value_raw = expected.value
+        if value_raw is None:
+            raise _UnitError("expected.value 必须是数字")
+        value = value_raw * scale
+        if expected.uncertainty is None:
+            lower = upper = value
+            exact = True
+        else:
+            uncertainty = expected.uncertainty * scale
+            lower = value - uncertainty
+            upper = value + uncertainty
+            exact = False
+    if not all(math.isfinite(bound) for bound in (lower, upper)):
+        raise _UnitError("expected 换算成 SI 后不是有限数")
+    return lower, upper, exact
+
+
+def _expected_display(expected: _Expected) -> str:
+    if expected.is_interval:
+        lower = expected.lower
+        upper = expected.upper
+        if lower is None or upper is None:
+            raise _UnitError("expected 区间缺少 lower 或 upper")
+        return f"[{_fmt(lower)}, {_fmt(upper)}] {expected.unit_text}"
+    value = expected.value
+    if value is None:
+        raise _UnitError("expected.value 必须是数字")
+    if expected.uncertainty is None:
+        return f"{_fmt(value)} {expected.unit_text}"
+    return f"{_fmt(value)} ± {_fmt(expected.uncertainty)} {expected.unit_text}"
+
+
+def _expected_note(expected: _Expected | None) -> str:
+    if expected is None:
+        return ""
+    if expected.is_interval:
+        return "；声明结果落在区间内（边界容差内）"
+    if expected.is_uncertainty:
+        return "；声明结果落在不确定度内（边界容差内）"
+    return "；声明结果值与单位一致"
+
+
+def _range_contains(
+    reference: float,
+    lower: float,
+    upper: float,
+    tolerance: _Tolerance,
+) -> bool:
+    """Range containment with tolerance applied only at the two boundaries."""
+
+    return (reference >= lower or _numbers_agree(reference, lower, tolerance)) and (
+        reference <= upper or _numbers_agree(reference, upper, tolerance)
+    )
 
 
 def _check_expected(
     *,
-    expected: tuple[float, Unit, str] | None,
+    expected: _Expected | None,
     reference_dimension: Dimension,
     reference_value: float | None,
     reference_label: str,
@@ -683,12 +810,12 @@ def _check_expected(
 
     if expected is None:
         return None
-    value, unit, unit_text = expected
-    if unit.dimension != reference_dimension:
+    if expected.unit.dimension != reference_dimension:
         return Verdict(
             status="fail",
             detail=(
-                f"结果单位不一致：声明 {unit_text!r} 的量纲是 {render_dimension(unit.dimension)}，"
+                f"结果单位不一致：声明 {expected.unit_text!r} 的量纲是 "
+                f"{render_dimension(expected.unit.dimension)}，"
                 f"但{reference_label}的量纲是 {render_dimension(reference_dimension)}"
             ),
         )
@@ -696,24 +823,41 @@ def _check_expected(
         return Verdict(
             status="unknown",
             detail=(
-                f"结果单位 {unit_text!r} 与{reference_label}一致，但缺少部分或全部符号的数值，"
-                "无法回代检查声明结果"
+                f"结果单位 {expected.unit_text!r} 与{reference_label}一致，"
+                "但缺少部分或全部符号的数值，无法回代检查声明结果"
             ),
         )
-    expected_si = value * unit.scale
-    if not math.isfinite(expected_si):
-        raise _UnitError("expected 换算成 SI 后不是有限数")
-    if not _numbers_agree(expected_si, reference_value, tolerance):
-        return Verdict(
-            status="fail",
-            detail=(
-                f"结果值不一致：声明 {_fmt(expected_si)}（{unit_text}）与{reference_label} "
-                f"{_fmt(reference_value)}（SI）相差 "
-                f"{_fmt(abs(expected_si - reference_value))}，超过容差 "
-                f"({_tolerance_text(tolerance)})"
-            ),
-        )
-    return None
+
+    lower, upper, exact = _expected_bounds(expected)
+    if exact:
+        if not _numbers_agree(lower, reference_value, tolerance):
+            return Verdict(
+                status="fail",
+                detail=(
+                    f"结果值不一致：声明 {_expected_display(expected)} 与{reference_label} "
+                    f"{_fmt(reference_value)}（SI）相差 "
+                    f"{_fmt(abs(lower - reference_value))}，超过容差 "
+                    f"({_tolerance_text(tolerance)})"
+                ),
+            )
+        return None
+
+    if _range_contains(reference_value, lower, upper, tolerance):
+        return None
+    if reference_value < lower:
+        side = "低于下界"
+        distance = lower - reference_value
+    else:
+        side = "高于上界"
+        distance = reference_value - upper
+    return Verdict(
+        status="fail",
+        detail=(
+            f"结果值不在声明范围内：声明 {_expected_display(expected)} 与{reference_label} "
+            f"{_fmt(reference_value)}（SI）相比{side}，差 {_fmt(distance)}，超过容差 "
+            f"({_tolerance_text(tolerance)})"
+        ),
+    )
 
 
 def _verify_step(step: StudentStep) -> Verdict:
@@ -825,9 +969,7 @@ def _verify_step(step: StudentStep) -> Verdict:
                     f"({_tolerance_text(tolerance)})"
                 ),
             )
-        expected_note = ""
-        if expected is not None:
-            expected_note = "；声明结果值与单位一致"
+        expected_note = _expected_note(expected)
         return Verdict(
             status="pass",
             detail=(
@@ -880,9 +1022,7 @@ def _verify_step(step: StudentStep) -> Verdict:
                 f"{declared_unit_raw!r} 一致；缺少 {missing} 的数值，未做数值回代"
             ),
         )
-    expected_note = ""
-    if expected is not None:
-        expected_note = "；声明结果值与单位一致"
+    expected_note = _expected_note(expected)
     return Verdict(
         status="pass",
         detail=(
