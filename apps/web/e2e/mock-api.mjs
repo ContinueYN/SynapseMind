@@ -1,0 +1,198 @@
+import { createServer } from "node:http";
+
+const PORT = Number(process.env.MOCK_API_PORT ?? 8100);
+
+const SESSIONS = {
+  S_MATH_E2E: {
+    problem_id: "P_E2E_MATH",
+    problem_title: "解方程",
+    problem_text: "解方程 x+1=2x。",
+    subject: "math",
+    prompt: {
+      action: "ask",
+      question: "你会先移项还是先合并同类项？",
+      options: ["先移项", "先合并同类项"],
+      hint_level: 0,
+      reason_code: "DISCRIMINATE_HYPOTHESIS",
+      confidence: 0.45,
+    },
+  },
+  S_PHYS_E2E: {
+    problem_id: "P_E2E_PHYSICS",
+    problem_title: "光滑斜面",
+    problem_text: "质量 m=2 kg 的物块从光滑斜面顶端由静止下滑，求底端速度。",
+    subject: "physics",
+    prompt: {
+      action: "ask",
+      question: "光滑斜面上物块受几个力？",
+      options: ["重力、支持力", "重力、支持力、下滑力"],
+      hint_level: 0,
+      reason_code: "DISCRIMINATE_HYPOTHESIS",
+      confidence: 0.45,
+    },
+  },
+};
+
+function sessionBody(id) {
+  const preset = SESSIONS[id];
+  return {
+    session_id: id,
+    state: "PROBE",
+    ...preset,
+    mode: "learning",
+    turn: 0,
+    max_turns: 6,
+    diagnosis: null,
+    hint: null,
+    notice: null,
+    progress: {
+      turn: 0,
+      max_turns: 6,
+      confidence: 0.45,
+      top_hypothesis: "H_L1",
+    },
+    history: [],
+  };
+}
+
+function send(res, status, body) {
+  res.writeHead(status, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "content-type",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  });
+  res.end(body === undefined ? "" : JSON.stringify(body));
+}
+
+function verdict(status, detail, findings = []) {
+  return { version: "0.2", status, detail, findings };
+}
+
+function mathVerdict(step) {
+  if (step.includes("x+1=2x")) {
+    return verdict("fail", "这个等号不成立：x=0.1 时左边 1.1、右边 0.2。", [
+      {
+        kind: "identity",
+        left: "x+1",
+        right: "2*x",
+        summary: "x=0.1 时左边 1.1、右边 0.2",
+        counterexample: "x=0.1 时左边 1.1、右边 0.2",
+      },
+    ]);
+  }
+  return verdict(
+    "unknown",
+    "没找到可证伪的等号；没判出来不等于这一步正确。",
+  );
+}
+
+function physicsVerdict(body) {
+  const data = body?.data;
+  const expected = data?.expected;
+  const tolerance = data?.tolerance;
+  const shapeOk =
+    data?.expression === "sqrt(2*g*h)" &&
+    data?.unit === "m/s" &&
+    data?.units?.g === "m/s^2" &&
+    data?.units?.h === "m" &&
+    data?.values?.g === 10 &&
+    data?.values?.h === 2 &&
+    expected?.unit === "m/s" &&
+    typeof expected?.value === "number" &&
+    tolerance?.relative === 0.01;
+  if (!shapeOk) {
+    return {
+      status: 400,
+      body: {
+        detail:
+          "mock API expected expression sqrt(2*g*h), g=10, h=2, expected m/s and relative tolerance 0.01.",
+      },
+    };
+  }
+  if (expected.value === 6.3246) {
+    return {
+      status: 200,
+      body: verdict(
+        "pass",
+        "表达式量纲 m/s 与声明单位 'm/s' 一致；求值 6.32456（SI）；声明结果值与单位一致",
+      ),
+    };
+  }
+  if (expected.value === 7) {
+    return {
+      status: 200,
+      body: verdict(
+        "fail",
+        "结果值不一致：声明 7（m/s）与表达式 6.32456（SI）相差 0.675445，超过容差 (绝对 1e-09 / 相对 0.01)",
+      ),
+    };
+  }
+  return {
+    status: 200,
+    body: verdict(
+      "unknown",
+      "声明结果与表达式求值无法比较；这不等于这一步正确。",
+    ),
+  };
+}
+
+async function readJson(req) {
+  let raw = "";
+  for await (const chunk of req) raw += chunk;
+  return raw ? JSON.parse(raw) : {};
+}
+
+const server = createServer(async (req, res) => {
+  if (req.method === "OPTIONS") {
+    send(res, 204);
+    return;
+  }
+  const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
+
+  if (req.method === "GET" && url.pathname === "/health") {
+    send(res, 200, { status: "ok" });
+    return;
+  }
+
+  const match = url.pathname.match(
+    /^\/api\/v1\/sessions\/([^/]+)(\/steps)?$/,
+  );
+  if (!match) {
+    send(res, 404, { detail: "not found" });
+    return;
+  }
+
+  const id = decodeURIComponent(match[1]);
+  if (!SESSIONS[id]) {
+    send(res, 404, { detail: "unknown session" });
+    return;
+  }
+
+  if (req.method === "GET" && !match[2]) {
+    send(res, 200, sessionBody(id));
+    return;
+  }
+
+  if (req.method === "POST" && match[2]) {
+    let body;
+    try {
+      body = await readJson(req);
+    } catch {
+      send(res, 400, { detail: "invalid json" });
+      return;
+    }
+    const result =
+      SESSIONS[id].subject === "physics"
+        ? physicsVerdict(body)
+        : { status: 200, body: mathVerdict(String(body.text ?? "")) };
+    send(res, result.status, result.body);
+    return;
+  }
+
+  send(res, 405, { detail: "method not allowed" });
+});
+
+server.listen(PORT, "127.0.0.1", () => {
+  console.log(`mock api listening on http://127.0.0.1:${PORT}`);
+});
