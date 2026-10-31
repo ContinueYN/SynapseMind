@@ -151,6 +151,9 @@ def main() -> int:
         f"http://localhost:{args.web_port},http://127.0.0.1:{args.web_port}"
     )
     env["NEXT_PUBLIC_API_BASE"] = f"http://localhost:{args.api_port}"
+    # Keep the review DB at the repository root even though uvicorn runs with
+    # cwd=apps/api; the CLI uses the same default.
+    env.setdefault("SYNAPSE_REVIEW_DB", str(ROOT / "var" / "review.sqlite3"))
 
     api_cmd = [
         str(python),

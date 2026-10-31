@@ -7,6 +7,7 @@ imports and no SQL/LLM calls.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 from time import perf_counter
 
 from synapse.application.audit import AuditEntry, CallAuditor
@@ -26,6 +27,7 @@ from synapse.application.ports import (
     ProblemRepository,
     SessionRepository,
 )
+from synapse.application.review import ReviewItem, ReviewQueue
 from synapse.application.subject import StudentStep, SubjectRegistry, Verdict
 from synapse.application.trace import tracing
 from synapse.application.work_check import EqualityChecker
@@ -78,6 +80,7 @@ class SessionService:
         subjects: SubjectRegistry | None = None,
         auditor: CallAuditor | None = None,
         step_limiter: StepRateLimiter | None = None,
+        review_queue: ReviewQueue | None = None,
     ) -> None:
         self._sessions = sessions
         self._problems = problems
@@ -103,6 +106,9 @@ class SessionService:
         # Optional process-local throttle. The composition root owns the
         # production default; ``None`` keeps direct callers unthrottled.
         self._step_limiter = step_limiter
+        # Optional local review queue. Disagreeing with a card is the only writer;
+        # the queue stores the card's conclusion, never the student's work.
+        self._review_queue = review_queue
 
     def start(self, command: StartSessionCommand) -> SessionView:
         # Check the student's own equals signs before alignment: a provable
@@ -154,14 +160,24 @@ class SessionService:
 
         This is deliberately narrow: the card keeps its diagnosis, evidence and
         confidence; only the ``disagree`` flag changes. The flag survives a
-        reload because it is stored with the session, but it is not a review
-        queue entry and does not alter the dialogue state.
+        reload because it is stored with the session, and a copy is appended to
+        the optional local review queue. It is not a state transition.
         """
 
         session = self._get(session_id)
         if session.diagnosis is None:
             raise DiagnosisNotReady("diagnosis card is not ready")
+        if session.diagnosis.disagree:
+            return session.diagnosis
+
         card = replace(session.diagnosis, disagree=True)
+        if self._review_queue is not None:
+            self._review_queue.record(
+                ReviewItem.from_card(
+                    card,
+                    created_at=datetime.now(UTC).isoformat(timespec="seconds"),
+                )
+            )
         session.diagnosis = card
         self._sessions.save(session)
         return card

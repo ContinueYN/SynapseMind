@@ -13,6 +13,7 @@ The composer chain is chosen here and nowhere else (chapter 12 §12.7):
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
@@ -52,6 +53,7 @@ from synapse.infrastructure.llm.composer import LLMProbeComposer
 from synapse.infrastructure.llm.graph import LLMGraphGenerator
 from synapse.infrastructure.llm.settings import LLMSettings
 from synapse.infrastructure.rate_limit import TokenBucketStepLimiter
+from synapse.infrastructure.review import SqliteReviewQueue
 from synapse.infrastructure.subjects.chinese import ChinesePlugin
 from synapse.infrastructure.subjects.math import MathPlugin
 from synapse.infrastructure.subjects.physics import PhysicsPlugin
@@ -133,6 +135,9 @@ def build_container(
     # generated problem does not wait for a cosmetic rewrite (chapter 12 §12.8).
     opening = LeakSafeProbeComposer(inner=GraphProbeComposer(), guards=guards)
     limiter = step_limiter if step_limiter is not None else TokenBucketStepLimiter()
+    review_queue = SqliteReviewQueue(
+        Path(os.environ.get("SYNAPSE_REVIEW_DB", "var/review.sqlite3"))
+    )
     service = SessionService(
         sessions=sessions,
         problems=problems,
@@ -144,6 +149,7 @@ def build_container(
         subjects=problems.plugins,
         auditor=sink,
         step_limiter=limiter,
+        review_queue=review_queue,
     )
     return Container(
         sessions=sessions,

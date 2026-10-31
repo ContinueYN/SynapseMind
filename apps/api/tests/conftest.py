@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -9,7 +11,7 @@ from synapse.api.main import create_app
 
 
 @pytest.fixture(autouse=True)
-def _rule_mode_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+def _rule_mode_by_default(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """CI must never depend on a model key or on the developer's shell."""
     for name in (
         "SYNAPSE_LLM_MODE",
@@ -20,6 +22,7 @@ def _rule_mode_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
         "SYNAPSE_EQUALITY_CHECK",
     ):
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("SYNAPSE_REVIEW_DB", str(tmp_path / "review.sqlite3"))
 
 
 @pytest.fixture()

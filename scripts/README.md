@@ -101,3 +101,14 @@ npm run generate:api
 ```
 
 生成物默认在 `.tmp/`（忽略）；`apps/web/src/lib/api/generated.ts` 入库，供 fresh clone 直接 typecheck/build。不要把它粘回 `specs/`；`specs/` 只放人写的契约源。
+
+## 卡点卡异议复核
+
+学生点「我不同意」后，API 把卡面结论写入 `var/review.sqlite3`（本地文件，不入库）。导出复核表：
+
+```powershell
+python scripts/eval/review_queue.py
+python scripts/eval/review_queue.py --out eval/reports/review.md
+```
+
+表里不含学生原文；最后一列留给教师填写。当前是本地 SQLite 队列，没有教师页面或鉴权。

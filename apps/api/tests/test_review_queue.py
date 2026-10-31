@@ -1,0 +1,69 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from fastapi.testclient import TestClient
+
+from synapse.api.main import create_app
+from synapse.application.review import ReviewItem
+from synapse.infrastructure.review import SqliteReviewQueue
+
+
+def _item(session_id: str = "S_ABC123456789") -> ReviewItem:
+    return ReviewItem(
+        session_id=session_id,
+        problem_id="P_PUB_002",
+        layer="L2",
+        label="概念不清：恒成立与最值",
+        node_id="n3",
+        one_line="漏掉了 a≤0 这一支。",
+        confidence=0.86,
+        created_at="2026-10-31T08:00:00+00:00",
+    )
+
+
+def test_sqlite_queue_round_trips_and_replaces(tmp_path: Path) -> None:
+    queue = SqliteReviewQueue(tmp_path / "review.sqlite3")
+    queue.record(_item())
+    queue.record(_item("S_DEF987654321"))
+
+    items = queue.items()
+    assert {item.session_id for item in items} == {"S_ABC123456789", "S_DEF987654321"}
+
+    queue.record(_item())
+    assert len(queue.items()) == 2
+
+
+def test_disagreement_is_written_to_the_review_queue(
+    tmp_path: Path,
+    monkeypatch,
+    sample_payload: dict[str, object],
+) -> None:
+    db_path = tmp_path / "review.sqlite3"
+    monkeypatch.setenv("SYNAPSE_REVIEW_DB", str(db_path))
+    client = TestClient(create_app())
+
+    body = client.post("/api/v1/sessions", json=sample_payload).json()
+    session_id = body["session_id"]
+    for answer in ("没有零点", "要，a=0 也在 a≤0 这一支里"):
+        response = client.post(
+            f"/api/v1/sessions/{session_id}/turns",
+            json={"answer": answer, "option_id": "A"},
+        )
+        assert response.status_code == 200, response.text
+
+    response = client.post(f"/api/v1/sessions/{session_id}/card/disagree")
+    assert response.status_code == 200, response.text
+
+    items = SqliteReviewQueue(db_path).items()
+    assert len(items) == 1
+    item = items[0]
+    assert item.session_id == session_id
+    assert item.node_id == "n3"
+    assert item.layer == "L2"
+    assert item.one_line
+
+    # A repeated request is idempotent: one session, one review row.
+    again = client.post(f"/api/v1/sessions/{session_id}/card/disagree")
+    assert again.status_code == 200, again.text
+    assert len(SqliteReviewQueue(db_path).items()) == 1
