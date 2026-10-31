@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -206,6 +212,33 @@ describe("PhysicsStepCheck", () => {
     expect(screen.getByText("左侧 3 N 对照 右侧 4 N")).toBeInTheDocument();
     expect(screen.queryByText("左侧 3 N = 右侧 4 N")).not.toBeInTheDocument();
     expect(screen.getByText("数值回代不一致：左侧 3 N、右侧 4 N")).toBeInTheDocument();
+  });
+
+  it("keeps at most three physics checks in the page history", async () => {
+    verify.mockResolvedValue(verdict("pass", "量纲一致，数值回代未发现矛盾。"));
+    const user = await open();
+
+    await user.type(screen.getByLabelText("这一步"), "m*a");
+    await user.type(screen.getByLabelText("结果单位"), "N");
+    const input = screen.getByLabelText("这一步");
+    const submit = screen.getByRole("button", { name: "检查这一步" });
+
+    for (const expression of ["m*a", "m*a*2", "m*a*3", "m*a*4"]) {
+      await user.clear(input);
+      await user.type(input, expression);
+      await user.click(submit);
+      await waitFor(() => expect(submit).toBeEnabled());
+    }
+
+    const previous = screen.getByRole("region", { name: "之前的检查" });
+    expect(within(previous).getAllByRole("listitem")).toHaveLength(2);
+    expect(within(previous).getByText("m*a*3（N）")).toBeInTheDocument();
+    expect(within(previous).queryByText("m*a（N）")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "清空记录" }));
+    expect(
+      screen.queryByRole("region", { name: "之前的检查" }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps an unknown verdict away from a correctness claim", async () => {

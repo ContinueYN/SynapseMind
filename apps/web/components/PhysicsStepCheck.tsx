@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 
 import { Surface } from "@/components/Surface";
 import { StepVerdictView } from "@/components/StepVerdictView";
@@ -33,6 +33,14 @@ interface PhysicsStepCheckProps {
   sessionId: string;
 }
 
+const HISTORY_LIMIT = 3;
+
+interface CheckRecord {
+  key: number;
+  text: string;
+  verdict: StepVerdict;
+}
+
 /**
  * Physics step check: units first, numeric replay when values are supplied.
  *
@@ -49,8 +57,10 @@ export function PhysicsStepCheck({ sessionId }: PhysicsStepCheckProps) {
   const [toleranceText, setToleranceText] = useState("");
   const [absoluteToleranceText, setAbsoluteToleranceText] = useState("");
   const [busy, setBusy] = useState(false);
-  const [verdict, setVerdict] = useState<StepVerdict | null>(null);
+  const [history, setHistory] = useState<CheckRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const nextKey = useRef(0);
+  const latest = history[0] ?? null;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -66,21 +76,27 @@ export function PhysicsStepCheck({ sessionId }: PhysicsStepCheckProps) {
       absoluteToleranceText,
     });
     if ("error" in payload) {
-      setVerdict(null);
       setError(payload.error);
       return;
     }
 
     setBusy(true);
     setError(null);
-    setVerdict(null);
     try {
-      setVerdict(
-        await verifyStep(sessionId, {
-          text: payload.text,
-          node_id: "",
-          data: payload.data,
-        }),
+      const next = await verifyStep(sessionId, {
+        text: payload.text,
+        node_id: "",
+        data: payload.data,
+      });
+      const label = unit.trim()
+        ? `${payload.text}（${unit.trim()}）`
+        : payload.text;
+      nextKey.current += 1;
+      setHistory((previous) =>
+        [{ key: nextKey.current, text: label, verdict: next }, ...previous].slice(
+          0,
+          HISTORY_LIMIT,
+        ),
       );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "检查失败，请重试。");
@@ -124,7 +140,6 @@ export function PhysicsStepCheck({ sessionId }: PhysicsStepCheckProps) {
                 disabled={busy}
                 onChange={(event) => {
                   setStep(event.target.value);
-                  setVerdict(null);
                 }}
                 placeholder="例如：F - mu*N = m*a"
                 rows={3}
@@ -143,7 +158,6 @@ export function PhysicsStepCheck({ sessionId }: PhysicsStepCheckProps) {
                   disabled={busy}
                   onChange={(event) => {
                     setUnitsText(event.target.value);
-                    setVerdict(null);
                   }}
                   placeholder={"F=N\nm=kg\na=m/s^2\nmu="}
                   rows={4}
@@ -161,7 +175,6 @@ export function PhysicsStepCheck({ sessionId }: PhysicsStepCheckProps) {
                   disabled={busy}
                   onChange={(event) => {
                     setValuesText(event.target.value);
-                    setVerdict(null);
                   }}
                   placeholder={"F=10\nm=2\na=3\nmu=0.2"}
                   rows={4}
@@ -180,7 +193,6 @@ export function PhysicsStepCheck({ sessionId }: PhysicsStepCheckProps) {
                 disabled={busy}
                 onChange={(event) => {
                   setUnit(event.target.value);
-                  setVerdict(null);
                 }}
                 placeholder="例如：N"
                 type="text"
@@ -199,7 +211,6 @@ export function PhysicsStepCheck({ sessionId }: PhysicsStepCheckProps) {
                   disabled={busy}
                   onChange={(event) => {
                     setExpectedText(event.target.value);
-                    setVerdict(null);
                   }}
                   placeholder="例如：6、6.32±0.01、[6.3, 6.4]"
                   type="text"
@@ -218,7 +229,6 @@ export function PhysicsStepCheck({ sessionId }: PhysicsStepCheckProps) {
                   inputMode="decimal"
                   onChange={(event) => {
                     setToleranceText(event.target.value);
-                    setVerdict(null);
                   }}
                   placeholder="例如：1"
                   type="text"
@@ -237,7 +247,6 @@ export function PhysicsStepCheck({ sessionId }: PhysicsStepCheckProps) {
                   inputMode="decimal"
                   onChange={(event) => {
                     setAbsoluteToleranceText(event.target.value);
-                    setVerdict(null);
                   }}
                   placeholder="例如：0.05"
                   type="text"
@@ -269,8 +278,43 @@ export function PhysicsStepCheck({ sessionId }: PhysicsStepCheckProps) {
             </p>
           ) : null}
 
-          {verdict ? (
-            <StepVerdictView copy={STATUS_COPY} verdict={verdict} />
+          {history.length > 0 ? (
+            <div className="sm-stepcheck-history-bar">
+              <span>检查记录只在本页保留最近 3 次，刷新后清空。</span>
+              <button
+                onClick={() => {
+                  setHistory([]);
+                }}
+                type="button"
+              >
+                清空记录
+              </button>
+            </div>
+          ) : null}
+
+          {latest ? (
+            <div className="sm-stepcheck-latest">
+              <p className="sm-stepcheck-latest-text">
+                你查的是 <code>{latest.text}</code>
+              </p>
+              <StepVerdictView copy={STATUS_COPY} verdict={latest.verdict} />
+            </div>
+          ) : null}
+
+          {history.length > 1 ? (
+            <section aria-label="之前的检查" className="sm-stepcheck-history">
+              <p className="sm-kicker">之前的检查</p>
+              <ul className="sm-stepcheck-history-list">
+                {history.slice(1).map((record) => (
+                  <li key={record.key}>
+                    <span data-status={record.verdict.status}>
+                      {STATUS_COPY[record.verdict.status].badge}
+                    </span>
+                    <code>{record.text}</code>
+                  </li>
+                ))}
+              </ul>
+            </section>
           ) : null}
         </Surface>
       ) : null}
