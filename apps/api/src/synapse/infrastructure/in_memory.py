@@ -6,8 +6,10 @@ PostgreSQL/Alembic in M2.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from threading import RLock
 
+from synapse.application.errors import SessionConflict
 from synapse.application.subject import SubjectRegistry
 from synapse.domain.dialogue.session import DialogueSession
 from synapse.domain.problem.models import Problem
@@ -16,21 +18,53 @@ from synapse.infrastructure.subjects.math import MathPlugin
 
 
 class InMemorySessionRepository:
+    """Default adapter, with the same revision contract as SQLite.
+
+    ``get`` returns a deep copy. Two requests therefore hold independent
+    aggregates at the same revision, and the second ``save`` is rejected
+    instead of silently overwriting the first. Without the copy the two
+    callers would share one mutable object and the check could never fire.
+    """
+
     def __init__(self) -> None:
         self._items: dict[str, DialogueSession] = {}
         self._lock = RLock()
 
     def add(self, session: DialogueSession) -> None:
         with self._lock:
-            self._items[session.session_id] = session
+            if session.session_id in self._items:
+                raise SessionConflict(
+                    f"session {session.session_id} already exists; reload it instead of adding"
+                )
+            stored = deepcopy(session)
+            stored.revision = 0
+            self._items[session.session_id] = stored
+        session.revision = 0
 
     def get(self, session_id: str) -> DialogueSession | None:
         with self._lock:
-            return self._items.get(session_id)
+            stored = self._items.get(session_id)
+            return None if stored is None else deepcopy(stored)
 
     def save(self, session: DialogueSession) -> None:
         with self._lock:
-            self._items[session.session_id] = session
+            stored = self._items.get(session.session_id)
+            if stored is None:
+                raise SessionConflict(
+                    f"session {session.session_id} no longer exists; "
+                    "it may have been removed by an explicit purge"
+                )
+            if stored.revision != session.revision:
+                raise SessionConflict(
+                    f"session {session.session_id} changed since it was read "
+                    f"(stored revision {stored.revision}, this copy is "
+                    f"{session.revision}); reload before retrying"
+                )
+            new_revision = session.revision + 1
+            stored = deepcopy(session)
+            stored.revision = new_revision
+            self._items[session.session_id] = stored
+        session.revision = new_revision
 
 
 class InMemoryProblemRepository:

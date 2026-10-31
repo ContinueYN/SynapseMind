@@ -14,3 +14,13 @@ class ProblemNotSupported(ValueError):
 
 class UnsupportedMode(ValueError):
     """Only learning mode is available in the walking skeleton."""
+
+
+class SessionConflict(RuntimeError):
+    """The stored session changed after it was read.
+
+    Repositories raise this instead of silently overwriting a newer snapshot.
+    The caller must reload the session; ``SessionService`` deliberately does not
+    retry, because replaying a turn or a disagreement on top of newer state is
+    not necessarily the same request.
+    """

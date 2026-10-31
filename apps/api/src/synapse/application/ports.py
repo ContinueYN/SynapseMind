@@ -14,6 +14,16 @@ from synapse.domain.problem.models import Problem
 
 
 class SessionRepository(Protocol):
+    """Store sessions with an optimistic-concurrency token.
+
+    ``add`` inserts a new aggregate at revision 0 and rejects a duplicate id.
+    ``get`` returns a detached copy carrying the stored revision. ``save`` is
+    compare-and-swap: it only succeeds when the stored revision still equals
+    ``session.revision``, advances the revision, and otherwise raises
+    ``SessionConflict``. A repository must never turn a conflict into an
+    overwrite.
+    """
+
     def add(self, session: DialogueSession) -> None: ...
 
     def get(self, session_id: str) -> DialogueSession | None: ...

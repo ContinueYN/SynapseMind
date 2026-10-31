@@ -4,12 +4,13 @@ This is an internal storage format, not a public contract: API shapes still live
 in ``specs/``. The snapshot is explicit rather than ``pickle`` so a corrupt or
 old row fails with a readable error instead of being silently misread.
 
-Only the SQLite adapter imports this module. The domain and application layers
-never see JSON.
+Only the SQLite adapters and the explicit maintenance command import this
+module. The domain and application layers never see JSON.
 """
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Mapping
 from datetime import datetime
 from typing import Literal, cast
@@ -34,7 +35,11 @@ from synapse.domain.problem.models import (
     VerificationClaim,
 )
 
-SNAPSHOT_VERSION = "0.1"
+SNAPSHOT_VERSION = "0.2"
+# Versions that have a registered, explicit migration. Adding a version here
+# without adding the matching branch in ``migrate_snapshot`` is a bug.
+MIGRATABLE_VERSIONS = frozenset({"0.1"})
+MIGRATION_COMMAND = "python scripts/dev/session_store.py --db <path>"
 KIND_SESSION = "session"
 KIND_PROBLEM = "problem"
 
@@ -46,6 +51,42 @@ _EVIDENCE_SOURCES = frozenset({"alignment", "probe", "self_report"})
 
 class SnapshotError(ValueError):
     """The row exists but cannot be read as the current snapshot version."""
+
+
+class SnapshotVersionError(SnapshotError):
+    """The JSON is readable, but its format version is not current.
+
+    The API never guesses at an older shape and never upgrades a row as a side
+    effect of reading it. The message names the explicit migration command;
+    ``migratable`` tells the CLI whether a registered path exists.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        version: str,
+        kind: str,
+        migratable: bool,
+    ) -> None:
+        super().__init__(message)
+        self.version = version
+        self.kind = kind
+        self.migratable = migratable
+
+
+def _version_message(version: str, kind: str) -> str:
+    if version in MIGRATABLE_VERSIONS:
+        return (
+            f"{kind} snapshot version {version!r} is older than {SNAPSHOT_VERSION!r}; "
+            f"run `{MIGRATION_COMMAND} migrate --apply` before starting the API. "
+            "The old snapshot is not read silently."
+        )
+    return (
+        f"{kind} snapshot version {version!r} is not supported "
+        f"(expected {SNAPSHOT_VERSION!r}); no migration is registered. "
+        f"Back up the database and inspect it with `{MIGRATION_COMMAND} stats`."
+    )
 
 
 def _object(value: object, where: str) -> dict[str, object]:
@@ -76,6 +117,13 @@ def _integer(value: object, where: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise SnapshotError(f"{where}: expected an integer")
     return value
+
+
+def _revision(value: object, where: str) -> int:
+    revision = _integer(value, where)
+    if revision < 0:
+        raise SnapshotError(f"{where}: expected a non-negative integer")
+    return revision
 
 
 def _number(value: object, where: str) -> float:
@@ -147,8 +195,11 @@ def _header(snapshot: object, kind: str) -> dict[str, object]:
     root = _object(snapshot, "snapshot")
     version = _text(root.get("version"), "snapshot.version")
     if version != SNAPSHOT_VERSION:
-        raise SnapshotError(
-            f"snapshot version {version!r} is not supported (expected {SNAPSHOT_VERSION!r})"
+        raise SnapshotVersionError(
+            _version_message(version, kind),
+            version=version,
+            kind=kind,
+            migratable=version in MIGRATABLE_VERSIONS,
         )
     actual = _text(root.get("kind"), "snapshot.kind")
     if actual != kind:
@@ -374,7 +425,15 @@ def _work_finding_from_json(value: object, where: str) -> WorkFinding:
     )
 
 
-def encode_session(session: DialogueSession) -> dict[str, object]:
+def encode_session(
+    session: DialogueSession,
+    *,
+    revision: int | None = None,
+) -> dict[str, object]:
+    # ``revision`` is injected by the SQLite adapter so the snapshot carries
+    # the value the row is about to have, without mutating the aggregate
+    # before the compare-and-swap succeeds.
+    stored_revision = session.revision if revision is None else revision
     return {
         "version": SNAPSHOT_VERSION,
         "kind": KIND_SESSION,
@@ -382,6 +441,7 @@ def encode_session(session: DialogueSession) -> dict[str, object]:
             "session_id": session.session_id,
             "problem_id": session.problem_id,
             "state": session.state.value,
+            "revision": stored_revision,
             "alignment": _alignment_to_json(session.alignment),
             "hypotheses": _hypotheses_to_json(session.hypotheses),
             "max_turns": session.max_turns,
@@ -431,7 +491,54 @@ def decode_session(snapshot: object) -> DialogueSession:
             _work_finding_from_json(item, f"session.work_findings[{index}]")
             for index, item in enumerate(_array(data.get("work_findings"), "session.work_findings"))
         ),
+        revision=_revision(data.get("revision"), "session.revision"),
     )
+
+
+def migrate_snapshot(snapshot: object) -> dict[str, object]:
+    """Return a current-version copy of one stored snapshot.
+
+    This is the only place a legacy shape is understood. Callers must run it
+    deliberately (the maintenance command), never from ``get()``: a read that
+    silently upgrades a row would hide an incomplete deployment.
+    """
+
+    root = _object(snapshot, "snapshot")
+    version = _text(root.get("version"), "snapshot.version")
+    kind = _text(root.get("kind"), "snapshot.kind")
+    if version == SNAPSHOT_VERSION:
+        # Validate the current shape too, so ``migrate`` fails the whole batch
+        # on a corrupt row instead of reporting "nothing to do".
+        if kind == KIND_SESSION:
+            decode_session(root)
+        elif kind == KIND_PROBLEM:
+            decode_problem(root)
+        else:
+            raise SnapshotError(f"snapshot kind {kind!r} is not supported")
+        return root
+    if version not in MIGRATABLE_VERSIONS:
+        raise SnapshotVersionError(
+            _version_message(version, kind),
+            version=version,
+            kind=kind,
+            migratable=False,
+        )
+
+    migrated = copy.deepcopy(root)
+    migrated["version"] = SNAPSHOT_VERSION
+    data = _object(migrated.get("data"), "snapshot.data")
+    migrated["data"] = data
+    if kind == KIND_SESSION:
+        # 0.1 stored no revision: the row's separate column was the only
+        # token. A migrated session starts at revision 0, matching the
+        # column's default; the CLI also rewrites the column to this value.
+        data["revision"] = _revision(data.get("revision", 0), "snapshot.data.revision")
+        decode_session(migrated)
+    elif kind == KIND_PROBLEM:
+        decode_problem(migrated)
+    else:
+        raise SnapshotError(f"snapshot kind {kind!r} has no migration path")
+    return migrated
 
 
 # --- problem -----------------------------------------------------------------

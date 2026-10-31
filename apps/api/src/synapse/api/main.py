@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import os
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from synapse.api.deps import Container, build_container
 from synapse.api.routes import router
+from synapse.infrastructure.snapshots import SnapshotError
+from synapse.infrastructure.sqlite_state import StateSchemaError
 
 
 def _web_origins() -> list[str]:
@@ -28,6 +31,24 @@ def create_app(container: Container | None = None) -> FastAPI:
     # The composition root is injectable so tests can swap one adapter (a fake
     # graph generator, a stub LLM client) without patching globals.
     app.state.container = container or build_container()
+
+    @app.exception_handler(SnapshotError)
+    async def snapshot_error_handler(_request: Request, exc: Exception) -> JSONResponse:
+        # A legacy or corrupt snapshot is an operator problem, not a 404. The
+        # message carries the explicit migration command instead of letting
+        # Starlette answer with a bare "Internal Server Error".
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"会话快照无法读取：{exc}"},
+        )
+
+    @app.exception_handler(StateSchemaError)
+    async def schema_error_handler(_request: Request, exc: Exception) -> JSONResponse:
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"会话存储结构不兼容：{exc}"},
+        )
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=_web_origins(),

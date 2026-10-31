@@ -28,6 +28,7 @@ from synapse.application.commands import (
     SubmitAnswerCommand,
     VerifyStepCommand,
 )
+from synapse.application.errors import SessionConflict
 from synapse.application.factory import ProblemNotSupported, UnsupportedMode
 from synapse.application.limits import StepRateLimited
 from synapse.application.review import ReviewService
@@ -80,6 +81,11 @@ def create_session(
         view = service.start(command)
     except (ProblemNotSupported, UnsupportedMode) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except SessionConflict as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"会话创建冲突，请重试（{exc}）。",
+        ) from exc
     return session_out(
         view,
         service.problem_title(view.session.problem_id),
@@ -151,6 +157,11 @@ def submit_turn(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except IllegalTransition as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except SessionConflict as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"会话已被另一个请求更新，请刷新后重试（{exc}）。",
+        ) from exc
     return session_out(
         view,
         service.problem_title(view.session.problem_id),
@@ -175,6 +186,11 @@ def disagree_with_card(
             status_code=409,
             detail="卡点卡尚未生成，暂时不能记录异议。",
         ) from exc
+    except SessionConflict as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"会话已被另一个请求更新，请刷新后重试（{exc}）。",
+        ) from exc
     return diagnosis_out(card)
 
 
@@ -187,6 +203,11 @@ def exit_session(
         view = service.exit(session_id)
     except SessionNotFound as exc:
         raise HTTPException(status_code=404, detail="session not found") from exc
+    except SessionConflict as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"会话已被另一个请求更新，请刷新后重试（{exc}）。",
+        ) from exc
     return session_out(
         view,
         service.problem_title(view.session.problem_id),

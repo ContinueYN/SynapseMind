@@ -124,9 +124,13 @@ class SessionService:
             # S7: a NONE-tier subject stops after ALIGN. Asking a probe here
             # would promise a diagnosis we cannot verify, so the session is
             # closed with the structure hint and no card.
+            # Closing paths used to rely on ``save`` as an upsert; the
+            # repository is compare-and-swap only, so creation is explicit.
+            self._sessions.add(session)
             return self._structure_only(session, problem, capabilities)
 
         if session.alignment.first_divergence == "none":
+            self._sessions.add(session)
             return self._close(
                 session,
                 "过程覆盖了定义域、最值、参数分类与合并；本轮没有可诊断的断点。",
@@ -134,6 +138,7 @@ class SessionService:
 
         probe = self._planner.next(session, problem.graph)
         if probe is None:
+            self._sessions.add(session)
             return self._close(session, "没有可用的探针，先不生成卡点卡。")
         session.asked_probe_ids.append(probe.id)
         prompt = self._compose(session, problem, probe, opening=True)
@@ -171,6 +176,10 @@ class SessionService:
             return session.diagnosis
 
         card = replace(session.diagnosis, disagree=True)
+        session.diagnosis = card
+        # Save before the review-queue append: a losing compare-and-swap must
+        # not leave a queue row for a disagreement the session never stored.
+        self._sessions.save(session)
         if self._review_queue is not None:
             self._review_queue.record(
                 ReviewItem.from_card(
@@ -178,8 +187,6 @@ class SessionService:
                     created_at=datetime.now(UTC).isoformat(timespec="seconds"),
                 )
             )
-        session.diagnosis = card
-        self._sessions.save(session)
         return card
 
     def submit(self, session_id: str, command: SubmitAnswerCommand) -> SessionView:

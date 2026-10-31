@@ -44,6 +44,10 @@ class DialogueSession:
     # Filled at start, read when the card is built several turns later. Empty
     # unless the equality-check flag is on (see application/work_check.py).
     work_findings: tuple[WorkFinding, ...] = ()
+    # Optimistic-concurrency token owned by the repository adapter. 0 means
+    # "not stored yet"; each successful save increments it. It is internal
+    # storage metadata and is never exposed by the HTTP API.
+    revision: int = 0
 
     def advance(self, event: DialogueEvent) -> DialogueState:
         self.state = next_state(self.state, event)
