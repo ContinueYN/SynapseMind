@@ -16,6 +16,14 @@ from synapse.application.replay import GoldenCase, judge, load_cases, replay_cas
 
 GOLDEN_PATH = Path(__file__).resolve().parents[3] / "eval" / "golden" / "golden-v0.1.jsonl"
 
+# The golden corpus stays local: it is review material, not a public fixture.
+# Public CI still exercises the replay engine through the non-golden tests.
+if not GOLDEN_PATH.exists():
+    pytest.skip(
+        "private golden corpus is not published; run locally with eval/golden present",
+        allow_module_level=True,
+    )
+
 CASES = load_cases(GOLDEN_PATH)
 
 

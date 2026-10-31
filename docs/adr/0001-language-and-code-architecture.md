@@ -153,7 +153,7 @@ apps/api/src/synapse/
 2. **契约**：把 `specs/dialogue-state.md` 的转移表落成 `apps/api/src/synapse/domain/dialogue/table.py`；Pydantic 模型生成 JSON Schema。
 3. **数据**：MySQL 设计改为 PostgreSQL；保留 14 张逻辑表，去掉 16 片分库，MVP 单库 + 月分区。
 4. **部署**：Compose 从 MySQL 改 Postgres；Nginx 保持 SSE 关闭缓冲；3 个容器。
-5. **文档**：`docs/design/chapters/07-技术架构.md`、`08-skill映射.md` 已按本 ADR 重写，本地 DOCX/PDF 已重生成（v0.3，不入库）；第 11 章保留旧 Java 设计过程作为方法记录。
+5. **文档**：`docs/design/chapters/07-技术架构.md` 已按本 ADR 重写；`08-skill映射.md` 与第 11 章历史过程只在本地保留，不随公开仓库发布。
 6. **验证**：`python scripts/checks/check_repo.py`、`uv run pytest`、契约生成 diff、500 并发 SSE 压测、100 条 golden 回放。
 
 ## 9. 验证实验

@@ -201,6 +201,13 @@ def test_composite_aligner_sends_annotated_problems_to_the_rule_aligner() -> Non
 
 
 GOLDEN_PATH = Path(__file__).resolve().parents[3] / "eval" / "golden" / "golden-v0.1.jsonl"
+# Public CI does not carry the private golden corpus; keep the other alignment
+# tests running and skip only this labelled-work comparison.
+_GOLDEN_CASES = (
+    [json.loads(line) for line in GOLDEN_PATH.read_text(encoding="utf-8").splitlines()]
+    if GOLDEN_PATH.exists()
+    else []
+)
 # Which layer the seed graph's node belongs to, used only to compare the two
 # aligners on labelled work.
 _SEED_LAYER = {"n1": "L1", "n2": "L1", "n3": "L2", "n4": "L2", "n5": "L4", "n6": "L2"}
@@ -208,7 +215,7 @@ _SEED_LAYER = {"n1": "L1", "n2": "L1", "n3": "L2", "n4": "L2", "n5": "L4", "n6":
 
 @pytest.mark.parametrize(
     "case",
-    [json.loads(line) for line in GOLDEN_PATH.read_text(encoding="utf-8").splitlines()],
+    _GOLDEN_CASES,
     ids=lambda case: case["case_id"],
 )
 def test_graph_derived_alignment_agrees_with_the_labelled_layer(case: dict[str, str]) -> None:

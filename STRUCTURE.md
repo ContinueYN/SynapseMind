@@ -21,9 +21,8 @@
 ├─ docs/
 │  ├─ adr/               # 架构决策记录（为什么这样选）
 │  ├─ design/
-│  │  ├─ chapters/       # 第 0–14 章 + 附录，唯一手写源
-│  │  └─ assets/         # 3 张设计图，由脚本生成
-│  ├─ reference/         # 能力清单等原始参考
+│  │  ├─ chapters/       # 公开章节 00–05、07、12–15
+│  │  └─ assets/         # 3 张设计图，由本地脚本生成
 │  └─ vision/            # 设想层：学习机理、CHC 归因、生物类比与文献
 ├─ .github/workflows/     # CI
 ├─ README.md              # 项目入口
@@ -38,6 +37,9 @@
 _local/                   # 旧版归档；不进 Git
 eval/ 私有语料与逐题报告   # 本机保留，不进 Git
 tools/                    # 本地文档构建脚本；不进 Git
+docs/design/plan/         # 本地详尽计划；不进 Git
+docs/reference/           # 能力清单等原始参考；不进 Git
+docs/status/              # 逐段验收记录；不进 Git
 docs/design/release/      # 合并 MD / DOCX / PDF；生成物，不进 Git
 .tmp/                     # 临时检查脚本
 ```
@@ -54,9 +56,8 @@ docs/design/release/      # 合并 MD / DOCX / PDF；生成物，不进 Git
 | `infra/` | `compose.yaml`、Dockerfile、Nginx、OTel 配置 | 业务代码、前端组件 | `README.md`；M2 起容器文件 |
 | `scripts/` | 按职责分组：`dev/` 启动、`contracts/` 契约、`checks/` 检查、`eval/` 评测、`release/` 可选导出 | 应用入口、部署脚本 | 5 组脚本 + `README.md` |
 | `docs/adr/` | 一个决策一个文件：背景、选项、评分、后果、改选条件 | 教程、会议记录、未决讨论 | `0001` 语言与代码架构 |
-| `docs/design/chapters/` | 第 0–14 章 + 附录 Markdown，按编号排序 | DOCX/PDF、合并稿、图片 | 16 个章节源文件 |
+| `docs/design/chapters/` | 公开设计章节：00–05、07、12–15，按编号排序 | 内部计划、历史过程、DOCX/PDF | 11 个公开章节源文件 |
 | `docs/design/assets/` | 由本地文档工具生成的 3 张 PNG | 手工改图、截图堆 | 3 张图 |
-| `docs/reference/` | 原始能力清单、外部资料摘要 | 正式设计正文 | `skill.txt` |
 | `.github/workflows/` | CI：链接、JSON、skill 映射检查 | 本地脚本 | `ci.yml` |
 
 ## 三条最容易放错的边界
@@ -103,7 +104,6 @@ specs/ 改契约 → 改 apps/api 的 Pydantic/转移表 → 生成 TS 类型 �
 | 设计文档怎么读 | [docs/README.md](docs/README.md) |
 | 设计章节源 | [docs/design/README.md](docs/design/README.md) |
 | ADR 索引 | [docs/adr/README.md](docs/adr/README.md) |
-| 能力清单原文 | [docs/reference/README.md](docs/reference/README.md) |
 
 ## 什么时候才加新目录
 

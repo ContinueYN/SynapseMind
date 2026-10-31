@@ -18,11 +18,10 @@
 | 目录 | 放什么 | 入库 | 什么时候该改 |
 |---|---|---|---|
 | [`adr/`](adr/README.md) | 决策记录：背景、选项、评分、后果、**改选条件** | ✅ | 做技术选型时新增一篇；旧篇只补「后来怎样」，不改写当时理由 |
-| [`design/chapters/`](design/chapters/) | 设计书唯一手写源：00 一页纸 … 14 视觉系统，15 附录 | ✅ | 设计变了改这里，**不要改 DOCX/PDF** |
+| [`design/chapters/`](design/chapters/) | 公开设计章节：00–05、07、12–15（一页纸、需求、核心体验、科学原理、诊断引擎、Prompt、技术架构、交付/插件/视觉/附录） | ✅ | 设计变了改这里，**不要改 DOCX/PDF** |
 | `design/release/` | 合并稿 MD、DOCX、PDF、`openapi.json` | ❌ 生成物 | 改了章节后重建（见第五节） |
 | [`design/assets/`](design/assets/) | 3 张设计图，由本地文档工具生成 | ✅ | 图变了重跑本地脚本，不要手改 PNG |
 | [`vision/`](vision/) | 设想层：学习机理、CHC 归因、生物类比与文献 | ✅ | 只增不删；与实现冲突时**以实现为准** |
-| [`reference/`](reference/) | 外部原始材料（能力清单 `skill.txt`） | ✅ | 只读，是第 08 章逐条映射的依据 |
 | `design/plan/` | 本地详尽计划、未入库的取舍记录 | ❌ 本机 | 只在本地会话里用 |
 
 ## 三、按身份选路径
@@ -36,17 +35,17 @@
 ## 四、阅读顺序（按依赖，不按编号）
 
 1. [00 一页纸](design/chapters/00-一页纸.md)
-2. [02 核心体验](design/chapters/02-核心体验.md)
-3. [04 诊断引擎](design/chapters/04-诊断引擎.md)
-4. [05 Prompt 与 Agent](design/chapters/05-Prompt与Agent.md)
-5. [07 技术架构](design/chapters/07-技术架构.md)
-6. [ADR-0001 语言与代码架构](adr/0001-language-and-code-architecture.md)（技术选型先看这篇）
-7. [08 skill 映射](design/chapters/08-skill映射.md)
-8. [09 可行性与 MVP](design/chapters/09-可行性与MVP.md)
+2. [01 需求与场景](design/chapters/01-需求与场景.md)
+3. [02 核心体验](design/chapters/02-核心体验.md)
+4. [03 科学原理与对话规则](design/chapters/03-科学原理与对话规则.md)
+5. [04 诊断引擎](design/chapters/04-诊断引擎.md)
+6. [05 Prompt 与 Agent](design/chapters/05-Prompt与Agent.md)
+7. [07 技术架构](design/chapters/07-技术架构.md)
+8. [ADR-0001 语言与代码架构](adr/0001-language-and-code-architecture.md)（技术选型先看这篇）
 9. [12 M2 交付计划](design/chapters/12-M2交付计划.md) → [13 学科插件与可扩展架构](design/chapters/13-学科插件与可扩展架构.md)
+10. [14 视觉系统](design/chapters/14-视觉系统.md) → [15 附录](design/chapters/15-附录.md)
 
-> 按需读：06（RAG，未实现的规划）、10（演示与问答）、11（子 Agent 设计过程，方法论存留）、
-> 14（视觉系统，改前端前必读）。
+> 按需读：15 附录（术语、JSON 示例与参考方向）。
 
 ## 五、构建设计书（本地）
 

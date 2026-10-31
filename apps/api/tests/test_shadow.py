@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from synapse.api.deps import build_container
 from synapse.application.llm import LLMRequest, LLMResponse
 from synapse.application.replay import load_cases, replay_case
@@ -17,6 +19,13 @@ from synapse.infrastructure.llm.audit import InMemoryCallAuditor
 from synapse.infrastructure.llm.settings import LLMSettings
 
 GOLDEN_PATH = Path(__file__).resolve().parents[3] / "eval" / "golden" / "golden-v0.1.jsonl"
+
+# Shadow replay needs the private golden corpus; skip it in a clean public clone.
+if not GOLDEN_PATH.exists():
+    pytest.skip(
+        "private golden corpus is not published; run locally with eval/golden present",
+        allow_module_level=True,
+    )
 
 SHADOW = LLMSettings(
     mode="shadow",

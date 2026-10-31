@@ -10,7 +10,7 @@
 > 不是互相矛盾的三个值；当前值以实跑为准。判断一条能力有没有落地，看它有没有自己的
 > 报告和测试，不要看这里的数字。
 
-**现在在哪**（逐段验收记录见 [docs/status/m2.5-log.md](docs/status/m2.5-log.md)）：
+**现在在哪**（逐段验收记录在本机 `docs/status/m2.5-log.md`，不入库）：
 
 | 阶段 | 状态 | 一句话 |
 |---|---|---|
@@ -260,9 +260,11 @@ README.md                    对外：架构（无进度）
 AGENTS.md                    对内：本文件
 docs/README.md               文档总索引（三层：设想／主体／实现）
 docs/adr/                    决策记录（改选条件）
-docs/design/chapters/        设计书正文 00–14 + 附录（会被合并成 DOCX/PDF）
+docs/design/chapters/        公开设计章节 00–05、07、12–15
 docs/design/plan/            本地详尽计划（未入库）
 docs/design/release/         构建产物（未入库，需重建）
+docs/reference/              原始能力清单等（未入库）
+docs/status/                 逐段验收记录（未入库）
 docs/vision/                 设想层：学习机理（诊断—归因—干预—巩固），不承诺已实现
 specs/                       机器可验证契约（JSON Schema + 状态机）
 apps/api/                    后端：domain / application / infrastructure / api 分层
@@ -279,7 +281,7 @@ scripts/release/             公开仓库导出：export_public.py + templates/�
 项目起点是"12 分钟测评 + 学习 OS"，在设计与评审中被判定跑偏，整体归档到 `_local/archive/v0-broad-os/`，转向**单题诊断引导**。因此仓库里有两代材料的痕迹：
 
 - `_local/archive/v0-broad-os/` — 旧方案全文，**不要当现状引用**；
-- 第 11 章记录的是当时的 Java/Spring 设计过程，**已被 ADR-0001 取代**，只作方法论留存；
+- 第 11 章记录的是当时的 Java/Spring 设计过程，**已被 ADR-0001 取代**，只作方法论留存（本地，不随公开仓库发布）；
 - 旧会话里的 "M2 = 处方-验证闭环" 属于 v0 口径，与当前 M2（LLM 追问）无关。
 
 当前 M2 / M2.5 的定义见第 12、13 章。

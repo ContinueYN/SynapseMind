@@ -6,7 +6,7 @@
 2. [`STRUCTURE.md`](STRUCTURE.md) —— 每个目录放什么、不放什么；
 3. [`docs/design/chapters/00-一页纸.md`](docs/design/chapters/00-一页纸.md) —— 一页纸；
 4. [`specs/dialogue-state.md`](specs/dialogue-state.md) —— 状态机与硬约束；
-5. [`docs/design/chapters/08-skill映射.md`](docs/design/chapters/08-skill映射.md) —— 能力与落点。
+5. [`docs/design/chapters/04-诊断引擎.md`](docs/design/chapters/04-诊断引擎.md) —— 诊断链路与可证伪性。
 
 ## 工作方式
 

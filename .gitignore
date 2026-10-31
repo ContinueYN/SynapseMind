@@ -81,6 +81,7 @@ docs/design/release/
 # scripts/release/export_public.py when needed.
 docs/design/
 docs/reference/
+docs/status/
 # Root-only: the private evaluation material. `scripts/eval/` is tooling and
 # must stay tracked (an unanchored `eval/` also swallowed it once).
 # `eval/README.md` is force-added as the only public evaluation page.

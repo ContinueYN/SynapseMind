@@ -68,7 +68,7 @@ python scripts/checks/check_repo.py
 - 根目录必需文件是否存在；
 - `README.md` 与 `docs/` 下的相对链接/图片是否可解析；
 - `specs/*.json` 是否为合法 JSON；
-- `docs/design/chapters/08-skill映射.md` 是否有 11 条编号映射；
+- 本地若保留 `docs/design/chapters/08-skill映射.md`，检查 11 条编号映射；
 - 三张设计图是否存在。
 
 ## 一键启动
