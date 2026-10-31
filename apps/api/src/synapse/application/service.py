@@ -7,7 +7,9 @@ imports and no SQL/LLM calls.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from time import perf_counter
 
+from synapse.application.audit import AuditEntry, CallAuditor
 from synapse.application.card_builder import build_diagnosis_card
 from synapse.application.commands import (
     StartSessionCommand,
@@ -69,6 +71,7 @@ class SessionService:
         opening_composer: ProbeComposer | None = None,
         equality_checker: EqualityChecker | None = None,
         subjects: SubjectRegistry | None = None,
+        auditor: CallAuditor | None = None,
     ) -> None:
         self._sessions = sessions
         self._problems = problems
@@ -87,6 +90,10 @@ class SessionService:
         # Step verification asks the subject plugin after the session exists, so
         # the service needs the registry (the factory only exposes level_for).
         self._subjects = subjects
+        # Optional operational trail for single-step checks. It is not session
+        # state: the endpoint stays read-only, and the student's text is not
+        # copied into the audit (see ``_audit_step_verification``).
+        self._auditor = auditor
 
     def start(self, command: StartSessionCommand) -> SessionView:
         # Check the student's own equals signs before alignment: a provable
@@ -223,16 +230,46 @@ class SessionService:
 
         session = self._get(session_id)
         problem = self._problem(session.problem_id)
+        started = perf_counter()
+        try:
+            verdict = self._verify_step(session, problem.subject, command)
+        except Exception as exc:
+            # Keep the failure visible in the operational trail, then let the
+            # API surface it. The audit must never hide a broken verifier.
+            self._audit_step_verification(
+                session,
+                problem.subject,
+                command,
+                verdict=None,
+                started=started,
+                error=type(exc).__name__,
+            )
+            raise
+        self._audit_step_verification(
+            session,
+            problem.subject,
+            command,
+            verdict=verdict,
+            started=started,
+        )
+        return verdict
+
+    def _verify_step(
+        self,
+        session: DialogueSession,
+        subject: str,
+        command: VerifyStepCommand,
+    ) -> Verdict:
         if self._subjects is None:
             return Verdict(
                 status="unknown",
                 detail="没有注册学科插件，未对这一步作断言。",
             )
-        plugin = self._subjects.for_subject(problem.subject)
+        plugin = self._subjects.for_subject(subject)
         if plugin is None:
             return Verdict(
                 status="unknown",
-                detail=f"没有注册「{problem.subject}」的学科插件，未对这一步作断言。",
+                detail=f"没有注册「{subject}」的学科插件，未对这一步作断言。",
             )
         return plugin.verify(
             StudentStep(
@@ -240,6 +277,32 @@ class SessionService:
                 text=command.text,
                 turn=session.turn,
                 data=command.data,
+            )
+        )
+
+    def _audit_step_verification(
+        self,
+        session: DialogueSession,
+        subject: str,
+        command: VerifyStepCommand,
+        *,
+        verdict: Verdict | None,
+        started: float,
+        error: str | None = None,
+    ) -> None:
+        if self._auditor is None:
+            return
+        self._auditor.record(
+            AuditEntry(
+                kind="step_verify",
+                session_id=session.session_id,
+                turn=session.turn,
+                latency_ms=max(0, int((perf_counter() - started) * 1000)),
+                verification_status="error" if verdict is None else verdict.status,
+                fallback_reason=error,
+                subject=subject,
+                finding_count=0 if verdict is None else len(verdict.findings),
+                step_chars=len(command.text),
             )
         )
 

@@ -18,6 +18,7 @@ from synapse.api.deps import build_container
 from synapse.api.main import create_app
 from synapse.application.commands import StartSessionCommand, SubmitAnswerCommand
 from synapse.infrastructure.features import FeatureFlags
+from synapse.infrastructure.llm.audit import InMemoryCallAuditor
 from synapse.infrastructure.seed import SAMPLE_PROBLEM
 from synapse.infrastructure.verification.equalities import SympyEqualityChecker
 
@@ -127,6 +128,52 @@ def test_step_endpoint_is_off_by_default(
     assert body["status"] == "unknown"
     assert body["findings"] == []
     assert "未启用" in body["detail"]
+
+
+def test_step_verification_writes_a_privacy_safe_audit_row(
+    sample_payload: dict[str, object],
+) -> None:
+    auditor = InMemoryCallAuditor()
+    on_client = TestClient(
+        create_app(
+            build_container(
+                features=FeatureFlags(equality_check=True),
+                auditor=auditor,
+            )
+        )
+    )
+    session_id = _start(on_client, sample_payload)
+
+    assert (
+        on_client.post(
+            f"/api/v1/sessions/{session_id}/steps",
+            json={"text": "x+1=2x", "node_id": "n3"},
+        ).status_code
+        == 200
+    )
+    assert (
+        on_client.post(
+            f"/api/v1/sessions/{session_id}/steps",
+            json={"text": "x+1=1+x"},
+        ).status_code
+        == 200
+    )
+
+    rows = [entry for entry in auditor.entries if entry.kind == "step_verify"]
+    assert len(rows) == 2
+    fail, unknown = rows
+    assert fail.session_id == session_id
+    assert fail.turn == 0
+    assert fail.subject == "math"
+    assert fail.verification_status == "fail"
+    assert fail.finding_count == 1
+    assert fail.step_chars == len("x+1=2x")
+    assert fail.latency_ms >= 0
+    assert unknown.verification_status == "unknown"
+    assert unknown.finding_count == 0
+    # The audit records volume and outcome, not the student's wording.
+    assert "x+1=2x" not in str(fail.as_dict())
+    assert "x+1=1+x" not in str(unknown.as_dict())
 
 
 def test_step_endpoint_returns_a_counterexample_with_the_flag_on(

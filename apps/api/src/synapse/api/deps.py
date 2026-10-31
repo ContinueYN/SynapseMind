@@ -138,6 +138,7 @@ def build_container(
         opening_composer=opening,
         equality_checker=equality_checker,
         subjects=problems.plugins,
+        auditor=sink,
     )
     return Container(
         sessions=sessions,
