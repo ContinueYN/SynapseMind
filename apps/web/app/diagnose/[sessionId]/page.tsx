@@ -13,7 +13,7 @@ import { StructureHintView } from "@/components/StructureHintView";
 import { Surface } from "@/components/Surface";
 import { ProbeCard } from "@/components/ProbeCard";
 import { Thread } from "@/components/Thread";
-import { ApiError, exitSession, getSession, submitTurn } from "@/src/lib/api/client";
+import { ApiError, API_BASE, exitSession, getSession, submitTurn } from "@/src/lib/api/client";
 import type { SessionResponse } from "@/src/lib/api/types";
 import { adoptSession } from "@/src/lib/session-handoff";
 
@@ -126,7 +126,7 @@ export default function DiagnosePage() {
         <Plane>
           <p className="sm-kicker">会话没打开</p>
           <h1 className="sm-h1">{error}</h1>
-          <p className="sm-p">诊断服务没有响应；请确认 API 已启动。</p>
+          <p className="sm-p">诊断服务没有响应；请确认 API 已启动（{API_BASE}）。</p>
           <p style={{ marginTop: 26 }}>
             <Link className="sm-cta" href="/">
               回到交题页
