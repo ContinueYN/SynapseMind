@@ -430,10 +430,9 @@ export interface components {
             image_url?: string | null;
             /**
              * Subject
-             * @default math
-             * @enum {string}
+             * @description 可选；省略时由系统识别学科，置信不足返回 422。
              */
-            subject: "math" | "physics" | "chinese";
+            subject?: ("math" | "physics" | "chinese") | null;
             /**
              * Grade
              * @default high_school

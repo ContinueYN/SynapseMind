@@ -25,8 +25,7 @@
         "subject": {
           "type": "string",
           "enum": ["math", "physics", "chinese"],
-          "default": "math",
-          "description": "学科标签，必须显式声明（不做自动识别）。math=STRONG（出卡点卡）、physics=PARTIAL（出卡点卡）、chinese=NONE（只出结构提示，不出卡）。未注册学科仍返回 422。"
+          "description": "可选；省略时由系统从题面识别（数学/物理/语文），置信不足返回 422。显式声明仍优先。math=STRONG（出卡点卡）、physics=PARTIAL（出卡点卡）、chinese=NONE（只出结构提示，不出卡）。"
         },
         "grade": {
           "type": "string",

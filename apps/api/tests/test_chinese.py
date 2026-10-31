@@ -64,7 +64,7 @@ def test_chinese_is_the_none_tier() -> None:
 
 
 def test_chinese_never_identifies_on_its_own() -> None:
-    """Subject declaration is explicit; a Chinese stem sent as math stays math."""
+    """The plugin's hook is catalog-only; generic routing uses the detector."""
 
     assert ChinesePlugin().identify(CHINESE_TEXT) is None
 

@@ -361,8 +361,7 @@ def main() -> int:
             "`probes_dropped_unsupported` / `claim_dropped_unsupported`，图仍然可用。"
         ),
         (
-            '- **不是自动识别**：必须显式声明 `subject="chinese"`；未声明时按数学处理，'
-            "这是 S3「不猜学科」的延续。"
+            '- **评测里显式声明**：本脚本固定 `subject="chinese"` 以隔离建图变量；通用入口的自动识别由 `application/subject_detection.py` 负责，不改变这里的 NONE 档承诺。'
         ),
         (
             "- 本报告衡量的是接线与承诺，不是诊断准确率；语文的“卡在哪一步”无法自动验证，"

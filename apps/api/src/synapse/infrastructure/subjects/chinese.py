@@ -62,11 +62,11 @@ class ChinesePlugin:
         self._aligner: StepAligner = aligner or ClauseCueAligner()
 
     def identify(self, text: str) -> ProblemRef | None:
-        """Never auto-identify: the subject must be declared by the request.
+        """No annotated Chinese catalog: generic routing is the resolver's job.
 
-        Same rule as physics (S3: do not guess the subject). A Chinese stem
-        sent without ``subject="chinese"`` is handled as math, which is the
-        documented boundary, not a fallback.
+        This hook only identifies reviewed problems owned by the plugin. The
+        decision to send an undeclared stem to the Chinese graph generator is
+        made by ``application.subject_detection`` before this hook is reached.
         """
 
         del text

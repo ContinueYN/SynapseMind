@@ -25,7 +25,7 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 32,
-      "description": "学科标签，必须由请求显式声明；NONE 档不做自动识别。"
+      "description": "学科标签；可由请求显式声明，也可由入口的学科识别器给出。NONE 档只影响输出承诺，不靠调用方猜。"
     },
     "level": {
       "type": "string",

@@ -27,15 +27,11 @@ function Harness({
 }
 
 describe("ProblemForm", () => {
-  it("switches the declared subject", async () => {
-    const user = userEvent.setup();
+  it("does not ask the student to pick a subject", () => {
     render(<Harness />);
 
-    const chinese = screen.getByRole("radio", { name: "语文" });
-    await user.click(chinese);
-
-    expect(chinese).toBeChecked();
-    expect(screen.getByRole("radio", { name: "数学" })).not.toBeChecked();
+    expect(screen.queryByLabelText("学科")).not.toBeInTheDocument();
+    expect(screen.getByText("自动识别")).toBeInTheDocument();
   });
 
   it("blocks an empty problem before calling the API", async () => {
@@ -49,12 +45,11 @@ describe("ProblemForm", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it("submits trimmed text, the chosen subject, and the learning mode", async () => {
+  it("submits trimmed text and the learning mode without a subject", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn(async () => {});
     render(<Harness onSubmit={onSubmit} />);
 
-    await user.click(screen.getByRole("radio", { name: "物理" }));
     await user.type(screen.getByPlaceholderText(/粘贴题目/), "  一物体从静止下落  ");
     await user.type(screen.getByPlaceholderText(/完全不会就写“不会”/), "  5 m/s  ");
     await user.type(screen.getByPlaceholderText(/写多少都行/), "  先算加速度  ");
@@ -62,7 +57,7 @@ describe("ProblemForm", () => {
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     expect(onSubmit).toHaveBeenCalledWith({
-      problem: { text: "一物体从静止下落", subject: "physics" },
+      problem: { text: "一物体从静止下落" },
       attempt: {
         answer: "5 m/s",
         work: "先算加速度",
@@ -84,7 +79,6 @@ describe("ProblemForm", () => {
       "aria-expanded",
       "true",
     );
-    expect(screen.getByRole("radio", { name: "数学" })).toBeChecked();
   });
 
   it("disables submission while a session is being created", () => {

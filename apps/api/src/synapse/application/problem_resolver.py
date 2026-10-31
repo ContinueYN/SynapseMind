@@ -4,10 +4,11 @@ Two ways a problem can exist (M2.5 S5 ②):
 
 1. it is in the annotated catalog — identification is a strict "the submission
    contains the annotated stem" check (S3), so the wrong graph is never used;
-2. it is not, and a subject plugin can generate a graph for it — the graph goes
-   through the same structure rules, schema and claim verification as the S4
-   evaluation run, then it is stored *unannotated* so later turns of the same
-   session can look it up.
+2. it is not, and a subject plugin can generate a graph for it — if the caller
+   did not declare ``subject``, a conservative detector picks the plugin; the
+   graph then goes through the same structure rules, schema and claim
+   verification as the S4 evaluation run, and is stored *unannotated* so later
+   turns of the same session can look it up.
 
 Refusing is a first-class outcome: no generator (``SYNAPSE_LLM_MODE=off``, no
 API key, a subject that cannot build graphs) means the entry keeps returning
@@ -22,10 +23,14 @@ from synapse.application.errors import ProblemNotSupported
 from synapse.application.graph import GraphBuildFailed
 from synapse.application.ports import MutableProblemRepository, ProblemRepository
 from synapse.application.subject import SubjectRegistry
+from synapse.application.subject_detection import (
+    MIN_CONFIDENCE,
+    HeuristicSubjectDetector,
+    SubjectDetector,
+)
 from synapse.domain.problem.alignment import normalize
 from synapse.domain.problem.models import Problem, ProblemDraft
 
-DEFAULT_SUBJECT = "math"
 _TITLE_LIMIT = 32
 
 
@@ -47,10 +52,12 @@ class ProblemResolver:
         subjects: SubjectRegistry | None,
         *,
         store: MutableProblemRepository | None = None,
+        detector: SubjectDetector | None = None,
     ) -> None:
         self._problems = problems
         self._subjects = subjects
         self._store = store
+        self._detector = detector or HeuristicSubjectDetector()
 
     def resolve(self, text: str, declared_subject: str | None = None) -> Problem:
         annotated = self._problems.find_for(text)
@@ -69,7 +76,13 @@ class ProblemResolver:
             raise ProblemNotSupported("题目文本为空，无法识别或建图")
         if self._subjects is None or self._store is None:
             raise ProblemNotSupported(_NO_GENERATOR)
-        subject = declared_subject or DEFAULT_SUBJECT
+        if declared_subject is not None:
+            subject = declared_subject
+        else:
+            detected = self._detector.detect(text)
+            if detected.subject is None or detected.confidence < MIN_CONFIDENCE:
+                raise ProblemNotSupported(_LOW_CONFIDENCE)
+            subject = detected.subject
         plugin = self._subjects.for_subject(subject)
         if plugin is None:
             raise ProblemNotSupported(f"subject {subject!r} has no annotated problem yet")
@@ -101,6 +114,7 @@ class ProblemResolver:
 
 
 _NO_GENERATOR = "这道题没有标注解法图，当前环境也不能建图（SYNAPSE_LLM_MODE=off 或缺少 API key）"
+_LOW_CONFIDENCE = "无法可靠识别这道题的学科；请在题面里补一句学科线索（如“函数/受力/阅读”）"
 
 
 def _detail(exc: GraphBuildFailed) -> str:

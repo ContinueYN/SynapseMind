@@ -201,16 +201,16 @@ NONE 档会话在 `ALIGN` 之后直接收束到 `STOP → CLOSED`：不追问、
 
 | 方法 | 数学（S2–S4） | 物理（S6） | 语文（S7） |
 |---|---|---|---|
-| `identify()` | 归一化后「包含」已标注题；不同题一律拒绝 | 恒 `None`（必须显式声明 `subject`） | 恒 `None` |
+| `identify()` | 归一化后「包含」已标注题；不同题一律拒绝 | 恒 `None`（无可识别标注题；通用路由见下） | 恒 `None`（同上） |
 | `build_graph()` | `Problem` 返回手写种子图；`ProblemDraft` 走 `LLMGraphGenerator`：生成 → 机械修复 → 结构规则 → `solution-graph.schema.json` → 失败重试一次（重试要最小可用图） | 同一个生成器，prompt `graph-v9-physics`，不输出 `claim` | 同一个生成器，prompt `graph-v6-chinese`，不输出探针与 `claim`；无探针图由 `review(require_probes=False)` 放行 |
 | `aligner_for()` | 标注题 → `RuleBasedAligner`；生成题 → `TypeCueAligner` | `TypeCueAligner`（S6 基线不重标定） | `ClauseCueAligner`（分句重合，可报 `partial`） |
 | `probes_for()` | 返回节点自带探针 | 同左（`hypothesis_labels` 换物理词表） | 恒空 |
 | `evidence_model()` | 生成图读图内 `probe.evidence`；只有已标注种子图回退手写 `EVIDENCE` | 只读图内权重，不回退数学 `EVIDENCE` | 恒空 |
 | `verify()` | 单步等式链：读 `text`，可证伪时 `fail`（带反例），否则 `unknown`；从不 `pass`，`data` 忽略。图顶层 `claim` 另由反例搜索核对（`pass`/`fail`/`unknown`） | `StudentStep.data` 的量纲与数值回代；纯文本 `unknown` | 恒 `unknown`（NONE 档没有可自动验证的真值） |
 
-`subject` 是显式声明：文本识别出的学科与声明不一致时返回 **422**，而不是静默按文本路由。三个插件共用同一套状态机与诊断门槛；对齐策略由插件给出（S8），`domain/dialogue/` 一行未改。
+`subject` 可省略：显式声明仍优先；未声明时 `application/subject_detection.py` 先用数学/物理/语文术语与公式打分，≥0.6 直接路由，否则才调用模型分类器（`off`/`shadow` 不调用）；仍不确定返回 **422**，不默认数学。标注题匹配优先于这一切：题面确实包含已标注题时永远用自带图。
 
-识别是**严格**的：只接受确实包含已标注题原文的提交（比较前忽略空白、标点、全半角与 LaTeX 转义），其余返回 422 并说明原因。关键字匹配会把「同一知识点、另一道题」也当成种子题，用错的解法图解释学生的错误——那比拒绝更糟。
+识别是**严格**的：只接受确实包含已标注题原文的提交（比较前忽略空白、标点、全半角与 LaTeX 转义），其余走生成或 422。关键字匹配会把「同一知识点、另一道题」也当成种子题，用错的解法图解释学生的错误——那比拒绝更糟。
 
 ## 本地命令
 

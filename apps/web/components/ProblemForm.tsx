@@ -6,10 +6,8 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import type { CreateSessionInput } from "@/src/lib/api/types";
 
 export type SelfReport = NonNullable<CreateSessionInput["attempt"]["self_report"]>;
-export type Subject = NonNullable<CreateSessionInput["problem"]["subject"]>;
 
 export interface Draft {
-  subject: Subject;
   problem: string;
   answer: string;
   work: string;
@@ -18,7 +16,6 @@ export interface Draft {
 }
 
 export const EMPTY_DRAFT: Draft = {
-  subject: "math",
   problem: "",
   answer: "",
   work: "",
@@ -46,12 +43,6 @@ const SELF_REPORTS: { value: SelfReport; label: string }[] = [
   { value: "unsure", label: "不确定" },
   { value: "correct_but_guessed", label: "对了但有点蒙" },
   { value: "no_idea", label: "完全不会" },
-];
-
-const SUBJECTS: { value: Subject; label: string }[] = [
-  { value: "math", label: "数学" },
-  { value: "physics", label: "物理" },
-  { value: "chinese", label: "语文" },
 ];
 
 /**
@@ -112,7 +103,6 @@ export function ProblemForm({
 
   function fillSample() {
     onChange({
-      subject: "math",
       problem: SAMPLE_PROBLEM,
       answer: "a≥1/e",
       work: SAMPLE_WORK,
@@ -137,7 +127,7 @@ export function ProblemForm({
     }
 
     await onSubmit({
-      problem: { text: value.problem.trim(), subject: value.subject },
+      problem: { text: value.problem.trim() },
       attempt: {
         answer: value.answer.trim(),
         work: value.work.trim(),
@@ -164,22 +154,11 @@ export function ProblemForm({
 
       <div>
         <div className="sm-f-label" style={{ marginBottom: 8 }}>
-          学科
+          学科 <em>自动识别</em>
         </div>
-        <div aria-label="学科" className="sm-picks" role="radiogroup">
-          {SUBJECTS.map((item) => (
-            <label className="sm-pick" key={item.value}>
-              <input
-                checked={value.subject === item.value}
-                name="subject"
-                onChange={() => patch({ subject: item.value })}
-                type="radio"
-                value={item.value}
-              />
-              <span>{item.label}</span>
-            </label>
-          ))}
-        </div>
+        <p className="sm-fine" style={{ margin: 0 }}>
+          不用选。系统从题面判断数学 / 物理 / 语文；识别不准时会明确说明。
+        </p>
       </div>
 
       <label className="sm-f">

@@ -18,7 +18,10 @@ class StrictModel(BaseModel):
 class ProblemIn(StrictModel):
     text: str | None = Field(default=None, min_length=1, max_length=4000)
     image_url: str | None = Field(default=None, max_length=2000)
-    subject: Literal["math", "physics", "chinese"] = "math"
+    subject: Literal["math", "physics", "chinese"] | None = Field(
+        default=None,
+        description="可选；省略时由系统识别学科，置信不足返回 422。",
+    )
     grade: Literal["primary_school", "middle_school", "high_school"] = "high_school"
 
     @model_validator(mode="after")

@@ -52,10 +52,11 @@
 
 ## 三、对话内核：显式转移表
 
-10 个状态，事件驱动，转移表写在代码里，不在模型里。
+11 个状态，事件驱动，转移表写在代码里，不在模型里。
 
 ```text
 INGEST → PARSE → ALIGN → PROBE ⇄ PROBE
+                          ├─→ SCAFFOLD（空白/不会）→ PROBE
                           ├─→ DIAGNOSE → INTERVENE → VERIFY → CLOSED
                           └─→ STOP → CLOSED
 PARSE → NEED_INPUT → PARSE
@@ -75,6 +76,7 @@ ALIGN → STOP       （超纲 / 无法建图）
 | 6 | 进入诊断需 `posterior ≥ 0.80` **且** `margin ≥ 0.25` | 后验 + 边际 |
 | 7 | 动作白名单：`ask` / `hint` / `confirm` / `diagnose` / `intervene` / `stop` / `offer_answer_exit` | 枚举 |
 | 8 | 每轮回答写入证据链，缺失证据不得进入诊断 | 证据门禁 |
+| 9 | 空白先示例：完全没写时先给 1–2 步示例，不提问、不出卡；示例不含最终答案 | `SCAFFOLD` 状态 |
 
 后验用 log-odds 累加，softmax 归一；答案选项的似然权重是领域常量，不由模型生成。
 

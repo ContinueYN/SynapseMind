@@ -40,6 +40,11 @@ from synapse.application.problem_resolver import ProblemResolver
 from synapse.application.review import ReviewService
 from synapse.application.service import SessionService
 from synapse.application.subject import SubjectRegistry
+from synapse.application.subject_detection import (
+    CompositeSubjectDetector,
+    HeuristicSubjectDetector,
+    SubjectDetector,
+)
 from synapse.application.work_check import EqualityChecker
 from synapse.domain.problem.alignment import RuleBasedAligner
 from synapse.infrastructure.features import FeatureFlags
@@ -55,6 +60,7 @@ from synapse.infrastructure.llm.client import OpenAICompatibleClient
 from synapse.infrastructure.llm.composer import LLMProbeComposer
 from synapse.infrastructure.llm.graph import LLMGraphGenerator
 from synapse.infrastructure.llm.settings import LLMSettings
+from synapse.infrastructure.llm.subject_detector import LLMSubjectDetector
 from synapse.infrastructure.rate_limit import TokenBucketStepLimiter
 from synapse.infrastructure.review import SqliteReviewQueue
 from synapse.infrastructure.sqlite_state import (
@@ -138,13 +144,27 @@ def build_container(
     # S8: the strategy lives on the subject plugin. This aligner is only the
     # no-registry fallback; every production subject returns its own.
     aligner = RuleBasedAligner()
+    # Deterministic first; the model only sees stems the term scorer cannot
+    # decide. ``shadow`` must not change what the student sees, so it stays on
+    # the heuristic path along with ``off``.
+    detector: SubjectDetector = HeuristicSubjectDetector()
+    if resolved.llm_enabled and resolved.mode != "shadow":
+        detector = CompositeSubjectDetector(
+            detector,
+            LLMSubjectDetector(llm_client or OpenAICompatibleClient(resolved)),
+        )
     factory = SessionFactory(
         problems=problems,
         aligner=aligner,
         ids=UuidSessionIdGenerator(),
         clock=SystemClock(),
         subjects=problems.plugins,
-        resolver=ProblemResolver(problems, problems.plugins, store=problems),
+        resolver=ProblemResolver(
+            problems,
+            problems.plugins,
+            store=problems,
+            detector=detector,
+        ),
     )
     planner = HypothesisTargetedPlanner()
     guards = AnswerStoreLeakGuardFactory(answers)
