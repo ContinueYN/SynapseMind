@@ -10,7 +10,10 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  // One Next dev server compiles routes on demand: more concurrent first loads
+  // than this starve it and every `page.goto` hits the 30s timeout. CI already
+  // runs serially; locally, four is the useful ceiling (six flaked).
+  workers: process.env.CI ? 1 : 4,
   reporter: [["list"]],
   use: {
     baseURL: "http://127.0.0.1:3100",

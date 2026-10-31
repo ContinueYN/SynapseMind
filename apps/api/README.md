@@ -34,11 +34,13 @@ apps/api/src/synapse/
 │  ├─ card_builder.py         # 由收敛假设生成 DiagnosisCard
 │  ├─ replay.py               # golden 回放与退出判定（eval 与 pytest 共用）
 │  ├─ subject.py              # SubjectPlugin 端口：识别/建图/对齐策略/探针/证据/验证
+│  ├─ review.py               # ReviewItem + ReviewQueue 端口 + 只读 ReviewService
 │  └─ service.py              # SessionService（Facade）：start/get/submit/exit
 ├─ infrastructure/            # 端口实现
 │  ├─ seed.py                 # M1 唯一种子题 + 4 个探针 + 标准答案
 │  ├─ in_memory.py            # 会话/题目/答案仓储（重启即丢）
 │  ├─ guards.py               # 唯一读取答案的适配器：构造泄漏防护
+│  ├─ review.py               # 本机 SQLite 异议队列（var/review.sqlite3）
 │  ├─ system.py               # UTC 时钟 / S_ 会话 ID
 │  ├─ subjects/               # 学科插件实现（M2.5）
 │  │  ├─ math.py              # MathPlugin：严格识别 + 种子图/EVIDENCE + 生成图证据
@@ -94,6 +96,8 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 | `GET` | `/api/v1/sessions/{id}` | 恢复会话/当前问题 |
 | `POST` | `/api/v1/sessions/{id}/turns` | 回答当前探针 |
 | `POST` | `/api/v1/sessions/{id}/steps` | 验证一条步骤（只读，不推进会话） |
+| `POST` | `/api/v1/sessions/{id}/card/disagree` | 记录卡点卡异议（写回会话 + 本地复核队列） |
+| `GET` | `/api/v1/review/items` | 只读列出异议队列（不含学生原文） |
 | `POST` | `/api/v1/sessions/{id}/exit` | 显式退出学习模式 |
 
 约定：
@@ -103,6 +107,7 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 - 一次只返回一个 `prompt.question`；最多 6 轮。
 - 后验 `≥0.80` 且领先 `≥0.25` 才出卡；到轮次上限仍 `<0.55` 明确不出确定卡点。
 - `/steps` 只验证提交的这一步（`specs/step-verification.schema.json`）：不推进状态、不出卡；`unknown` 表示未启用/读不懂/没有可判的断言，不是“这步正确”。
+- `/review/items` 只读（`specs/review-queue.schema.json`）：只返回卡面结论与位置，不含学生原文；没有鉴权，判断也不写回服务端——教师在浏览器里标记后自行导出 CSV。
 - `SessionOut.subject` 是会话所属学科；前端只在 `math` 会话显示单步检查入口，语文/物理不摆这个空承诺。
 
 ## LLM 追问（M2）

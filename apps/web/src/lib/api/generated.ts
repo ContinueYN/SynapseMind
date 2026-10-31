@@ -21,6 +21,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/review/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Review Items
+         * @description Read-only listing of disagreed cards for the teacher review page.
+         *
+         *     There is no write endpoint and no authentication yet: the queue is a local
+         *     SQLite file, and the page exports the reviewer's judgment as a CSV instead
+         *     of storing it. The response never contains the student's own work.
+         */
+        get: operations["list_review_items_api_v1_review_items_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sessions": {
         parameters: {
             query?: never;
@@ -366,6 +390,45 @@ export interface components {
             /** Top Hypothesis */
             top_hypothesis: string;
         };
+        /**
+         * ReviewItemOut
+         * @description One disagreed card, as the teacher review page sees it.
+         *
+         *     It deliberately carries the card's conclusion and location only: the
+         *     student's own work is not copied into the queue (v0.1,
+         *     ``specs/review-queue.schema.json``).
+         */
+        ReviewItemOut: {
+            /** Session Id */
+            session_id: string;
+            /** Problem Id */
+            problem_id: string;
+            /**
+             * Layer
+             * @enum {string}
+             */
+            layer: "L0" | "L1" | "L2" | "L3" | "L4" | "L5" | "L6";
+            /** Label */
+            label: string;
+            /** Node Id */
+            node_id: string;
+            /** One Line */
+            one_line: string;
+            /** Confidence */
+            confidence: number;
+            /** Created At */
+            created_at: string;
+        };
+        /** ReviewItemsOut */
+        ReviewItemsOut: {
+            /**
+             * Version
+             * @constant
+             */
+            version: "0.1";
+            /** Items */
+            items: components["schemas"]["ReviewItemOut"][];
+        };
         /** SessionOut */
         SessionOut: {
             /** Session Id */
@@ -515,6 +578,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthOut"];
+                };
+            };
+        };
+    };
+    list_review_items_api_v1_review_items_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewItemsOut"];
                 };
             };
         };

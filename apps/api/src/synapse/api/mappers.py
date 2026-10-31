@@ -15,12 +15,15 @@ from synapse.api.schemas import (
     NextActionOut,
     ProbeOut,
     ProgressOut,
+    ReviewItemOut,
+    ReviewItemsOut,
     SessionOut,
     StepFindingOut,
     StepVerdictOut,
     VerifyOut,
 )
 from synapse.application.composer import ProbePrompt
+from synapse.application.review import ReviewItem
 from synapse.application.service import SessionView
 from synapse.application.subject import Verdict
 from synapse.domain.diagnosis.hint import StructureHint
@@ -130,6 +133,28 @@ def step_verdict_out(verdict: Verdict) -> StepVerdictOut:
             )
             for finding in verdict.findings[:3]
         ],
+    )
+
+
+def review_item_out(item: ReviewItem) -> ReviewItemOut:
+    """Map one queue row; the queue has no student text to leak."""
+
+    return ReviewItemOut(
+        session_id=item.session_id,
+        problem_id=item.problem_id,
+        layer=item.layer,
+        label=_clip(item.label, 40),
+        node_id=item.node_id,
+        one_line=_clip(item.one_line, 200),
+        confidence=item.confidence,
+        created_at=item.created_at,
+    )
+
+
+def review_items_out(items: list[ReviewItem]) -> ReviewItemsOut:
+    return ReviewItemsOut(
+        version="0.1",
+        items=[review_item_out(item) for item in items],
     )
 
 

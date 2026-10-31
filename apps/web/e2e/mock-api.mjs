@@ -33,6 +33,29 @@ const SESSIONS = {
   },
 };
 
+const REVIEW_ITEMS = [
+  {
+    session_id: "S_REVIEWE2E01",
+    problem_id: "P_PUB_002",
+    layer: "L2",
+    label: "概念不清：恒成立与最值",
+    node_id: "n3",
+    one_line: "漏掉了 a≤0 这一支。",
+    confidence: 0.86,
+    created_at: "2026-10-31T08:00:00+00:00",
+  },
+  {
+    session_id: "S_REVIEWE2E02",
+    problem_id: "P_PUB_003",
+    layer: "L1",
+    label: "概念不清：没有抓住关键条件",
+    node_id: "n2",
+    one_line: "只讨论了 a>0。",
+    confidence: 0.74,
+    created_at: "2026-10-30T09:30:00+00:00",
+  },
+];
+
 function sessionBody(id) {
   const preset = SESSIONS[id];
   return {
@@ -163,6 +186,11 @@ const server = createServer(async (req, res) => {
 
   if (req.method === "GET" && url.pathname === "/health") {
     send(res, 200, { status: "ok" });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/v1/review/items") {
+    send(res, 200, { version: "0.1", items: REVIEW_ITEMS });
     return;
   }
 

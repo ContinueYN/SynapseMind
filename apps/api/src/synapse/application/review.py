@@ -10,14 +10,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from synapse.domain.diagnosis.models import DiagnosisCard
+from synapse.domain.diagnosis.models import DiagnosisCard, Layer
 
 
 @dataclass(frozen=True, slots=True)
 class ReviewItem:
     session_id: str
     problem_id: str
-    layer: str
+    layer: Layer
     label: str
     node_id: str
     one_line: str
@@ -42,3 +42,18 @@ class ReviewQueue(Protocol):
     def record(self, item: ReviewItem) -> None: ...
 
     def items(self) -> list[ReviewItem]: ...
+
+
+class ReviewService:
+    """Read-only listing of the disagreement queue.
+
+    The queue is written by ``SessionService.mark_card_disagree``. This service
+    only reads it, so the teacher page cannot change a session or a card by
+    accident: there is no write method to call.
+    """
+
+    def __init__(self, queue: ReviewQueue) -> None:
+        self._queue = queue
+
+    def items(self) -> list[ReviewItem]:
+        return self._queue.items()

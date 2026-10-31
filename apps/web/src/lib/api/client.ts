@@ -1,6 +1,7 @@
 import type {
   CreateSessionInput,
   Diagnosis,
+  ReviewListing,
   SessionResponse,
   StepInput,
   StepVerdict,
@@ -105,4 +106,9 @@ export function disagreeWithCard(sessionId: string): Promise<Diagnosis> {
     `/api/v1/sessions/${encodeURIComponent(sessionId)}/card/disagree`,
     { method: "POST" },
   );
+}
+
+/** Read the local review queue; the teacher page never writes back. */
+export function listReviewItems(): Promise<ReviewListing> {
+  return request<ReviewListing>("/api/v1/review/items");
 }

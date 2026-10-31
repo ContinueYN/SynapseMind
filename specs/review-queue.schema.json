@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://synapsemind.dev/schemas/review-queue.schema.json",
+  "title": "ReviewQueueListing",
+  "description": "卡点卡异议复核队列的只读列表（v0.1）。GET /api/v1/review/items 的响应。每一行是学生点过「我不同意」的那张卡的结论与位置，不含学生原文；列表不写入、不改变会话。人工判断由复核者在本地标记并导出 CSV，不属于本契约。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "items"],
+  "properties": {
+    "version": {"type": "string", "const": "0.1"},
+    "items": {
+      "type": "array",
+      "description": "按 created_at 倒序；同一时间按 session_id 排序。没有异议时为空数组。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "session_id",
+          "problem_id",
+          "layer",
+          "label",
+          "node_id",
+          "one_line",
+          "confidence",
+          "created_at"
+        ],
+        "properties": {
+          "session_id": {"type": "string", "pattern": "^S_[A-Z0-9]+$"},
+          "problem_id": {"type": "string", "pattern": "^P_[A-Z0-9_]+$"},
+          "layer": {
+            "type": "string",
+            "enum": ["L0", "L1", "L2", "L3", "L4", "L5", "L6"]
+          },
+          "label": {"type": "string", "minLength": 1, "maxLength": 40},
+          "node_id": {"type": "string", "pattern": "^n[0-9]+$"},
+          "one_line": {"type": "string", "minLength": 1, "maxLength": 200},
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "学生点「我不同意」的时间，ISO 8601 UTC。"
+          }
+        }
+      }
+    }
+  }
+}

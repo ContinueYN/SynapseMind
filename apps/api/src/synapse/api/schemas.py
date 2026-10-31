@@ -186,6 +186,29 @@ class StepVerdictOut(StrictModel):
     findings: list[StepFindingOut] = Field(max_length=3)
 
 
+class ReviewItemOut(StrictModel):
+    """One disagreed card, as the teacher review page sees it.
+
+    It deliberately carries the card's conclusion and location only: the
+    student's own work is not copied into the queue (v0.1,
+    ``specs/review-queue.schema.json``).
+    """
+
+    session_id: str = Field(pattern=r"^S_[A-Z0-9]+$")
+    problem_id: str = Field(pattern=r"^P_[A-Z0-9_]+$")
+    layer: Literal["L0", "L1", "L2", "L3", "L4", "L5", "L6"]
+    label: str = Field(min_length=1, max_length=40)
+    node_id: str = Field(pattern=r"^n[0-9]+$")
+    one_line: str = Field(min_length=1, max_length=200)
+    confidence: float = Field(ge=0, le=1)
+    created_at: str = Field(min_length=1, max_length=40)
+
+
+class ReviewItemsOut(StrictModel):
+    version: Literal["0.1"]
+    items: list[ReviewItemOut]
+
+
 class HealthOut(StrictModel):
     status: Literal["ok"] = "ok"
     version: str

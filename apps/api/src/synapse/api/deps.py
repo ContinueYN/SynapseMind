@@ -36,6 +36,7 @@ from synapse.application.llm import LLMClient
 from synapse.application.planner import HypothesisTargetedPlanner
 from synapse.application.ports import AnswerStore, ProblemRepository, SessionRepository
 from synapse.application.problem_resolver import ProblemResolver
+from synapse.application.review import ReviewService
 from synapse.application.service import SessionService
 from synapse.application.subject import SubjectRegistry
 from synapse.application.work_check import EqualityChecker
@@ -67,6 +68,7 @@ class Container:
     problems: ProblemRepository
     answers: AnswerStore
     service: SessionService
+    review: ReviewService
     settings: LLMSettings
     subjects: SubjectRegistry
     features: FeatureFlags
@@ -156,6 +158,7 @@ def build_container(
         problems=problems,
         answers=answers,
         service=service,
+        review=ReviewService(review_queue),
         settings=resolved,
         subjects=problems.plugins,
         features=flags,
@@ -215,3 +218,8 @@ def build_composer(
 def get_service(request: Request) -> SessionService:
     container = cast(Container, request.app.state.container)
     return container.service
+
+
+def get_review_service(request: Request) -> ReviewService:
+    container = cast(Container, request.app.state.container)
+    return container.review

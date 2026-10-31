@@ -3971,6 +3971,308 @@ html[data-read="done"] .sm-orb-fill {
   font-weight: 600;
 }
 
+/* ───────────────────────── 教师复核页 ─────────────────────────
+ * 它不是学生的第二个入口：没有交题板，只有队列概况、逐条判断与导出。
+ * 玻璃层级沿用段落板 + 玻璃砖；判断键用 chip 语法，不引入第二套控件语言。
+ */
+
+.sm-review {
+  display: grid;
+  gap: var(--s6);
+}
+
+.sm-review-hero .sm-lede {
+  max-width: 46em;
+}
+
+.sm-review-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: var(--s5);
+}
+
+.sm-review-stats > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 9px 16px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.98);
+  border-radius: var(--r-pill);
+  background: var(--glass-chip);
+  box-shadow: var(--glass-hi);
+}
+
+.sm-review-stats b {
+  color: var(--azure-ink);
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.sm-review-stats span {
+  color: var(--ink-3);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+}
+
+.sm-review-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: var(--s5);
+}
+
+.sm-review-btn {
+  padding: 9px 15px;
+  border: 1px solid rgba(255, 255, 255, 0.94);
+  border-radius: var(--r-pill);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.9), rgba(233, 243, 254, 0.62));
+  box-shadow: var(--glass-hi);
+  color: var(--ink-2);
+  font-family: inherit;
+  font-size: var(--fs-small);
+  cursor: pointer;
+  transition:
+    border-color var(--t-fast) linear,
+    color var(--t-fast) linear,
+    background var(--t-fast) linear;
+}
+
+.sm-review-btn:hover:not(:disabled) {
+  border-color: rgba(154, 190, 235, 0.95);
+  color: var(--ink);
+}
+
+.sm-review-btn:focus-visible {
+  outline: 2px solid var(--azure-line);
+  outline-offset: 3px;
+}
+
+.sm-review-btn:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.sm-review-btn--quiet {
+  border-color: transparent;
+  background: none;
+  box-shadow: none;
+  color: var(--ink-3);
+}
+
+.sm-review-btn--quiet:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.sm-review-exported {
+  margin: 12px 0 0;
+  color: var(--azure-ink);
+  font-size: var(--fs-small);
+}
+
+.sm-review-alert {
+  margin-top: calc(-1 * var(--s4));
+}
+
+.sm-review-queue-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 12px;
+}
+
+.sm-review-queue-head .sm-kicker {
+  margin: 0;
+}
+
+.sm-review-queue-head > p:last-child {
+  max-width: 46em;
+  margin: 0;
+  color: var(--ink-3);
+  font-size: var(--fs-small);
+  line-height: 1.7;
+}
+
+.sm-review-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sm-review-item {
+  padding: 16px 18px 17px;
+}
+
+.sm-review-item-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+}
+
+.sm-review-layer {
+  padding: 2px 9px 3px;
+  border-radius: var(--r-pill);
+  background: rgba(63, 134, 224, 0.12);
+  color: var(--azure-ink);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.sm-review-time {
+  color: var(--ink-4);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+.sm-review-confidence {
+  margin-left: auto;
+  color: var(--ink-3);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+}
+
+.sm-review-title {
+  margin: 10px 0 0;
+  color: var(--ink);
+  font-size: var(--fs-p);
+  font-weight: 600;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.sm-review-line {
+  margin: 5px 0 0;
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+  line-height: 1.75;
+  text-wrap: pretty;
+}
+
+.sm-review-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 9px 0 0;
+  color: var(--ink-4);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+}
+
+.sm-review-meta code {
+  color: var(--ink-3);
+  font-family: inherit;
+  font-size: 10.5px;
+  overflow-wrap: anywhere;
+}
+
+.sm-review-judge {
+  display: grid;
+  grid-template-columns: auto minmax(220px, 1fr);
+  align-items: end;
+  gap: 12px 18px;
+  margin-top: 14px;
+  padding-top: 13px;
+  border-top: 1px solid var(--line);
+}
+
+.sm-review-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sm-review-choice {
+  padding: 7px 13px;
+  border: 1px solid rgba(255, 255, 255, 0.92);
+  border-radius: var(--r-pill);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.86), rgba(233, 243, 254, 0.56));
+  box-shadow: var(--glass-hi);
+  color: var(--ink-2);
+  font-family: inherit;
+  font-size: var(--fs-small);
+  cursor: pointer;
+  transition:
+    border-color var(--t-fast) linear,
+    background var(--t-fast) linear,
+    color var(--t-fast) linear,
+    box-shadow var(--t-fast) linear;
+}
+
+.sm-review-choice:hover {
+  border-color: rgba(154, 190, 235, 0.95);
+  color: var(--ink);
+}
+
+.sm-review-choice[aria-pressed="true"] {
+  border-color: rgba(255, 255, 255, 0.55);
+  background: linear-gradient(180deg, #4a8ce0, #3574c6);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 10px 18px -14px rgba(53, 116, 198, 0.9);
+  color: #ffffff;
+}
+
+.sm-review-choice:focus-visible {
+  outline: 2px solid var(--azure-line);
+  outline-offset: 3px;
+}
+
+.sm-review-note {
+  min-width: 0;
+}
+
+.sm-review-note input {
+  font-size: var(--fs-small);
+}
+
+@media (max-width: 900px) {
+  .sm-review-judge {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+@media (max-width: 620px) {
+  .sm-review {
+    gap: var(--s5);
+  }
+
+  .sm-review-stats {
+    gap: 8px;
+  }
+
+  .sm-review-stats > div {
+    flex: 1 1 30%;
+    justify-content: center;
+    padding: 8px 10px 9px;
+  }
+
+  .sm-review-queue-head {
+    display: grid;
+    gap: 5px;
+  }
+
+  .sm-review-confidence {
+    margin-left: 0;
+  }
+
+  .sm-review-item {
+    padding: 14px 14px 15px;
+  }
+
+  .sm-review-actions .sm-cta {
+    flex: 1 1 auto;
+  }
+}
+
 /* ───────────────────────── 设计说明页 ─────────────────────────
  * 它不是第二个首页：没有交题板，只有四段解释与一张边界表。
  * 版式沿用段落玻璃板，窄一点、读得慢一点；引用行用一条细线分开，像论文的脚注。

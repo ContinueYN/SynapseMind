@@ -20,6 +20,8 @@ export type Progress = Schemas["ProgressOut"];
 export type TurnInput = Schemas["TurnRequest"];
 export type StepInput = Schemas["StepRequest"];
 export type StepVerdict = Schemas["StepVerdictOut"];
+export type ReviewItem = Schemas["ReviewItemOut"];
+export type ReviewListing = Schemas["ReviewItemsOut"];
 
 export type SessionState =
   | "INGEST"
