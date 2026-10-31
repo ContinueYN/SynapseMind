@@ -1,0 +1,65 @@
+{"id":"Q01","kind":"relevant","text":"恒成立 参数 最值","expect":["K_MATH_MAX_MIN"]}
+{"id":"Q02","kind":"relevant","text":"定义域 增根","expect":["K_MATH_DOMAIN"]}
+{"id":"Q03","kind":"relevant","text":"对数 真数","expect":["K_MATH_LOG"]}
+{"id":"Q04","kind":"relevant","text":"导数 单调区间","expect":["K_MATH_MONOTONIC"]}
+{"id":"Q05","kind":"relevant","text":"极值 端点","expect":["K_MATH_EXTREMA"]}
+{"id":"Q06","kind":"relevant","text":"判别式 实根 个数","expect":["K_MATH_QUADRATIC"]}
+{"id":"Q07","kind":"relevant","text":"韦达定理 两根之和","expect":["K_MATH_VIETA"]}
+{"id":"Q08","kind":"relevant","text":"参数分离 边界","expect":["K_MATH_SEPARATION"]}
+{"id":"Q09","kind":"relevant","text":"数学归纳法 归纳假设","expect":["K_MATH_INDUCTION"]}
+{"id":"Q10","kind":"relevant","text":"向量 数量积 夹角","expect":["K_MATH_VECTOR"]}
+{"id":"Q11","kind":"relevant","text":"排列 组合 顺序","expect":["K_MATH_COUNT"]}
+{"id":"Q12","kind":"relevant","text":"圆的方程 圆心 半径","expect":["K_MATH_CIRCLE"]}
+{"id":"Q13","kind":"relevant","text":"基本不等式 等号条件","expect":["K_MATH_INEQ_MEAN"]}
+{"id":"Q14","kind":"relevant","text":"切线 斜率 导数","expect":["K_MATH_DERIV2"]}
+{"id":"Q15","kind":"relevant","text":"定积分 面积","expect":["K_MATH_INTEGRAL"]}
+{"id":"Q16","kind":"relevant","text":"量词 否定 命题","expect":["K_MATH_LOGIC"]}
+{"id":"Q17","kind":"relevant","text":"奇偶性 定义域对称","expect":["K_MATH_PARITY"]}
+{"id":"Q18","kind":"relevant","text":"二次不等式 解集","expect":["K_MATH_INEQUALITY"]}
+{"id":"Q19","kind":"relevant","text":"因式分解 十字相乘","expect":["K_MATH_FACTOR"]}
+{"id":"Q20","kind":"relevant","text":"等比数列 前n项和","expect":["K_MATH_SEQUENCE"]}
+{"id":"Q21","kind":"relevant","text":"裂项 错位相减","expect":["K_MATH_SERIES"]}
+{"id":"Q22","kind":"relevant","text":"方差 标准差 波动","expect":["K_MATH_STAT"]}
+{"id":"Q23","kind":"relevant","text":"椭圆 双曲线 离心率","expect":["K_MATH_CONIC"]}
+{"id":"Q24","kind":"relevant","text":"直线 斜率 垂直","expect":["K_MATH_LINE"]}
+{"id":"Q25","kind":"relevant","text":"指数函数 比较大小","expect":["K_MATH_EXP"]}
+{"id":"Q26","kind":"relevant","text":"复数 共轭 模","expect":["K_MATH_COMPLEX"]}
+{"id":"Q27","kind":"relevant","text":"互斥 独立 概率","expect":["K_MATH_PROB"]}
+{"id":"Q28","kind":"relevant","text":"绝对值 零点分段","expect":["K_MATH_ABS"]}
+{"id":"Q29","kind":"relevant","text":"分式方程 增根","expect":["K_MATH_FRACTION"]}
+{"id":"Q30","kind":"relevant","text":"复合函数 链式法则","expect":["K_MATH_CHAIN"]}
+{"id":"Q31","kind":"relevant","text":"周期 三角函数","expect":["K_MATH_PERIOD"]}
+{"id":"Q32","kind":"relevant","text":"对数 比较大小 换底","expect":["K_MATH_LOG_COMPARE"]}
+{"id":"Q33","kind":"relevant","text":"不等式 等号 检验","expect":["K_MATH_EQUALITY"]}
+{"id":"Q34","kind":"relevant","text":"三角 恒等变换 角的范围","expect":["K_MATH_TRIG"]}
+{"id":"Q35","kind":"relevant","text":"分类讨论 不重不漏","expect":["K_MATH_CLASSIFY"]}
+{"id":"Q36","kind":"relevant","text":"极限 左右极限","expect":["K_MATH_LIMIT"]}
+{"id":"Q37","kind":"relevant","text":"受力分析 牛顿第二定律","expect":["K_PHYS_FORCES"]}
+{"id":"Q38","kind":"relevant","text":"单位 量纲 换算","expect":["K_PHYS_UNITS"]}
+{"id":"Q39","kind":"relevant","text":"机械能 守恒","expect":["K_PHYS_ENERGY"]}
+{"id":"Q40","kind":"relevant","text":"匀变速 位移 公式","expect":["K_PHYS_KINEMATICS"]}
+{"id":"Q41","kind":"relevant","text":"动量守恒 碰撞","expect":["K_PHYS_MOMENTUM"]}
+{"id":"Q42","kind":"relevant","text":"向心力 圆周运动","expect":["K_PHYS_CIRCULAR"]}
+{"id":"Q43","kind":"relevant","text":"电磁感应 楞次定律","expect":["K_PHYS_INDUCTION"]}
+{"id":"Q44","kind":"relevant","text":"光电效应 截止频率","expect":["K_PHYS_PHOTO"]}
+{"id":"Q45","kind":"relevant","text":"全反射 临界角","expect":["K_PHYS_OPTICS"]}
+{"id":"Q46","kind":"relevant","text":"浮力 排开体积","expect":["K_PHYS_PRESSURE"]}
+{"id":"Q47","kind":"relevant","text":"串联 并联 等效电阻","expect":["K_PHYS_CIRCUIT"]}
+{"id":"Q48","kind":"relevant","text":"波速 波长 频率","expect":["K_PHYS_WAVE"]}
+{"id":"Q49","kind":"relevant","text":"摩擦力 相对运动","expect":["K_PHYS_FRICTION"]}
+{"id":"Q50","kind":"relevant","text":"平抛 运动分解","expect":["K_PHYS_PROJECTILE"]}
+{"id":"Q51","kind":"relevant","text":"万有引力 卫星 轨道","expect":["K_PHYS_GRAVITY"]}
+{"id":"Q52","kind":"relevant","text":"热力学第一定律 内能","expect":["K_PHYS_THERMO"]}
+{"id":"Q53","kind":"relevant","text":"电场强度 电势差","expect":["K_PHYS_EFIELD"]}
+{"id":"Q54","kind":"relevant","text":"安培力 洛伦兹力 左手定则","expect":["K_PHYS_MAGNETIC"]}
+{"id":"Q55","kind":"relevant","text":"功 功率 夹角","expect":["K_PHYS_WORK_POWER"]}
+{"id":"Q56","kind":"relevant","text":"有效数字 误差","expect":["K_PHYS_ERROR"]}
+{"id":"F01","kind":"filter","text":"单位 量纲 换算","subject":"math","forbid":["K_PHYS_UNITS"]}
+{"id":"F02","kind":"filter","text":"受力分析 牛顿第二定律","subject":"physics","expect":["K_PHYS_FORCES"]}
+{"id":"F03","kind":"filter","text":"恒成立 参数 最值","subject":"physics","forbid":["K_MATH_MAX_MIN"]}
+{"id":"I01","kind":"irrelevant","text":"第二次世界大战 起因"}
+{"id":"I02","kind":"irrelevant","text":"细胞有丝分裂 过程"}
+{"id":"I03","kind":"irrelevant","text":"唐诗 平仄 格律"}
+{"id":"I04","kind":"irrelevant","text":"如何提高英语听力"}
+{"id":"I05","kind":"irrelevant","text":"股票 基金 定投 收益"}
+{"id":"I06","kind":"irrelevant","text":"photosynthesis light reaction"}

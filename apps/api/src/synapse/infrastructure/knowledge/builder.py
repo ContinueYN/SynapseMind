@@ -12,7 +12,12 @@ from synapse.infrastructure.knowledge.corpus import load_corpus
 from synapse.infrastructure.knowledge.embedding import DEFAULT_MODEL, FastEmbedEmbedder
 from synapse.infrastructure.knowledge.index import InMemoryKnowledgeIndex
 
-DEFAULT_MIN_SCORE = 0.35
+# Calibrated by scripts/eval/knowledge_retrieval.py against the 56-card corpus:
+# with 56 cards the highest-scoring irrelevant query reached 0.490 while the
+# weakest relevant query still scored 0.608. 0.35 let every irrelevant query
+# through; 0.55 separates the two groups. Re-run the eval after changing the
+# corpus or the embedding model — the usable threshold depends on corpus size.
+DEFAULT_MIN_SCORE = 0.55
 # FastEmbed's own default is a temporary directory. Keep the ~90 MB model
 # across runs and OS temp cleanups; override with SYNAPSE_EMBED_CACHE.
 DEFAULT_CACHE_DIR = str(Path.home() / ".cache" / "synapsemind" / "fastembed")

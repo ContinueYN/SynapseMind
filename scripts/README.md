@@ -21,7 +21,8 @@ scripts/
 │  ├─ s6_physics.py      # M2.5 S6 物理接入（6 题）
 │  ├─ s6_verifier.py     # M2.5 S6 物理验证器自检（无需 key）
 │  ├─ s7_none_tier.py    # M2.5 S7 语文 NONE 档结构提示（6 题 × 2 段）
-│  └─ s8_alignment.py    # M2.5 S8 分句级对齐（6 题 × 3 段）
+│  ├─ s8_alignment.py    # M2.5 S8 分句级对齐（6 题 × 3 段）
+│  └─ knowledge_retrieval.py # 知识卡检索评测（top-k/过滤/拒答/阈值扫描）
 └─ release/
    └─ export_public.py   # 可选的公开树导出工具
 ```
@@ -53,6 +54,11 @@ cd apps/api
 
 # S8：分句级对齐（6 题 × 3 段 partial/full/blank，需真实 key）
 .\.venv\Scripts\python.exe ..\..\scripts\eval\s8_alignment.py
+
+# 知识卡检索评测（需 fastembed + 本地模型缓存；报告写入 eval/reports/）
+.\.venv\Scripts\python.exe ..\..\scripts\eval\knowledge_retrieval.py
+# 只校验语料与固定查询集，不加载模型
+.\.venv\Scripts\python.exe ..\..\scripts\eval\knowledge_retrieval.py --check
 ```
 
 ## 可选本地检查

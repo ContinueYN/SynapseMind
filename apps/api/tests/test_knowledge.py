@@ -16,6 +16,13 @@ from synapse.infrastructure.knowledge.embedding import HashingEmbedder
 from synapse.infrastructure.knowledge.index import InMemoryKnowledgeIndex
 
 SPEC_PATH = Path(__file__).resolve().parents[3] / "specs" / "knowledge-search.schema.json"
+QUERY_PATH = (
+    Path(__file__).resolve().parents[3]
+    / "scripts"
+    / "eval"
+    / "data"
+    / "knowledge-queries-v0.1.jsonl"
+)
 
 
 def _index() -> InMemoryKnowledgeIndex:
@@ -40,14 +47,51 @@ def _client(service: KnowledgeService) -> TestClient:
 def test_corpus_is_sourced_and_has_no_duplicate_ids() -> None:
     cards = load_corpus()
 
-    assert len(cards) >= 10
+    assert len(cards) >= 40
     assert len({card.id for card in cards}) == len(cards)
     assert {card.subject for card in cards} == {"math", "physics"}
+    assert sum(card.subject == "math" for card in cards) >= 25
+    assert sum(card.subject == "physics" for card in cards) >= 15
     for card in cards:
+        assert card.id.startswith("K_MATH_" if card.subject == "math" else "K_PHYS_")
+        assert card.source.title
         assert card.source.url.startswith("https://")
         assert card.source.license
         assert card.body
         assert card.tags
+        assert len(set(card.tags)) == len(card.tags)
+
+
+def test_eval_query_set_targets_existing_cards_and_covers_every_card() -> None:
+    cards = {card.id: card for card in load_corpus()}
+    rows = [
+        json.loads(line)
+        for line in QUERY_PATH.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+    assert len(rows) >= 40
+    assert len({row["id"] for row in rows}) == len(rows)
+    targeted: set[str] = set()
+    for row in rows:
+        assert row["kind"] in {"relevant", "filter", "irrelevant"}
+        assert 2 <= len(row["text"]) <= 200
+        expect = row.get("expect", [])
+        forbid = row.get("forbid", [])
+        for card_id in [*expect, *forbid]:
+            assert card_id in cards, f"{row['id']}: unknown card {card_id}"
+        targeted.update(expect)
+        if row["kind"] == "relevant":
+            assert expect
+        elif row["kind"] == "filter":
+            assert row["subject"] in {"math", "physics"}
+            assert expect or forbid
+            for card_id in expect:
+                assert cards[card_id].subject == row["subject"]
+        else:
+            assert not expect and not forbid
+            assert "subject" not in row
+    assert targeted == set(cards)
 
 
 def test_corpus_rejects_duplicate_ids() -> None:
