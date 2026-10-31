@@ -30,6 +30,44 @@ test("math step check keeps unknown away from a correctness claim", async ({
   await expect(result).toContainText("没判出来不等于这一步正确");
 });
 
+test("math step check keeps earlier checks at 390px", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/diagnose/S_MATH_E2E");
+
+  await page.getByRole("button", { name: /有一步拿不准/ }).click();
+  const input = page.getByLabel("这一步");
+  const submit = page.getByRole("button", { name: "检查这一步" });
+
+  await input.fill("x+1=2x");
+  await submit.click();
+  await expect(page.locator(".sm-stepcheck-result")).toHaveAttribute(
+    "data-status",
+    "fail",
+  );
+
+  await input.fill("x+1=1+x");
+  await submit.click();
+  await expect(page.locator(".sm-stepcheck-result")).toHaveAttribute(
+    "data-status",
+    "unknown",
+  );
+
+  const previous = page.getByRole("region", { name: "之前的检查" });
+  await expect(previous).toContainText("x+1=2x");
+  await expect(previous.getByText("有反例")).toBeVisible();
+  await expect(page.getByText("检查记录只在本页保留最近 3 次，刷新后清空。")).toBeVisible();
+
+  const layout = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+    columns: getComputedStyle(
+      document.querySelector(".sm-stepcheck-history-list li") as Element,
+    ).gridTemplateColumns,
+  }));
+  expect(layout.scrollWidth).toBe(layout.clientWidth);
+  expect(layout.columns.split(" ")).toHaveLength(1);
+});
+
 test("physics step check sends declared result/tolerance and survives 390px", async ({
   page,
 }) => {

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -81,6 +81,71 @@ describe("StepCheck", () => {
     // The formula and the counterexample are separate rows now; the client no
     // longer strips the headline prefix out of the free-text detail.
     expect(screen.queryByText(/这个等号不成立：/)).not.toBeInTheDocument();
+  });
+
+  it("keeps previous checks visible and labels the latest one", async () => {
+    verify
+      .mockResolvedValueOnce(
+        verdict(
+          "fail",
+          "这个等号不成立：「x+1 = 2*x」x=0.1 时左边 1.1、右边 0.2",
+          [
+            {
+              kind: "identity",
+              left: "x+1",
+              right: "2*x",
+              summary: "x=0.1 时左边 1.1、右边 0.2",
+              counterexample: "x=0.1 时左边 1.1、右边 0.2",
+            },
+          ],
+        ),
+      )
+      .mockResolvedValueOnce(
+        verdict("unknown", "没有找到可机器证明的等号错误；这不等于这一步正确。"),
+      );
+    const user = await openAndType("x+1=2x");
+    const input = screen.getByLabelText("这一步");
+    const submit = screen.getByRole("button", { name: "检查这一步" });
+
+    await user.click(submit);
+    expect(await screen.findByText("这个等号不成立")).toBeInTheDocument();
+
+    await user.clear(input);
+    await user.type(input, "x+1=1+x");
+    await user.click(submit);
+
+    expect(await screen.findByText("这一步没判出来")).toBeInTheDocument();
+    expect(screen.getByText(/你查的是/)).toHaveTextContent("x+1=1+x");
+
+    const previous = screen.getByRole("region", { name: "之前的检查" });
+    expect(within(previous).getByText("x+1=2x")).toBeInTheDocument();
+    expect(within(previous).getByText("有反例")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "清空记录" }));
+
+    expect(screen.queryByText("这一步没判出来")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "之前的检查" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps at most three checks in the page history", async () => {
+    verify.mockResolvedValue(verdict("unknown", "没有找到可机器证明的等号错误。"));
+    const user = await openAndType("a=1");
+    const input = screen.getByLabelText("这一步");
+    const submit = screen.getByRole("button", { name: "检查这一步" });
+
+    for (const step of ["a=2", "a=3", "a=4"]) {
+      await user.clear(input);
+      await user.type(input, step);
+      await user.click(submit);
+      await waitFor(() => expect(submit).toBeEnabled());
+    }
+
+    const previous = screen.getByRole("region", { name: "之前的检查" });
+    expect(within(previous).getAllByRole("listitem")).toHaveLength(2);
+    expect(within(previous).getByText("a=3")).toBeInTheDocument();
+    expect(within(previous).queryByText("a=1")).not.toBeInTheDocument();
   });
 
   it("does not turn an unknown verdict into a correctness claim", async () => {

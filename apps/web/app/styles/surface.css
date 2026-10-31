@@ -3267,6 +3267,96 @@ html[data-read="done"] .sm-orb-fill {
   color: var(--ink-3) !important;
 }
 
+/* 单步检查记录：只在当前页面内存里，刷新就清空，不冒充会话历史 */
+.sm-stepcheck-history-bar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: var(--s4);
+  padding-top: 12px;
+  border-top: 1px solid rgba(74, 140, 224, 0.14);
+  color: var(--ink-4);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.sm-stepcheck-history-bar button {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-4);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.sm-stepcheck-history-bar button:hover {
+  color: var(--azure-ink);
+}
+
+.sm-stepcheck-latest-text {
+  margin: 0 0 8px;
+  color: var(--ink-4);
+  font-size: 11px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.sm-stepcheck-latest-text code {
+  color: var(--ink-2);
+  font-family: "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+  font-size: 11.5px;
+  white-space: pre-wrap;
+}
+
+.sm-stepcheck-latest > .sm-stepcheck-result {
+  margin-top: 0;
+}
+
+.sm-stepcheck-history {
+  margin-top: 16px;
+}
+
+.sm-stepcheck-history-list {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sm-stepcheck-history-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+  padding: 8px 10px;
+  border-radius: var(--r-1);
+  background: rgba(255, 255, 255, 0.48);
+}
+
+.sm-stepcheck-history-list span {
+  color: var(--ink-4);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.sm-stepcheck-history-list span[data-status="fail"] {
+  color: var(--warn);
+}
+
+.sm-stepcheck-history-list code {
+  color: var(--ink-2);
+  font-family: "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+  font-size: 11.5px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 /* ───────────────────────── 结构提示（NONE 档） ───────────────────────── */
 
 /* 没有把握尺：这里能数的只有“几步被提到”，所以给的是计数，不是百分比 */
@@ -3750,6 +3840,11 @@ html[data-read="done"] .sm-orb-fill {
 
   .sm-stepcheck-grid {
     grid-template-columns: 1fr;
+  }
+
+  .sm-stepcheck-history-list li {
+    grid-template-columns: 1fr;
+    gap: 4px;
   }
 }
 

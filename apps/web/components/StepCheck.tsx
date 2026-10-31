@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 
 import { Surface } from "@/components/Surface";
 import { StepVerdictView } from "@/components/StepVerdictView";
@@ -40,12 +40,22 @@ interface StepCheckProps {
   sessionId: string;
 }
 
+const HISTORY_LIMIT = 3;
+
+interface CheckRecord {
+  key: number;
+  text: string;
+  verdict: StepVerdict;
+}
+
 export function StepCheck({ sessionId }: StepCheckProps) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
-  const [verdict, setVerdict] = useState<StepVerdict | null>(null);
+  const [history, setHistory] = useState<CheckRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const nextKey = useRef(0);
+  const latest = history[0] ?? null;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -54,9 +64,15 @@ export function StepCheck({ sessionId }: StepCheckProps) {
 
     setBusy(true);
     setError(null);
-    setVerdict(null);
     try {
-      setVerdict(await verifyStep(sessionId, { text: step, node_id: "" }));
+      const next = await verifyStep(sessionId, { text: step, node_id: "" });
+      nextKey.current += 1;
+      setHistory((previous) =>
+        [{ key: nextKey.current, text: step, verdict: next }, ...previous].slice(
+          0,
+          HISTORY_LIMIT,
+        ),
+      );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "检查失败，请重试。");
     } finally {
@@ -83,9 +99,9 @@ export function StepCheck({ sessionId }: StepCheckProps) {
       {open ? (
         <Surface className="sm-stepcheck-panel" id="sm-stepcheck-panel">
           <p className="sm-kicker">单步检查</p>
-          <h2 className="sm-h2">贴一行你写的式子。</h2>
+          <h2 className="sm-h2">贴一步你写的过程。</h2>
           <p className="sm-p">
-            系统只做一件事：看等号两边是不是真的相等。读不懂的写法会被跳过，不猜。
+            可以是一行，也可以是多行；系统只检查能读懂的等号。读不懂的写法会被跳过，不猜。
           </p>
 
           <form onSubmit={submit}>
@@ -95,7 +111,6 @@ export function StepCheck({ sessionId }: StepCheckProps) {
                 disabled={busy}
                 onChange={(event) => {
                   setText(event.target.value);
-                  setVerdict(null);
                 }}
                 placeholder="例如：sin(x)/(x+sin(x)/cos(x)) = sin(x)/x + cos(x)"
                 rows={3}
@@ -126,8 +141,43 @@ export function StepCheck({ sessionId }: StepCheckProps) {
             </p>
           ) : null}
 
-          {verdict ? (
-            <StepVerdictView copy={STATUS_COPY} verdict={verdict} />
+          {history.length > 0 ? (
+            <div className="sm-stepcheck-history-bar">
+              <span>检查记录只在本页保留最近 3 次，刷新后清空。</span>
+              <button
+                onClick={() => {
+                  setHistory([]);
+                }}
+                type="button"
+              >
+                清空记录
+              </button>
+            </div>
+          ) : null}
+
+          {latest ? (
+            <div className="sm-stepcheck-latest">
+              <p className="sm-stepcheck-latest-text">
+                你查的是 <code>{latest.text}</code>
+              </p>
+              <StepVerdictView copy={STATUS_COPY} verdict={latest.verdict} />
+            </div>
+          ) : null}
+
+          {history.length > 1 ? (
+            <section aria-label="之前的检查" className="sm-stepcheck-history">
+              <p className="sm-kicker">之前的检查</p>
+              <ul className="sm-stepcheck-history-list">
+                {history.slice(1).map((record) => (
+                  <li key={record.key}>
+                    <span data-status={record.verdict.status}>
+                      {STATUS_COPY[record.verdict.status].badge}
+                    </span>
+                    <code>{record.text}</code>
+                  </li>
+                ))}
+              </ul>
+            </section>
           ) : null}
         </Surface>
       ) : null}
