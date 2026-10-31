@@ -97,6 +97,7 @@ test("physics step check sends declared result/tolerance and survives 390px", as
 
   const previous = page.getByRole("region", { name: "之前的检查" });
   await expect(previous).toContainText("sqrt(2*g*h)（m/s）");
+  await expect(previous).toContainText("结果 6.3246");
   await expect(previous.getByText("已检查")).toBeVisible();
 
   const mobile = await page.evaluate(() => ({

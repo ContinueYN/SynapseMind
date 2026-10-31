@@ -214,6 +214,27 @@ describe("PhysicsStepCheck", () => {
     expect(screen.getByText("数值回代不一致：左侧 3 N、右侧 4 N")).toBeInTheDocument();
   });
 
+  it("records the declared result with each history entry", async () => {
+    verify.mockResolvedValue(verdict("pass", "量纲一致，数值回代未发现矛盾。"));
+    const user = await open();
+
+    await user.type(screen.getByLabelText("这一步"), "sqrt(2*g*h)");
+    await user.type(screen.getByLabelText("结果单位"), "m/s");
+    await user.type(screen.getByLabelText("你写的结果"), "6.3246");
+    const submit = screen.getByRole("button", { name: "检查这一步" });
+    await user.click(submit);
+    await waitFor(() => expect(submit).toBeEnabled());
+
+    await user.clear(screen.getByLabelText("你写的结果"));
+    await user.type(screen.getByLabelText("你写的结果"), "7");
+    await user.click(submit);
+    await waitFor(() => expect(submit).toBeEnabled());
+
+    expect(screen.getByText(/你查的是/)).toHaveTextContent("结果 7");
+    const previous = screen.getByRole("region", { name: "之前的检查" });
+    expect(previous).toHaveTextContent("结果 6.3246");
+  });
+
   it("keeps at most three physics checks in the page history", async () => {
     verify.mockResolvedValue(verdict("pass", "量纲一致，数值回代未发现矛盾。"));
     const user = await open();

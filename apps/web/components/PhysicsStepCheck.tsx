@@ -88,9 +88,11 @@ export function PhysicsStepCheck({ sessionId }: PhysicsStepCheckProps) {
         node_id: "",
         data: payload.data,
       });
-      const label = unit.trim()
-        ? `${payload.text}（${unit.trim()}）`
-        : payload.text;
+      const label = [
+        payload.text,
+        unit.trim() ? `（${unit.trim()}）` : "",
+        expectedText.trim() ? ` · 结果 ${expectedText.trim()}` : "",
+      ].join("");
       nextKey.current += 1;
       setHistory((previous) =>
         [{ key: nextKey.current, text: label, verdict: next }, ...previous].slice(
