@@ -16,11 +16,13 @@ from jsonschema import Draft202012Validator
 
 from synapse.api.deps import build_container
 from synapse.api.main import create_app
+from synapse.api.mappers import step_verdict_out
 from synapse.application.commands import StartSessionCommand, SubmitAnswerCommand
 from synapse.infrastructure.features import FeatureFlags
 from synapse.infrastructure.llm.audit import InMemoryCallAuditor
 from synapse.infrastructure.seed import SAMPLE_PROBLEM
 from synapse.infrastructure.verification.equalities import SympyEqualityChecker
+from synapse.infrastructure.verification.physics_units import verify_equation
 
 REAL_LIMIT_WORK = "=lim[sinX/(X+sinX/cosX)] =lim[sinX/X +cosX] =1+1 =2，有哪里错了么"
 SPEC_PATH = Path(__file__).resolve().parents[3] / "specs" / "step-verification.schema.json"
@@ -124,7 +126,7 @@ def test_step_endpoint_is_off_by_default(
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["version"] == "0.2"
+    assert body["version"] == "0.3"
     assert body["status"] == "unknown"
     assert body["findings"] == []
     assert "未启用" in body["detail"]
@@ -280,3 +282,20 @@ def test_step_verdict_conforms_to_the_public_schema(
     ).json()
     assert unknown["status"] == "unknown"
     validator.validate(unknown)
+
+
+def test_physics_fail_verdict_conforms_to_the_public_schema() -> None:
+    """Physics fail used to return detail only, which violated v0.2's minItems."""
+
+    verdict = verify_equation(
+        "F = m*a",
+        {"F": "N", "m": "kg", "a": "m/s^2"},
+        values={"F": 1, "m": 2, "a": 3},
+    )
+    body = step_verdict_out(verdict).model_dump()
+
+    spec = json.loads(SPEC_PATH.read_text(encoding="utf-8"))
+    Draft202012Validator(spec).validate(body)
+    assert body["status"] == "fail"
+    assert body["findings"][0]["kind"] == "quantity"
+    assert "数值回代不一致" in body["findings"][0]["summary"]

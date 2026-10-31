@@ -170,9 +170,9 @@ class StepRequest(StrictModel):
 
 
 class StepFindingOut(StrictModel):
-    """One broken equals sign, in a shape the client can lay out (v0.2)."""
+    """One failed comparison, in a shape the client can lay out (v0.3)."""
 
-    kind: Literal["identity", "limit"]
+    kind: Literal["identity", "limit", "quantity"]
     left: str = Field(min_length=1, max_length=500)
     right: str = Field(min_length=1, max_length=500)
     summary: str = Field(min_length=1, max_length=300)
@@ -180,7 +180,7 @@ class StepFindingOut(StrictModel):
 
 
 class StepVerdictOut(StrictModel):
-    version: Literal["0.2"]
+    version: Literal["0.3"]
     status: Literal["pass", "fail", "unknown"]
     detail: str = Field(default="", max_length=1000)
     findings: list[StepFindingOut] = Field(max_length=3)

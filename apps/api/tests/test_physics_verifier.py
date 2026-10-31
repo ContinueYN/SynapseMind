@@ -40,6 +40,11 @@ def _detail(data: object) -> str:
     return verdict.detail
 
 
+def _findings(data: object):
+    verdict = PLUGIN.verify(StudentStep(node_id="n2", text="", data=data))  # type: ignore[arg-type]
+    return verdict.findings
+
+
 FORCE_EQUATION = {
     "equation": "F*cos(theta) - mu*N = m*a",
     "units": {
@@ -96,6 +101,12 @@ def test_a_dimensionally_wrong_equation_fails_with_both_sides() -> None:
     # F is a force; q/E is C^2/N, not a force.
     assert "kg·m/s^2" in detail
 
+    finding = _findings(data)[0]
+    assert finding.kind == "quantity"
+    assert "左侧" in finding.left
+    assert "右侧" in finding.right
+    assert "量纲不一致" in finding.summary
+
 
 def test_adding_incompatible_units_fails_instead_of_becoming_unknown() -> None:
     data = {"equation": "F + m = 0", "units": {"F": "N", "m": "kg"}}
@@ -104,6 +115,11 @@ def test_adding_incompatible_units_fails_instead_of_becoming_unknown() -> None:
 
     assert "量纲不一致" in detail
     assert "加法" in detail
+
+    finding = _findings(data)[0]
+    assert finding.kind == "quantity"
+    assert "加法左侧" in finding.left
+    assert "加法右侧" in finding.right
 
 
 def test_a_dimensionally_correct_electric_equation_passes() -> None:
@@ -127,6 +143,11 @@ def test_a_numeric_contradiction_fails_even_when_units_match() -> None:
     assert "3" in detail and "4" in detail
     assert "超过容差" in detail
 
+    finding = _findings(data)[0]
+    assert finding.kind == "quantity"
+    assert "左侧" in finding.left
+    assert "右侧" in finding.right
+
 
 def test_an_equation_can_declare_the_result_unit_and_expected_value() -> None:
     data = dict(FORCE_EQUATION)
@@ -145,6 +166,10 @@ def test_an_equation_result_unit_mismatch_fails() -> None:
 
     assert _verdict(data) == "fail"
     assert "声明结果单位" in _detail(data)
+    finding = _findings(data)[0]
+    assert finding.kind == "quantity"
+    assert "声明结果单位" in finding.left
+    assert "方程右侧" in finding.right
 
 
 def test_dimension_only_inspection_is_a_pass_with_an_explicit_gap() -> None:
@@ -228,6 +253,11 @@ def test_an_expected_result_with_the_wrong_value_fails() -> None:
     assert "结果值不一致" in detail
     assert "超过容差" in detail
 
+    finding = _findings(data)[0]
+    assert finding.kind == "quantity"
+    assert "声明结果" in finding.left
+    assert "表达式" in finding.right
+
 
 def test_an_expected_result_with_the_wrong_unit_fails() -> None:
     data = {
@@ -240,6 +270,10 @@ def test_an_expected_result_with_the_wrong_unit_fails() -> None:
 
     assert _verdict(data) == "fail"
     assert "结果单位不一致" in _detail(data)
+    finding = _findings(data)[0]
+    assert finding.kind == "quantity"
+    assert "声明结果单位" in finding.left
+    assert "表达式" in finding.right
 
 
 def test_an_expected_result_without_values_is_unknown_not_passed() -> None:
@@ -282,6 +316,11 @@ def test_an_uncertainty_range_fails_when_the_reference_is_outside() -> None:
     assert "不在声明范围" in detail
     assert "高于上界" in detail
     assert "5 ± 0.1 m/s" in detail
+
+    finding = _findings(data)[0]
+    assert finding.kind == "quantity"
+    assert "声明结果" in finding.left
+    assert "高于上界" in finding.summary
 
 
 def test_an_interval_is_converted_to_si_before_comparison() -> None:
@@ -371,6 +410,10 @@ def test_an_expression_must_match_its_declared_unit() -> None:
 
     assert _verdict(data) == "fail"
     assert "表达式量纲不一致" in _detail(data)
+    finding = _findings(data)[0]
+    assert finding.kind == "quantity"
+    assert "表达式 v" in finding.left
+    assert "声明单位" in finding.right
 
 
 def test_an_expression_without_a_unit_is_unknown() -> None:

@@ -34,6 +34,7 @@ from fractions import Fraction
 from typing import Final, cast
 
 from synapse.application.subject import StudentStep, Verdict
+from synapse.domain.diagnosis.work import WorkFinding
 
 # Seven SI base dimensions, in this order: kg, m, s, A, K, mol, cd.
 Dimension = tuple[
@@ -90,6 +91,11 @@ class _UnitError(ValueError):
 
 class _DimensionMismatch(ValueError):
     """The input is readable, but its dimensions disagree (a concrete fail)."""
+
+    def __init__(self, detail: str, *, left: str, right: str) -> None:
+        super().__init__(detail)
+        self.left = left
+        self.right = right
 
 
 @dataclass(frozen=True, slots=True)
@@ -431,13 +437,17 @@ def _dimension_node(node: ast.AST, units: Mapping[str, Unit]) -> Dimension:
         if isinstance(node.op, ast.Add):
             if left != right:
                 raise _DimensionMismatch(
-                    f"加法两侧量纲不一致：{render_dimension(left)} 与 {render_dimension(right)}"
+                    f"加法两侧量纲不一致：{render_dimension(left)} 与 {render_dimension(right)}",
+                    left=f"加法左侧 {render_dimension(left)}",
+                    right=f"加法右侧 {render_dimension(right)}",
                 )
             return left
         if isinstance(node.op, ast.Sub):
             if left != right:
                 raise _DimensionMismatch(
-                    f"减法两侧量纲不一致：{render_dimension(left)} 与 {render_dimension(right)}"
+                    f"减法两侧量纲不一致：{render_dimension(left)} 与 {render_dimension(right)}",
+                    left=f"减法左侧 {render_dimension(left)}",
+                    right=f"减法右侧 {render_dimension(right)}",
                 )
             return left
         if isinstance(node.op, ast.Mult):
@@ -456,7 +466,9 @@ def _dimension_node(node: ast.AST, units: Mapping[str, Unit]) -> Dimension:
         if name in _DIMENSIONLESS_FUNCTIONS:
             if argument != _ZERO:
                 raise _DimensionMismatch(
-                    f"{name}() 的参数量纲必须是无量纲，实际是 {render_dimension(argument)}"
+                    f"{name}() 的参数量纲必须是无量纲，实际是 {render_dimension(argument)}",
+                    left=f"{name}() 参数 {render_dimension(argument)}",
+                    right="无量纲",
                 )
             return _ZERO
         if name == "sqrt":
@@ -692,6 +704,33 @@ def _tolerance_text(tolerance: _Tolerance) -> str:
     return f"绝对 {tolerance.absolute:g} / 相对 {tolerance.relative:g}"
 
 
+def _clip(value: str, limit: int) -> str:
+    return value if len(value) <= limit else f"{value[: limit - 1]}…"
+
+
+def _fail(*, left: str, right: str, detail: str) -> Verdict:
+    """Build a fail verdict with the structured evidence v0.3 requires.
+
+    Physics reuses the generic ``quantity`` kind: the finding says the two
+    items disagree, while ``detail`` says whether the disagreement is
+    dimensional, numeric, or between a declared result and the expression.
+    """
+
+    return Verdict(
+        status="fail",
+        detail=detail,
+        findings=(
+            WorkFinding(
+                kind="quantity",
+                left=_clip(left, 500),
+                right=_clip(right, 500),
+                detail=detail,
+                summary=_clip(detail, 300),
+            ),
+        ),
+    )
+
+
 def _parse_expected(raw: object) -> _Expected:
     expected = _as_mapping(raw, "expected")
     unit_text = expected.get("unit")
@@ -811,8 +850,12 @@ def _check_expected(
     if expected is None:
         return None
     if expected.unit.dimension != reference_dimension:
-        return Verdict(
-            status="fail",
+        return _fail(
+            left=(
+                f"声明结果单位 {expected.unit_text!r}"
+                f"（{render_dimension(expected.unit.dimension)}）"
+            ),
+            right=f"{reference_label}（{render_dimension(reference_dimension)}）",
             detail=(
                 f"结果单位不一致：声明 {expected.unit_text!r} 的量纲是 "
                 f"{render_dimension(expected.unit.dimension)}，"
@@ -831,8 +874,9 @@ def _check_expected(
     lower, upper, exact = _expected_bounds(expected)
     if exact:
         if not _numbers_agree(lower, reference_value, tolerance):
-            return Verdict(
-                status="fail",
+            return _fail(
+                left=f"声明结果 {_expected_display(expected)}",
+                right=f"{reference_label} {_fmt(reference_value)}（SI）",
                 detail=(
                     f"结果值不一致：声明 {_expected_display(expected)} 与{reference_label} "
                     f"{_fmt(reference_value)}（SI）相差 "
@@ -850,8 +894,9 @@ def _check_expected(
     else:
         side = "高于上界"
         distance = reference_value - upper
-    return Verdict(
-        status="fail",
+    return _fail(
+        left=f"声明结果 {_expected_display(expected)}",
+        right=f"{reference_label} {_fmt(reference_value)}（SI）",
         detail=(
             f"结果值不在声明范围内：声明 {_expected_display(expected)} 与{reference_label} "
             f"{_fmt(reference_value)}（SI）相比{side}，差 {_fmt(distance)}，超过容差 "
@@ -910,8 +955,12 @@ def _verify_step(step: StudentStep) -> Verdict:
                 raise _UnitError("unit 必须是单位字符串")
             declared = parse_unit(declared_unit_raw)
             if declared.dimension != right_dimension:
-                return Verdict(
-                    status="fail",
+                return _fail(
+                    left=(
+                        f"声明结果单位 {declared_unit_raw!r}"
+                        f"（{render_dimension(declared.dimension)}）"
+                    ),
+                    right=f"方程右侧（{render_dimension(right_dimension)}）",
                     detail=(
                         f"声明结果单位 {declared_unit_raw!r} 的量纲是 "
                         f"{render_dimension(declared.dimension)}，但方程右侧的量纲是 "
@@ -921,8 +970,9 @@ def _verify_step(step: StudentStep) -> Verdict:
             declared_note = f"；声明结果单位 {declared_unit_raw!r} 与方程右侧一致"
 
         if left_dimension != right_dimension:
-            return Verdict(
-                status="fail",
+            return _fail(
+                left=f"左侧 {left_text}（{render_dimension(left_dimension)}）",
+                right=f"右侧 {right_text}（{render_dimension(right_dimension)}）",
                 detail=(
                     f"方程两侧量纲不一致：左侧是 {render_dimension(left_dimension)}，"
                     f"右侧是 {render_dimension(right_dimension)}；"
@@ -960,8 +1010,9 @@ def _verify_step(step: StudentStep) -> Verdict:
                 ),
             )
         if not _numbers_agree(left_value, right_value, tolerance):
-            return Verdict(
-                status="fail",
+            return _fail(
+                left=f"左侧 {_fmt(left_value)}（{render_dimension(left_dimension)}）",
+                right=f"右侧 {_fmt(right_value)}（{render_dimension(right_dimension)}）",
                 detail=(
                     f"数值回代不一致：左侧 {_fmt(left_value)}、右侧 {_fmt(right_value)}"
                     f"（{render_dimension(left_dimension)}），相差 "
@@ -987,8 +1038,9 @@ def _verify_step(step: StudentStep) -> Verdict:
         raise _UnitError("没有 equation 时，expression 必须配一个 unit 字符串")
     declared = parse_unit(declared_unit_raw)
     if declared.dimension != expression_dimension:
-        return Verdict(
-            status="fail",
+        return _fail(
+            left=f"表达式 {expression_raw}（{render_dimension(expression_dimension)}）",
+            right=f"声明单位 {declared_unit_raw!r}（{render_dimension(declared.dimension)}）",
             detail=(
                 f"表达式量纲不一致：表达式是 {render_dimension(expression_dimension)}，"
                 f"声明单位 {declared_unit_raw!r} 是 {render_dimension(declared.dimension)}"
@@ -1045,7 +1097,7 @@ def verify_step(step: StudentStep) -> Verdict:
     try:
         return _verify_step(step)
     except _DimensionMismatch as exc:
-        return Verdict(status="fail", detail=str(exc))
+        return _fail(left=exc.left, right=exc.right, detail=str(exc))
     except _UnitError as exc:
         return Verdict(status="unknown", detail=f"物理结构化步骤无法验证：{exc}")
     except (TypeError, KeyError, ArithmeticError, RecursionError) as exc:

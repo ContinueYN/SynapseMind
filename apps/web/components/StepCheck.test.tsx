@@ -17,7 +17,7 @@ function verdict(
   detail: string,
   findings: NonNullable<StepVerdict["findings"]> = [],
 ): StepVerdict {
-  return { version: "0.2", status, detail, findings };
+  return { version: "0.3", status, detail, findings };
 }
 
 async function openAndType(text: string) {

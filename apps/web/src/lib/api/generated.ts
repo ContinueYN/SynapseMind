@@ -377,14 +377,14 @@ export interface components {
         };
         /**
          * StepFindingOut
-         * @description One broken equals sign, in a shape the client can lay out (v0.2).
+         * @description One failed comparison, in a shape the client can lay out (v0.3).
          */
         StepFindingOut: {
             /**
              * Kind
              * @enum {string}
              */
-            kind: "identity" | "limit";
+            kind: "identity" | "limit" | "quantity";
             /** Left */
             left: string;
             /** Right */
@@ -424,7 +424,7 @@ export interface components {
              * Version
              * @constant
              */
-            version: "0.2";
+            version: "0.3";
             /**
              * Status
              * @enum {string}

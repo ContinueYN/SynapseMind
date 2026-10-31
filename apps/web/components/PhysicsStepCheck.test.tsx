@@ -12,8 +12,12 @@ vi.mock("@/src/lib/api/client", () => ({
 
 const verify = vi.mocked(verifyStep);
 
-function verdict(status: StepVerdict["status"], detail: string): StepVerdict {
-  return { version: "0.2", status, detail, findings: [] };
+function verdict(
+  status: StepVerdict["status"],
+  detail: string,
+  findings: NonNullable<StepVerdict["findings"]> = [],
+): StepVerdict {
+  return { version: "0.3", status, detail, findings };
 }
 
 async function open() {
@@ -178,6 +182,30 @@ describe("PhysicsStepCheck", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("结果单位");
     expect(verify).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "检查这一步" })).toBeEnabled();
+  });
+
+  it("renders a physics failure as a comparison, not an equality", async () => {
+    verify.mockResolvedValue(
+      verdict("fail", "数值回代不一致：左侧 3 N、右侧 4 N", [
+        {
+          kind: "quantity",
+          left: "左侧 3 N",
+          right: "右侧 4 N",
+          summary: "数值回代不一致：左侧 3 N、右侧 4 N",
+          counterexample: "",
+        },
+      ]),
+    );
+    const user = await open();
+
+    await user.type(screen.getByLabelText("这一步"), "m*a");
+    await user.type(screen.getByLabelText("结果单位"), "N");
+    await user.click(screen.getByRole("button", { name: "检查这一步" }));
+
+    expect(await screen.findByText("这一步有矛盾")).toBeInTheDocument();
+    expect(screen.getByText("左侧 3 N 对照 右侧 4 N")).toBeInTheDocument();
+    expect(screen.queryByText("左侧 3 N = 右侧 4 N")).not.toBeInTheDocument();
+    expect(screen.getByText("数值回代不一致：左侧 3 N、右侧 4 N")).toBeInTheDocument();
   });
 
   it("keeps an unknown verdict away from a correctness claim", async () => {

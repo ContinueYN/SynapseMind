@@ -15,8 +15,9 @@ interface StepVerdictViewProps {
  * One verification result, shared by the math and physics step checks.
  *
  * The status wording is supplied by each subject: math can say "这个等号不
- * 成立", physics must not. ``findings`` is math-only today, so physics falls
- * back to the server's free-text ``detail``.
+ * 成立", physics must not. ``findings`` now comes from both subjects: math
+ * uses ``identity``/``limit`` and renders an equality; physics uses
+ * ``quantity`` and renders the two compared items with 对照 rather than "=".
  */
 export function StepVerdictView({ verdict, copy }: StepVerdictViewProps) {
   const text = copy[verdict.status];
@@ -34,14 +35,20 @@ export function StepVerdictView({ verdict, copy }: StepVerdictViewProps) {
       </div>
       {verdict.findings && verdict.findings.length > 0 ? (
         <ul className="sm-stepcheck-findings">
-          {verdict.findings.map((finding, index) => (
-            <li key={`${finding.kind}-${finding.left}-${finding.right}-${index}`}>
-              <code>
-                {finding.left} = {finding.right}
-              </code>
-              <span>{finding.summary}</span>
-            </li>
-          ))}
+          {verdict.findings.map((finding, index) => {
+            const isEquation =
+              finding.kind === "identity" || finding.kind === "limit";
+            return (
+              <li key={`${finding.kind}-${finding.left}-${finding.right}-${index}`}>
+                <code>
+                  {isEquation
+                    ? `${finding.left} = ${finding.right}`
+                    : `${finding.left} 对照 ${finding.right}`}
+                </code>
+                <span>{finding.summary}</span>
+              </li>
+            );
+          })}
         </ul>
       ) : (
         <p>{verdict.detail}</p>

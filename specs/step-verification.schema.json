@@ -2,12 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://synapsemind.dev/schemas/step-verification.schema.json",
   "title": "StepVerdict",
-  "description": "单步验证结果（M2.5 S5 ⑥，v0.2）。POST /api/v1/sessions/{id}/steps 的响应；只验证提交的这一步，不推进对话、不生成卡点卡、不返回答案。pass 只表示实际跑过的检查没有发现不一致，不是证明；unknown 表示未启用、读不懂或没有可判的断言，不能写成“已核对”。v0.2 起 fail 同时返回结构化 findings（左边/右边/反例摘要），detail 保留为一句可读说明；unknown/pass 的 findings 必须为空。",
+  "description": "单步验证结果（M2.5 S5 ⑥，v0.3）。POST /api/v1/sessions/{id}/steps 的响应；只验证提交的这一步，不推进对话、不生成卡点卡、不返回答案。pass 只表示实际跑过的检查没有发现不一致，不是证明；unknown 表示未启用、读不懂或没有可判的断言，不能写成“已核对”。v0.2 起 fail 同时返回结构化 findings（左边/右边/反例摘要），detail 保留为一句可读说明；v0.3 起 kind 增加 quantity，物理的量纲/数值/声明结果矛盾同样必须落进 findings；unknown/pass 的 findings 必须为空。",
   "type": "object",
   "additionalProperties": false,
   "required": ["version", "status", "detail", "findings"],
   "properties": {
-    "version": {"type": "string", "const": "0.2"},
+    "version": {"type": "string", "const": "0.3"},
     "status": {
       "type": "string",
       "enum": ["pass", "fail", "unknown"],
@@ -22,7 +22,7 @@
       "type": "array",
       "maxItems": 3,
       "default": [],
-      "description": "fail 时的结构化反例，按发现顺序最多 3 条；unknown/pass 必须为空数组。前端可用它分行显示公式与反例，不必解析 detail。",
+      "description": "fail 时的结构化证据，按发现顺序最多 3 条；unknown/pass 必须为空数组。前端可用它分行显示公式、量纲或数值差，不必解析 detail。",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -30,8 +30,8 @@
         "properties": {
           "kind": {
             "type": "string",
-            "enum": ["identity", "limit"],
-            "description": "identity = 两边作为函数不等价；limit = 链里带 lim，两边的极限不相等。"
+            "enum": ["identity", "limit", "quantity"],
+            "description": "identity = 两边作为函数不等价；limit = 链里带 lim，两边的极限不相等；quantity = 物理的两侧/两项在量纲或数值上不一致（含声明结果）。"
           },
           "left": {"type": "string", "minLength": 1, "maxLength": 500},
           "right": {"type": "string", "minLength": 1, "maxLength": 500},
@@ -39,12 +39,12 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 300,
-            "description": "具体反例摘要，例如“x=0.1 时左边 1.1、右边 0.2”或“x→0 时左边极限 0.5、右边 2”。"
+            "description": "具体证据摘要，例如“x=0.1 时左边 1.1、右边 0.2”“左侧量纲 kg·m/s^2、右侧量纲 C^2/N”“声明 7 m/s，表达式求值 6.32456 m/s”。"
           },
           "counterexample": {
             "type": "string",
             "maxLength": 300,
-            "description": "可选的代入值/极限点原文；summary 已包含时可为空。"
+            "description": "可选的代入值/极限点原文；summary 已包含时可为空。物理 finding 通常留空。"
           }
         }
       }

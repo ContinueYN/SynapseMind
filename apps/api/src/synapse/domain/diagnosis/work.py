@@ -17,12 +17,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-FindingKind = Literal["identity", "limit"]
+FindingKind = Literal["identity", "limit", "quantity"]
 
 
 @dataclass(frozen=True, slots=True)
 class WorkFinding:
-    """One broken equals sign in the student's own process."""
+    """One concrete inconsistency in the student's own work.
+
+    ``identity``/``limit`` are the math equality-chain kinds. ``quantity`` is
+    the physics PARTIAL kind: the two compared sides/quantities disagree in
+    dimension or numeric value, or the declared result contradicts the
+    expression. ``quantity`` does not imply the same kind of proof as a math
+    identity; the summary must say what actually disagreed.
+    """
 
     kind: FindingKind
     left: str

@@ -66,7 +66,7 @@ function send(res, status, body) {
 }
 
 function verdict(status, detail, findings = []) {
-  return { version: "0.2", status, detail, findings };
+  return { version: "0.3", status, detail, findings };
 }
 
 function mathVerdict(step) {
@@ -126,6 +126,16 @@ function physicsVerdict(body) {
       body: verdict(
         "fail",
         "结果值不一致：声明 7（m/s）与表达式 6.32456（SI）相差 0.675445，超过容差 (绝对 1e-09 / 相对 0.01)",
+        [
+          {
+            kind: "quantity",
+            left: "声明结果 7（m/s）",
+            right: "表达式 6.32456（SI）",
+            summary:
+              "结果值不一致：声明 7（m/s）与表达式 6.32456（SI）相差 0.675445，超过容差 (绝对 1e-09 / 相对 0.01)",
+            counterexample: "",
+          },
+        ],
       ),
     };
   }

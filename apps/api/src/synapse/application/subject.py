@@ -127,7 +127,7 @@ class Verdict:
     detail: str = ""
     #: Structured evidence for a ``fail``; empty for ``pass``/``unknown``.
     #: Kept alongside ``detail`` so a client can lay out formula and
-    #: counterexample without parsing prose (contract v0.2).
+    #: counterexample without parsing prose (contract v0.3).
     findings: tuple[WorkFinding, ...] = ()
 
 

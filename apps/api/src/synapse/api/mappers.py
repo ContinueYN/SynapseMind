@@ -114,7 +114,7 @@ def step_verdict_out(verdict: Verdict) -> StepVerdictOut:
     """
 
     return StepVerdictOut(
-        version="0.2",
+        version="0.3",
         status=verdict.status,
         detail=_clip(verdict.detail, 1000),
         findings=[

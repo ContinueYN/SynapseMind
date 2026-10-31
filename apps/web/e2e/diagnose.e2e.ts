@@ -92,6 +92,8 @@ test("physics step check sends declared result/tolerance and survives 390px", as
   await page.getByRole("button", { name: "检查这一步" }).click();
   await expect(result).toHaveAttribute("data-status", "fail");
   await expect(result).toContainText("结果值不一致");
+  await expect(result.locator("code")).toContainText("对照");
+  await expect(result.locator("code")).not.toContainText("=");
 
   const mobile = await page.evaluate(() => ({
     innerWidth: window.innerWidth,
