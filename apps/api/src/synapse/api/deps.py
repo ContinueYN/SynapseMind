@@ -30,6 +30,7 @@ from synapse.application.composer import (
 )
 from synapse.application.factory import SessionFactory
 from synapse.application.graph import GraphGenerator
+from synapse.application.limits import StepRateLimiter
 from synapse.application.llm import LLMClient
 from synapse.application.planner import HypothesisTargetedPlanner
 from synapse.application.ports import AnswerStore, ProblemRepository, SessionRepository
@@ -50,6 +51,7 @@ from synapse.infrastructure.llm.client import OpenAICompatibleClient
 from synapse.infrastructure.llm.composer import LLMProbeComposer
 from synapse.infrastructure.llm.graph import LLMGraphGenerator
 from synapse.infrastructure.llm.settings import LLMSettings
+from synapse.infrastructure.rate_limit import TokenBucketStepLimiter
 from synapse.infrastructure.subjects.chinese import ChinesePlugin
 from synapse.infrastructure.subjects.math import MathPlugin
 from synapse.infrastructure.subjects.physics import PhysicsPlugin
@@ -75,6 +77,7 @@ def build_container(
     llm_client: LLMClient | None = None,
     auditor: CallAuditor | None = None,
     generator: GraphGenerator | None = None,
+    step_limiter: StepRateLimiter | None = None,
 ) -> Container:
     resolved = settings or LLMSettings.from_env()
     flags = features or FeatureFlags.from_env()
@@ -129,6 +132,7 @@ def build_container(
     # Same guard, same renderer, no model call: the first question of a
     # generated problem does not wait for a cosmetic rewrite (chapter 12 §12.8).
     opening = LeakSafeProbeComposer(inner=GraphProbeComposer(), guards=guards)
+    limiter = step_limiter if step_limiter is not None else TokenBucketStepLimiter()
     service = SessionService(
         sessions=sessions,
         problems=problems,
@@ -139,6 +143,7 @@ def build_container(
         equality_checker=equality_checker,
         subjects=problems.plugins,
         auditor=sink,
+        step_limiter=limiter,
     )
     return Container(
         sessions=sessions,

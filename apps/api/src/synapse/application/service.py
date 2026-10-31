@@ -20,6 +20,7 @@ from synapse.application.commitment import Capabilities, capabilities_for
 from synapse.application.composer import ProbeComposer, ProbePrompt
 from synapse.application.factory import SessionFactory
 from synapse.application.hint_builder import build_structure_hint
+from synapse.application.limits import StepRateLimited, StepRateLimiter
 from synapse.application.planner import ProbePlanner
 from synapse.application.ports import (
     ProblemRepository,
@@ -72,6 +73,7 @@ class SessionService:
         equality_checker: EqualityChecker | None = None,
         subjects: SubjectRegistry | None = None,
         auditor: CallAuditor | None = None,
+        step_limiter: StepRateLimiter | None = None,
     ) -> None:
         self._sessions = sessions
         self._problems = problems
@@ -94,6 +96,9 @@ class SessionService:
         # state: the endpoint stays read-only, and the student's text is not
         # copied into the audit (see ``_audit_step_verification``).
         self._auditor = auditor
+        # Optional process-local throttle. The composition root owns the
+        # production default; ``None`` keeps direct callers unthrottled.
+        self._step_limiter = step_limiter
 
     def start(self, command: StartSessionCommand) -> SessionView:
         # Check the student's own equals signs before alignment: a provable
@@ -226,10 +231,17 @@ class SessionService:
         ``pass``/``fail``/``unknown``, but it must never become a state
         transition or a card. The student can ask about a step at any point;
         only the plugin that owns the problem's subject is consulted.
+
+        A per-session limiter, when wired, is checked before the plugin runs:
+        a 429 is not a verdict and is not written to the step audit.
         """
 
         session = self._get(session_id)
         problem = self._problem(session.problem_id)
+        if self._step_limiter is not None:
+            retry_after = self._step_limiter.consume(session.session_id)
+            if retry_after is not None:
+                raise StepRateLimited(retry_after)
         started = perf_counter()
         try:
             verdict = self._verify_step(session, problem.subject, command)

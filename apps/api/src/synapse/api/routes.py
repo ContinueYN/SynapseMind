@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from math import ceil
+
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from synapse.api.deps import get_service
@@ -20,6 +22,7 @@ from synapse.application.commands import (
     VerifyStepCommand,
 )
 from synapse.application.factory import ProblemNotSupported, UnsupportedMode
+from synapse.application.limits import StepRateLimited
 from synapse.application.service import InvalidAnswer, SessionNotFound, SessionService
 from synapse.domain.dialogue.table import IllegalTransition
 
@@ -94,6 +97,13 @@ def verify_step(
         )
     except SessionNotFound as exc:
         raise HTTPException(status_code=404, detail="session not found") from exc
+    except StepRateLimited as exc:
+        wait_seconds = max(1, ceil(exc.retry_after))
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"单步检查太频繁，请约 {wait_seconds} 秒后再试。",
+            headers={"Retry-After": str(wait_seconds)},
+        ) from exc
     return step_verdict_out(verdict)
 
 
