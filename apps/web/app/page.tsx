@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useState } from "react";
 
 import { CluePreview } from "@/components/CluePreview";
@@ -258,6 +259,12 @@ export default function HomePage() {
           <p className="sm-fine">
             这些文献只解释设计形状：怎么降低负荷、怎么给反馈、为什么用「强化」作类比。
             我们没有做对照实验，也没有延迟正确率；不把类比写成神经测量，也不承诺提分。
+          </p>
+
+          <p className="sm-ground-more">
+            <Link href="/science">五条机制与逐条引用 →</Link>
+            <span aria-hidden="true"> · </span>
+            <Link href="/cases">四段演示记录 →</Link>
           </p>
         </Plane>
       </Reveal>

@@ -235,6 +235,10 @@ export default function AboutPage() {
           </p>
 
           <p className="sm-about-back">
+            <Link href="/science">五条机制的逐条依据 →</Link>
+            <span aria-hidden="true"> · </span>
+            <Link href="/cases">四段演示记录 →</Link>
+            <span aria-hidden="true"> · </span>
             <Link href="/">← 回到交题</Link>
           </p>
         </Plane>
