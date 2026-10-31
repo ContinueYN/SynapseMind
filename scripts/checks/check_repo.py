@@ -35,6 +35,7 @@ PUBLIC_REQUIRED = [
     "specs/structure-hint.schema.json",
     "specs/step-verification.schema.json",
     "specs/review-queue.schema.json",
+    "specs/knowledge-search.schema.json",
 ]
 
 REQUIRED = (
@@ -50,6 +51,7 @@ REQUIRED = (
         "specs/structure-hint.schema.json",
         "specs/step-verification.schema.json",
         "specs/review-queue.schema.json",
+        "specs/knowledge-search.schema.json",
     ]
 )
 

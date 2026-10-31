@@ -1,6 +1,7 @@
 import type {
   CreateSessionInput,
   Diagnosis,
+  KnowledgeSearch,
   ReviewListing,
   SessionResponse,
   StepInput,
@@ -120,4 +121,18 @@ export function disagreeWithCard(sessionId: string): Promise<Diagnosis> {
 /** Read the local review queue; the teacher page never writes back. */
 export function listReviewItems(): Promise<ReviewListing> {
   return request<ReviewListing>("/api/v1/review/items");
+}
+
+/**
+ * Look up sourced knowledge cards for a concept label. Read-only: it never
+ * advances the session. The query must be a label, not the student's prose.
+ */
+export function searchKnowledge(
+  query: string,
+  subject?: "math" | "physics" | "chinese",
+  limit = 3,
+): Promise<KnowledgeSearch> {
+  const params = new URLSearchParams({ q: query, limit: String(limit) });
+  if (subject) params.set("subject", subject);
+  return request<KnowledgeSearch>(`/api/v1/knowledge/search?${params.toString()}`);
 }

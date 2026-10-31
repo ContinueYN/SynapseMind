@@ -36,6 +36,12 @@ vi.mock("@/src/lib/api/client", () => {
     getSession: vi.fn(),
     submitTurn: vi.fn(),
     exitSession: vi.fn(),
+    searchKnowledge: vi.fn().mockResolvedValue({
+      version: "0.1",
+      enabled: false,
+      query: "",
+      hits: [],
+    }),
     isSessionConflict: (error: unknown) =>
       error instanceof ApiError && error.status === 409,
   };

@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { Dendrite, type DendriteStop } from "@/components/Dendrite";
 import { DiagnosisCardView } from "@/components/DiagnosisCardView";
+import { KnowledgePanel } from "@/components/KnowledgePanel";
 import { Plane } from "@/components/Plane";
 import { PhysicsStepCheck } from "@/components/PhysicsStepCheck";
 import { ProblemBrief } from "@/components/ProblemBrief";
@@ -290,7 +291,13 @@ export default function DiagnosePage() {
 
           <div ref={probeRef}>
             {session.diagnosis ? (
-              <DiagnosisCardView card={session.diagnosis.card} sessionId={sessionId} />
+              <>
+                <DiagnosisCardView card={session.diagnosis.card} sessionId={sessionId} />
+                <KnowledgePanel
+                  query={session.diagnosis.card.label}
+                  subject={session.subject}
+                />
+              </>
             ) : hint ? (
               <StructureHintView hint={hint} sessionId={sessionId} />
             ) : session.prompt ? (

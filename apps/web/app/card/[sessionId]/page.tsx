@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { DiagnosisCardView } from "@/components/DiagnosisCardView";
+import { KnowledgePanel } from "@/components/KnowledgePanel";
 import { Plane } from "@/components/Plane";
 import { ProblemBrief } from "@/components/ProblemBrief";
 import { getSession } from "@/src/lib/api/client";
@@ -104,6 +105,10 @@ export default function CardPage() {
         card={session.diagnosis.card}
         sessionId={sessionId}
         showCardLink={false}
+      />
+      <KnowledgePanel
+        query={session.diagnosis.card.label}
+        subject={session.subject}
       />
     </div>
   );

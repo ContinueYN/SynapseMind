@@ -25,6 +25,9 @@ dev = [
   "types-jsonschema>=4.23",
   "sympy>=1.13,<2",
 ]
+# Optional local embeddings for RAG (`SYNAPSE_RAG=on`). Kept out of `dev` so CI
+# and the rule baseline never download an ONNX model.
+rag = ["fastembed>=0.9,<1"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/synapse"]
@@ -53,6 +56,10 @@ files = ["src"]
 # behind float-typed helpers, so the untyped surface is one module.
 [[tool.mypy.overrides]]
 module = ["sympy", "sympy.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["fastembed", "fastembed.*"]
 ignore_missing_imports = true
 
 [tool.importlinter]

@@ -45,6 +45,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/knowledge/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search Knowledge
+         * @description Find sourced knowledge cards for a concept label.
+         *
+         *     The query is a label, not the student's answer or work: callers must not
+         *     send prose from the attempt. Retrieval is read-only and never advances a
+         *     session or changes a diagnosis.
+         */
+        get: operations["search_knowledge_api_v1_knowledge_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sessions": {
         parameters: {
             query?: never;
@@ -328,6 +352,44 @@ export interface components {
              */
             is_unknown: boolean;
         };
+        /** KnowledgeHitOut */
+        KnowledgeHitOut: {
+            /** Card Id */
+            card_id: string;
+            /** Title */
+            title: string;
+            /** Excerpt */
+            excerpt: string;
+            source: components["schemas"]["KnowledgeSourceOut"];
+            /** Score */
+            score: number;
+        };
+        /**
+         * KnowledgeSearchOut
+         * @description Read-only knowledge lookup; ``enabled=false`` hides the panel client-side.
+         */
+        KnowledgeSearchOut: {
+            /**
+             * Version
+             * @constant
+             */
+            version: "0.1";
+            /** Enabled */
+            enabled: boolean;
+            /** Query */
+            query: string;
+            /** Hits */
+            hits?: components["schemas"]["KnowledgeHitOut"][];
+        };
+        /** KnowledgeSourceOut */
+        KnowledgeSourceOut: {
+            /** Title */
+            title: string;
+            /** Url */
+            url: string;
+            /** License */
+            license: string;
+        };
         /** NextActionOut */
         NextActionOut: {
             /**
@@ -598,6 +660,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReviewItemsOut"];
+                };
+            };
+        };
+    };
+    search_knowledge_api_v1_knowledge_search_get: {
+        parameters: {
+            query: {
+                q: string;
+                subject?: ("math" | "physics" | "chinese") | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeSearchOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

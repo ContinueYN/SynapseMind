@@ -10,6 +10,7 @@
 | [`structure-hint.schema.json`](structure-hint.schema.json) | 结构提示输出（NONE 档学科） | API、Web、评测 |
 | [`step-verification.schema.json`](step-verification.schema.json) | 单步验证输出（`POST /sessions/{id}/steps`） | API、Web |
 | [`review-queue.schema.json`](review-queue.schema.json) | 异议复核只读列表（`GET /review/items`） | API、Web |
+| [`knowledge-search.schema.json`](knowledge-search.schema.json) | 只读知识卡检索（`GET /knowledge/search`） | API、Web |
 | [`dialogue-state.md`](dialogue-state.md) | 追问状态机与事件 | API、AI 编排、评测 |
 
 ## 约定
@@ -31,6 +32,8 @@
 `structure-hint.schema.json` 是 NONE 档学科（语文/英语/历史）的唯一输出契约（M2.5 S7，v0.2 起为 S8）。它不是卡点卡的简化版，而是**另一种承诺**：`steps[].status`（`covered`/`partial`/`missing`）只描述“解法图里的这一步有没有被写到、是否只写到一部分”，由存在性对齐（线索词 + 分句重合）得出，不代表写得对错；`focus_node_id` 是“下一步先看哪里”（第一个没有完全写到的节点），不是卡点；`disclaimer` 必须写明该学科没有可自动验证的真值。NONE 档不进入 `PROBE`，也不生成卡点卡——`application/commitment.py` 是这条承诺的唯一开关。v0.2 只新增 `partial` 与 `version` 变化；`partial` 不是“写错”，也不改变卡点卡路径。
 
 `review-queue.schema.json` 是教师复核页的只读列表契约（v0.1）。它只暴露卡片的 `layer`/`label`/`node_id`/`one_line`/`confidence` 与来源会话、时间，**不含学生原文**；`GET /api/v1/review/items` 只读，不写回复核库，也不推进任何会话。人工判断（准确 / 说得通但不对 / 空泛）由复核者在浏览器里标记并导出 CSV，不进入服务端契约。
+
+`knowledge-search.schema.json` 是本地知识卡检索的只读契约（v0.1）。`GET /api/v1/knowledge/search` 只接受概念标签（`q`）和学科过滤，**不接受学生作答原文**；返回 `card_id`、标题、摘录、出处（title/url/license）与余弦分数。`enabled=false` 表示 `SYNAPSE_RAG` 未开启，此时 `hits` 为空，客户端隐藏面板。检索不推进会话、不修改卡点卡、不写库；没有模型时 API 返回 503 并带安装提示，而不是静默返回空结果。
 
 `step-verification.schema.json` 是「交一步」的响应契约（M2.5 S5 ⑥，v0.2）。`POST /api/v1/sessions/{id}/steps` 只把这一条步骤交给会话所属学科的 `SubjectPlugin.verify()`，**不推进状态、不生成卡点卡、不返回答案**。`fail` 必须带学生自己写的式子或两边数值（例如 `x→0 时左边极限 0.5、右边 2`）；v0.2 起同时给出结构化 `findings`（`kind`/`left`/`right`/`summary`，必填、最多 3 条），`detail` 仍保留为一句可读说明，前端不必解析它来拆公式；schema 的 `if/then` 约束 `fail` 至少 1 条、`unknown`/`pass` 为空。`unknown` 表示开关未开、式子读不懂、没发现可机器证明的错误，或该学科没有可判的真值——`unknown` 不是“这步对了”，它的 `findings` 必须为空。数学的等式链校验由 `SYNAPSE_EQUALITY_CHECK` 控制，默认 `off`。
 

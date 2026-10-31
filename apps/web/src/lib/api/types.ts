@@ -22,6 +22,8 @@ export type StepInput = Schemas["StepRequest"];
 export type StepVerdict = Schemas["StepVerdictOut"];
 export type ReviewItem = Schemas["ReviewItemOut"];
 export type ReviewListing = Schemas["ReviewItemsOut"];
+export type KnowledgeHit = Schemas["KnowledgeHitOut"];
+export type KnowledgeSearch = Schemas["KnowledgeSearchOut"];
 
 export type SessionState =
   | "INGEST"

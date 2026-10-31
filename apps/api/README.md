@@ -21,6 +21,7 @@ apps/api/src/synapse/
 │  ├─ diagnosis/
 │  │  ├─ models.py            # L0–L6、Hypothesis、DiagnosisCard
 │  │  └─ hypotheses.py        # 先验/对数似然证据/后验/判定
+│  ├─ knowledge/models.py     # KnowledgeCard / KnowledgeSource / KnowledgeHit
 │  ├─ evidence/models.py      # Evidence + EvidenceChain（来源/主张/支持假设/轮次）
 │  └─ guard/leak.py           # 禁用词 + n-gram 出口防护
 ├─ application/               # 用例编排 + ports（Protocol）
@@ -32,6 +33,7 @@ apps/api/src/synapse/
 │  ├─ planner.py              # ProbePlanner 策略：优先区分 top 假设
 │  ├─ composer.py             # GraphProbeComposer + LeakSafe/Fallback/Shadow/Canary 装饰器
 │  ├─ card_builder.py         # 由收敛假设生成 DiagnosisCard
+│  ├─ knowledge.py            # KnowledgeRetriever 端口 + 只读检索服务
 │  ├─ replay.py               # golden 回放与退出判定（eval 与 pytest 共用）
 │  ├─ subject.py              # SubjectPlugin 端口：识别/建图/对齐策略/探针/证据/验证
 │  ├─ review.py               # ReviewItem + ReviewQueue 端口 + 只读 ReviewService
@@ -43,6 +45,7 @@ apps/api/src/synapse/
 │  ├─ snapshots.py            # 版本化 JSON 快照编解码
 │  ├─ guards.py               # 唯一读取答案的适配器：构造泄漏防护
 │  ├─ review.py               # 本机 SQLite 异议队列（var/review.sqlite3）
+│  ├─ knowledge/              # 知识卡语料、可选 FastEmbed、内存余弦索引
 │  ├─ system.py               # UTC 时钟 / S_ 会话 ID
 │  ├─ subjects/               # 学科插件实现（M2.5）
 │  │  ├─ math.py              # MathPlugin：严格识别 + 种子图/EVIDENCE + 生成图证据
@@ -100,6 +103,7 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 | `POST` | `/api/v1/sessions/{id}/steps` | 验证一条步骤（只读，不推进会话） |
 | `POST` | `/api/v1/sessions/{id}/card/disagree` | 记录卡点卡异议（写回会话 + 本地复核队列） |
 | `GET` | `/api/v1/review/items` | 只读列出异议队列（不含学生原文） |
+| `GET` | `/api/v1/knowledge/search` | 只读知识卡检索（可选 RAG，不含学生原文） |
 | `POST` | `/api/v1/sessions/{id}/exit` | 显式退出学习模式 |
 
 约定：
@@ -110,6 +114,7 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 - 后验 `≥0.80` 且领先 `≥0.25` 才出卡；到轮次上限仍 `<0.55` 明确不出确定卡点。
 - `/steps` 只验证提交的这一步（`specs/step-verification.schema.json`）：不推进状态、不出卡；`unknown` 表示未启用/读不懂/没有可判的断言，不是“这步正确”。
 - `/review/items` 只读（`specs/review-queue.schema.json`）：只返回卡面结论与位置，不含学生原文；没有鉴权，判断也不写回服务端——教师在浏览器里标记后自行导出 CSV。
+- `/knowledge/search` 只读（`specs/knowledge-search.schema.json` v0.1）：`q` 是概念标签，不是学生作答原文；返回卡片的标题、摘录、出处（title/url/license）和余弦分数。`enabled=false` 表示 `SYNAPSE_RAG` 未开启；开启但模型不可用时返回 **503**，不会静默返回空结果。
 - `SessionOut.subject` 是会话所属学科；前端只在 `math` 会话显示单步检查入口，语文/物理不摆这个空承诺。
 
 ## 本地会话快照
@@ -144,6 +149,40 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 失败链：JSON 不合法 → 重试 1 次 → 仍失败回退规则；超时与传输失败不重试（保 8s 首问预算），直接回退。每次调用、每次降级、每条 shadow 差异都写 `AuditEntry`：`session_id`、`turn`、`model`、`latency_ms`、`prompt_tokens`、`completion_tokens`、`retried`、`fallback_reason`、`schema_ok`。
 
 答案隔离：发给模型的只有题面 `stem` 与探针本身；`node.text` / `common_errors` 不发送。出口仍是 `LeakSafeProbeComposer`（最外层），命中即改写。
+
+## 知识卡检索（可选 RAG）
+
+诊断卡旁边可以显示几张**有出处的概念解释**。它是只读旁路：不参与对齐、不推进会话、不改诊断，也不把学生作答发给任何服务。
+
+- 默认**关闭**。开启需要本地 ONNX 模型，不依赖 DeepSeek（DeepSeek 只提供 chat）。
+- 模型：`BAAI/bge-small-zh-v1.5`，512 维，约 90 MB；`fastembed` 在 CPU 上跑，首次运行下载到 `SYNAPSE_EMBED_CACHE`（默认 `~/.cache/synapsemind/fastembed`）。
+- 语料：`src/synapse/infrastructure/knowledge/corpus.jsonl`，当前 14 张数学/物理卡，每张都带 `source.title/url/license`。改语料后重启 API 重建索引；向量不落库。
+- 检索：按 `q` + 可选 `subject` 过滤，余弦相似度线性扫描，默认取前 3 条、分数低于 `0.35` 的不返回。语料只有几十张，暂不引入 pgvector；`KnowledgeRetriever` 端口保留替换点。
+- 前端在诊断页和卡点卡页渲染 `KnowledgePanel`；`enabled=false`、无命中或请求失败时整块隐藏，不遮挡诊断。
+
+```powershell
+cd apps/api
+pip install -e ".[rag]"
+$env:SYNAPSE_RAG="on"
+# 若 huggingface.co 不可达，先设置镜像再首次启动
+$env:HF_ENDPOINT="https://hf-mirror.com"
+
+# 可选
+$env:SYNAPSE_EMBED_MODEL="BAAI/bge-small-zh-v1.5"
+$env:SYNAPSE_EMBED_CACHE="$HOME\.cache\synapsemind\fastembed"
+$env:SYNAPSE_RAG_MIN_SCORE="0.35"
+$env:SYNAPSE_KNOWLEDGE_PATH="path\to\corpus.jsonl"
+
+uvicorn --app-dir src synapse.api.main:app --port 8000
+```
+
+```powershell
+# 验证检索（不需要 API 进程）
+$env:PYTHONPATH="src"
+python -c "from synapse.infrastructure.knowledge import build_knowledge_service; s=build_knowledge_service(enabled=True); print([(round(h.score,3), h.card.id) for h in s.search('恒成立 参数 最值').hits])"
+```
+
+规则路径和 CI 不装 `fastembed`：测试用确定性的 `HashingEmbedder`，不需要模型、网络或 key。当前边界是数学/物理；语文 NONE 档没有卡点卡，也不显示知识面板。
 
 ## 学科插件（M2.5）
 

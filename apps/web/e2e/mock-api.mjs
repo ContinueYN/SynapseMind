@@ -31,6 +31,36 @@ const SESSIONS = {
       confidence: 0.45,
     },
   },
+  S_CARD_E2E: {
+    problem_id: "P_E2E_CARD",
+    problem_title: "恒成立与最值",
+    problem_text: "若对任意 x>0，不等式 ln x - a x ≤ 0 恒成立，求 a 的取值范围。",
+    subject: "math",
+    prompt: null,
+    diagnosis: {
+      version: "0.1",
+      session_id: "S_CARD_E2E",
+      problem_id: "P_E2E_CARD",
+      card: {
+        layer: "L2",
+        label: "概念不清：恒成立与最值",
+        node_id: "n6",
+        one_line: "漏掉了 a≤0 这一支。",
+        evidence: ["把恒成立直接当成判别式问题。"],
+        excluded: [],
+        confidence: 0.86,
+        confidence_label: "high",
+        next_action: {
+          type: "micro_lesson",
+          concept_id: "C_MAX_MIN",
+          duration_min: 5,
+          task_id: null,
+        },
+        verify: { type: "transfer", due_hours: 24, item_id: null },
+        disagree: false,
+      },
+    },
+  },
 };
 
 const REVIEW_ITEMS = [
@@ -58,14 +88,15 @@ const REVIEW_ITEMS = [
 
 function sessionBody(id) {
   const preset = SESSIONS[id];
+  const diagnosis = preset.diagnosis ?? null;
   return {
     session_id: id,
-    state: "PROBE",
+    state: diagnosis ? "DIAGNOSE" : "PROBE",
     ...preset,
     mode: "learning",
     turn: 0,
     max_turns: 6,
-    diagnosis: null,
+    diagnosis,
     hint: null,
     notice: null,
     progress: {
@@ -191,6 +222,30 @@ const server = createServer(async (req, res) => {
 
   if (req.method === "GET" && url.pathname === "/api/v1/review/items") {
     send(res, 200, { version: "0.1", items: REVIEW_ITEMS });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/v1/knowledge/search") {
+    const q = url.searchParams.get("q") ?? "";
+    const subject = url.searchParams.get("subject");
+    const hits =
+      q.includes("恒成立") && subject !== "physics"
+        ? [
+            {
+              card_id: "K_MATH_MAX_MIN",
+              title: "恒成立先转成最值",
+              excerpt:
+                "对定义域内的所有 x，f(x)≤a 恒成立，等价于 f 的最大值≤a；先确认定义域和端点是否取到。",
+              source: {
+                title: "OpenStax Calculus Volume 1",
+                url: "https://openstax.org/details/books/calculus-volume-1",
+                license: "CC BY-NC-SA 4.0",
+              },
+              score: 0.7516,
+            },
+          ]
+        : [];
+    send(res, 200, { version: "0.1", enabled: true, query: q, hits });
     return;
   }
 

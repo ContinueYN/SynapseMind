@@ -12,6 +12,9 @@ from synapse.api.schemas import (
     HintOut,
     HintStepOut,
     HistoryItemOut,
+    KnowledgeHitOut,
+    KnowledgeSearchOut,
+    KnowledgeSourceOut,
     NextActionOut,
     ProbeOut,
     ProgressOut,
@@ -23,12 +26,44 @@ from synapse.api.schemas import (
     VerifyOut,
 )
 from synapse.application.composer import ProbePrompt
+from synapse.application.knowledge import KnowledgeSearch
 from synapse.application.review import ReviewItem
 from synapse.application.service import SessionView
 from synapse.application.subject import Verdict
 from synapse.domain.diagnosis.hint import StructureHint
 from synapse.domain.diagnosis.models import DiagnosisCard
 from synapse.domain.dialogue.session import DialogueSession, TurnRecord
+from synapse.domain.knowledge.models import KnowledgeHit
+
+
+def _knowledge_excerpt(body: str, limit: int = 300) -> str:
+    if len(body) <= limit:
+        return body
+    return body[: limit - 1] + "…"
+
+
+def _knowledge_hit(hit: KnowledgeHit) -> KnowledgeHitOut:
+    card = hit.card
+    return KnowledgeHitOut(
+        card_id=card.id,
+        title=card.title,
+        excerpt=_knowledge_excerpt(card.body),
+        source=KnowledgeSourceOut(
+            title=card.source.title,
+            url=card.source.url,
+            license=card.source.license,
+        ),
+        score=round(max(0.0, min(1.0, hit.score)), 4),
+    )
+
+
+def knowledge_search_out(result: KnowledgeSearch) -> KnowledgeSearchOut:
+    return KnowledgeSearchOut(
+        version="0.1",
+        enabled=result.enabled,
+        query=result.query,
+        hits=[_knowledge_hit(hit) for hit in result.hits],
+    )
 
 
 def probe_out(prompt: ProbePrompt) -> ProbeOut:

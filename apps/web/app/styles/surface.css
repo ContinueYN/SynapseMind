@@ -4715,3 +4715,57 @@ body::-webkit-scrollbar {
 .sm-dossier > :nth-child(3) {
   animation: sm-rise-in 660ms var(--ease-liquid) 150ms both;
 }
+
+/* ── 知识卡：诊断旁边的出处 ───────────────────────────────────────── */
+
+.sm-knowledge {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.sm-knowledge-note {
+  margin: 4px 0 14px;
+  color: var(--ink-3);
+  font-size: 13px;
+}
+
+.sm-knowledge ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 14px;
+}
+
+.sm-knowledge li {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.sm-knowledge h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.sm-knowledge li > p {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+.sm-knowledge-source {
+  margin-top: 8px !important;
+  color: var(--ink-3) !important;
+  font-size: 12px !important;
+}
+
+.sm-knowledge-source a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

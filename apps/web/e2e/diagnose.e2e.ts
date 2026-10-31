@@ -131,3 +131,32 @@ test("physics step check sends declared result/tolerance and survives 390px", as
   );
   expect(desktopOverflow).toBe(0);
 });
+
+test("knowledge panel shows a sourced card beside the diagnosis at 390px", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/diagnose/S_CARD_E2E");
+
+  const panel = page.getByRole("region", { name: "相关知识点" });
+  await expect(panel).toBeVisible();
+  await expect(panel.getByText("恒成立先转成最值")).toBeVisible();
+  await expect(panel.getByText(/不是对你这次作答的判断/)).toBeVisible();
+  await expect(
+    panel.getByRole("link", { name: "OpenStax Calculus Volume 1" }),
+  ).toHaveAttribute(
+    "href",
+    "https://openstax.org/details/books/calculus-volume-1",
+  );
+  await expect(panel.getByText(/CC BY-NC-SA 4.0/)).toBeVisible();
+
+  const layout = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+    columns: getComputedStyle(
+      document.querySelector(".sm-knowledge ul") as Element,
+    ).gridTemplateColumns,
+  }));
+  expect(layout.scrollWidth).toBe(layout.clientWidth);
+  expect(layout.columns.split(" ")).toHaveLength(1);
+});

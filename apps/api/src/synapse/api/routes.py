@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from math import ceil
+from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from synapse.api.deps import get_review_service, get_service
+from synapse.api.deps import get_knowledge_service, get_review_service, get_service
 from synapse.api.mappers import (
     diagnosis_out,
+    knowledge_search_out,
     review_items_out,
     session_out,
     step_verdict_out,
@@ -17,6 +19,7 @@ from synapse.api.schemas import (
     CreateSessionRequest,
     DiagnosisOut,
     HealthOut,
+    KnowledgeSearchOut,
     ReviewItemsOut,
     SessionOut,
     StepRequest,
@@ -30,6 +33,7 @@ from synapse.application.commands import (
 )
 from synapse.application.errors import SessionConflict
 from synapse.application.factory import ProblemNotSupported, UnsupportedMode
+from synapse.application.knowledge import KnowledgeService, KnowledgeUnavailable
 from synapse.application.limits import StepRateLimited
 from synapse.application.review import ReviewService
 from synapse.application.service import (
@@ -60,6 +64,30 @@ def list_review_items(
     """
 
     return review_items_out(review.items())
+
+
+@router.get("/knowledge/search", response_model=KnowledgeSearchOut)
+def search_knowledge(
+    q: str = Query(min_length=2, max_length=200),
+    subject: Literal["math", "physics", "chinese"] | None = Query(default=None),
+    limit: int = Query(default=3, ge=1, le=5),
+    knowledge: KnowledgeService = Depends(get_knowledge_service),
+) -> KnowledgeSearchOut:
+    """Find sourced knowledge cards for a concept label.
+
+    The query is a label, not the student's answer or work: callers must not
+    send prose from the attempt. Retrieval is read-only and never advances a
+    session or changes a diagnosis.
+    """
+
+    try:
+        result = knowledge.search(q, subject=subject, limit=limit)
+    except KnowledgeUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    return knowledge_search_out(result)
 
 
 @router.post("/sessions", response_model=SessionOut, status_code=status.HTTP_201_CREATED)

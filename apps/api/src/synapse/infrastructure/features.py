@@ -24,6 +24,9 @@ class FeatureFlags:
     # Check the student's own equality chains and merge provable findings into
     # the diagnosis card. Off by default: it changes annotated baseline cards.
     equality_check: bool = False
+    # Read-only knowledge retrieval. Off by default because turning it on loads
+    # an optional ONNX embedding model; the rule diagnosis path never needs it.
+    rag: bool = False
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> FeatureFlags:
@@ -32,7 +35,8 @@ class FeatureFlags:
             equality_check=_parse_flag(
                 "SYNAPSE_EQUALITY_CHECK",
                 source.get("SYNAPSE_EQUALITY_CHECK", "off"),
-            )
+            ),
+            rag=_parse_flag("SYNAPSE_RAG", source.get("SYNAPSE_RAG", "off")),
         )
 
 

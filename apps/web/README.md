@@ -42,6 +42,7 @@ apps/web/
 │  ├─ ProbeCard.tsx           # 单问题 + 选项 + 我还是不懂 + 退出
 │  ├─ Thread.tsx              # 已答轮次连成一条线
 │  ├─ DiagnosisCardView.tsx   # 卡点卡视图；“我不同意”写回会话
+│  ├─ KnowledgePanel.tsx      # 卡旁的出处知识卡；RAG 关闭/无命中/失败时隐藏
 │  ├─ ReviewBoard.tsx         # 教师复核：取队列、判断、导出
 │  └─ review-sheet.ts         # 复核纯逻辑：判断词表、CSV、本机草稿
 └─ src/lib/api/

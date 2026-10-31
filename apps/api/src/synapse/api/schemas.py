@@ -209,6 +209,29 @@ class ReviewItemsOut(StrictModel):
     items: list[ReviewItemOut]
 
 
+class KnowledgeSourceOut(StrictModel):
+    title: str = Field(min_length=1, max_length=120)
+    url: str = Field(min_length=1, max_length=500)
+    license: str = Field(min_length=1, max_length=80)
+
+
+class KnowledgeHitOut(StrictModel):
+    card_id: str = Field(pattern=r"^K_[A-Z0-9_]+$")
+    title: str = Field(min_length=1, max_length=60)
+    excerpt: str = Field(min_length=1, max_length=300)
+    source: KnowledgeSourceOut
+    score: float = Field(ge=0, le=1)
+
+
+class KnowledgeSearchOut(StrictModel):
+    """Read-only knowledge lookup; ``enabled=false`` hides the panel client-side."""
+
+    version: Literal["0.1"]
+    enabled: bool
+    query: str = Field(max_length=200)
+    hits: list[KnowledgeHitOut] = Field(default_factory=list, max_length=5)
+
+
 class HealthOut(StrictModel):
     status: Literal["ok"] = "ok"
     version: str

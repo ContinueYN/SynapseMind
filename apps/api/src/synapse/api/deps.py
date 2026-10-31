@@ -31,6 +31,7 @@ from synapse.application.composer import (
 )
 from synapse.application.factory import SessionFactory
 from synapse.application.graph import GraphGenerator
+from synapse.application.knowledge import KnowledgeService
 from synapse.application.limits import StepRateLimiter
 from synapse.application.llm import LLMClient
 from synapse.application.planner import HypothesisTargetedPlanner
@@ -48,6 +49,7 @@ from synapse.infrastructure.in_memory import (
     InMemoryProblemRepository,
     InMemorySessionRepository,
 )
+from synapse.infrastructure.knowledge import build_knowledge_service
 from synapse.infrastructure.llm.audit import JsonlCallAuditor
 from synapse.infrastructure.llm.client import OpenAICompatibleClient
 from synapse.infrastructure.llm.composer import LLMProbeComposer
@@ -76,6 +78,7 @@ class Container:
     settings: LLMSettings
     subjects: SubjectRegistry
     features: FeatureFlags
+    knowledge: KnowledgeService
 
 
 def build_container(
@@ -86,6 +89,7 @@ def build_container(
     auditor: CallAuditor | None = None,
     generator: GraphGenerator | None = None,
     step_limiter: StepRateLimiter | None = None,
+    knowledge: KnowledgeService | None = None,
 ) -> Container:
     resolved = settings or LLMSettings.from_env()
     flags = features or FeatureFlags.from_env()
@@ -168,6 +172,9 @@ def build_container(
         step_limiter=limiter,
         review_queue=review_queue,
     )
+    knowledge_service = (
+        knowledge if knowledge is not None else build_knowledge_service(enabled=flags.rag)
+    )
     return Container(
         sessions=sessions,
         problems=problems,
@@ -177,6 +184,7 @@ def build_container(
         settings=resolved,
         subjects=problems.plugins,
         features=flags,
+        knowledge=knowledge_service,
     )
 
 
@@ -238,3 +246,8 @@ def get_service(request: Request) -> SessionService:
 def get_review_service(request: Request) -> ReviewService:
     container = cast(Container, request.app.state.container)
     return container.review
+
+
+def get_knowledge_service(request: Request) -> KnowledgeService:
+    container = cast(Container, request.app.state.container)
+    return container.knowledge
