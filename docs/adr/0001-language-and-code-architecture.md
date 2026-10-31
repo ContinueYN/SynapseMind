@@ -2,18 +2,20 @@
 
 - **状态**：accepted
 - **日期**：2026-10-28
-- **决策者**：产品/架构（5 个无共享记忆子 Agent 独立评审 + 主 Agent 综合）
+- **决策者**：产品与架构评审组
 - **相关**：[状态机](../../specs/dialogue-state.md)、[诊断卡 schema](../../specs/diagnosis.schema.json)、[仓库结构](../../README.md)
+
+> 本文记录目标架构。当前实现使用内存仓储；数据库、鉴权、队列与 RAG 尚未接入，现状以 [README](../../README.md) 为准。
 
 ## 1. 背景
 
-SynapseMind 不是“聊天机器人”，而是一个**确定性状态机 + 受控 LLM 输出 + 证据链**的单题诊断产品：
+SynapseMind 是单题诊断产品：确定性状态机、受控 LLM 输出与证据链共同约束诊断过程。
 
 - 输入：一道题 + 学生自己的答案/过程，或“完全不会”；
-- 在线：2–6 轮追问，SSE 流式，首问 P95 <8s；
+- 在线：2–6 轮追问，首问 P95 <8s；
 - 核心：步骤对齐、假设后验、卡点判定、答案不泄漏；
-- 离线：OCR 后处理、知识 ETL、100 条 golden 评测、50 条红队；
-- MVP：100 道题、30 道深标、40–60 beta。
+- 离线：生成图的结构校验与反例验证、金标准回归、单步检查；
+- MVP：一道标注种子题 + 未见题现场建图；100 道题用于离线结构评测。
 
 原方案默认 **Java 21 + Spring Boot 3/Spring Cloud + Next.js + Python 离线**。本次要求是：
 **语言按工作负载选最合适的，不因难度或现有技能栈迁就。**
@@ -32,9 +34,9 @@ SynapseMind 不是“聊天机器人”，而是一个**确定性状态机 + 受
 
 **性能不进表**：首问 8s 里九成是模型首 token；应用层预算 <300ms；40–60 beta 的 SSE 是几十到几百条，四个候选都过剩一个数量级。成本 ¥0.8/次由 token 路由决定，与语言无关。
 
-## 3. 五个独立评审（无共享记忆）
+## 3. 独立评审
 
-每个 Agent 拿到同一份事实包，但看不到彼此输出；下面是原始结论，不改写。
+五份评审从不同立场完成，彼此不看对方的结论。原始结论如下：
 
 | 评审 | 结论 | 置信度 | 关键理由 |
 |---|---|---|---|
@@ -80,7 +82,7 @@ SynapseMind 不是“聊天机器人”，而是一个**确定性状态机 + 受
 | 部署 | **3 个容器：web / api / worker** | Nginx；Compose；**不引 K8s、Spring Cloud、MQ、7 服务** |
 | 契约 | **Pydantic → OpenAPI → TS 类型** | JSON Schema 同时约束 LLM 输出；`specs/` 是人类可读源 |
 
-**明确不选**：Java/Spring 核心、Go 核心、MySQL、4 部署单元/7 服务边界、多 Agent 框架、K8s。
+**明确不选**：Java/Spring 核心、Go 核心、MySQL、4 部署单元/7 服务边界、自由编排的多智能体框架、K8s。
 
 ## 6. 目录与代码架构
 
@@ -130,22 +132,22 @@ apps/api/src/synapse/
 ### 正面
 
 - 2 种语言（TS + Python）、3 个容器；没有 JVM/Spring/MySQL 的额外运行时。
-- SymPy、Pydantic、RAG、评测同进程，减少跨进程 fail-open。
+- SymPy、Pydantic 与评测同进程；后续 RAG 若接入，可复用同一运行时。
 - 状态机、诊断卡、SSE、评测共用一套类型/契约；改一个字段，CI 能发现前端/后端/评测不一致。
 - MVP 的范围更可控：先把文本闭环跑通，再补 OCR。
 
 ### 负面（必须承认）
 
-- **skill.txt 的 Java/Spring/MyBatis/MySQL/Caffeine 在 MVP 主链路失去落点**。这不是疏忽，是“产品最优”对“技能展示”的代价。
-- Python 没有编译期穷尽检查；状态机靠转移表 + 穷举测试，不靠类型系统。
+- **Java/Spring/MyBatis/MySQL/Caffeine 不再位于 MVP 主链路**。这是产品取舍的结果，不是对既有技术栈的否定。
+- Python 没有编译期穷尽检查；状态机靠转移表与穷举测试，不靠类型系统。
 - Python 事件循环对同步阻塞敏感；必须全链路 async，SymPy/OCR 全部出进程。
-- 若目标是 Java/Spring 岗位作品集，**应选方案 C**，或单独维护 `extensions/enterprise-java`；不要为了简历把主产品做成三语言。
+- 若后续需要面向企业采购的 Java 适配，单独维护扩展模块，不把主产品做成三语言。
 
-### 对 skill.txt 的处理
+### 技术栈边界
 
-- 保留 11 项映射表，但把 Java/Spring/MySQL/Caffeine 标为 **Phase 2 企业适配器 / 作品集分支**，不冒充 MVP 已实现。
-- Python/TS 可覆盖：Python、RAG、Prompt、PGvector、ETL、MCP、多 Agent、Docker/Nginx、可观测性、SEO/GEO、SDD、Cursor/Claude Code。
-- Go 仅在“SSE 采集 sidecar”保留为可选实验，不进主链路。
+- TypeScript/Next.js 覆盖界面、SEO 与 SSE 外壳。
+- Python 覆盖状态机、模型编排、符号计算与离线评测。
+- Go/Java 仅在明确的集成场景引入；新增语言必须先证明边界与维护成本。
 
 ## 8. 迁移计划
 
@@ -153,7 +155,7 @@ apps/api/src/synapse/
 2. **契约**：把 `specs/dialogue-state.md` 的转移表落成 `apps/api/src/synapse/domain/dialogue/table.py`；Pydantic 模型生成 JSON Schema。
 3. **数据**：MySQL 设计改为 PostgreSQL；保留 14 张逻辑表，去掉 16 片分库，MVP 单库 + 月分区。
 4. **部署**：Compose 从 MySQL 改 Postgres；Nginx 保持 SSE 关闭缓冲；3 个容器。
-5. **文档**：`docs/design/chapters/07-技术架构.md` 已按本 ADR 重写；`08-skill映射.md` 与第 11 章历史过程只在本地保留，不随公开仓库发布。
+5. **文档**：设计文档按本 ADR 收敛，公开部分保留产品定义、诊断引擎与决策记录；其余过程材料不入库。
 6. **验证**：`python scripts/checks/check_repo.py`、`uv run pytest`、契约生成 diff、500 并发 SSE 压测、100 条 golden 回放。
 
 ## 9. 验证实验
@@ -172,10 +174,10 @@ apps/api/src/synapse/
 出现任一，回到本 ADR 改选：
 
 - 后端 Python 生产经验不足，且统一语言带来的收益大于 Python AI 生态的收益 → 切 A（TS 全栈 + Python AI）。
-- 出现机构采购级多租户 + 强审计 + 跨系统事务补偿 → 切 C（JVM 核心 + Python AI），不是“为了 Spring 而 Spring”。
+- 出现机构采购级多租户 + 强审计 + 跨系统事务补偿 → 切 C（JVM 核心 + Python AI）。
 - SymPy 校验稳定 >800ms 且落在流式热路径 → 移到 worker 出卡前校验，语言不再被 SymPy 绑定。
 - 稳态 SSE >5k 且单实例内存成瓶颈 → 只让 Go 做网关层，AI 仍 Python。
 
 ---
 
-**一句话**：这个产品的最优解不是“一种语言打天下”，而是**TypeScript 守住 Web/SEO/SSE 外壳，Python 守住状态机/诊断/AI/评测内核**；Java 留给需要强审计的企业版，不进 MVP。
+结论：TypeScript 负责 Web/SEO/SSE 外壳，Python 负责状态机、诊断、模型编排与评测内核；Java 保留给需要强审计的企业版，不进入 MVP。

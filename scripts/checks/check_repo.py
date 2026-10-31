@@ -36,16 +36,20 @@ PUBLIC_REQUIRED = [
     "specs/step-verification.schema.json",
 ]
 
-REQUIRED = PUBLIC_REQUIRED if PUBLIC else [
-    "README.md",
-    ".gitignore",
-    "specs/dialogue-state.md",
-    "specs/problem-input.schema.json",
-    "specs/solution-graph.schema.json",
-    "specs/diagnosis.schema.json",
-    "specs/structure-hint.schema.json",
-    "specs/step-verification.schema.json",
-]
+REQUIRED = (
+    PUBLIC_REQUIRED
+    if PUBLIC
+    else [
+        "README.md",
+        ".gitignore",
+        "specs/dialogue-state.md",
+        "specs/problem-input.schema.json",
+        "specs/solution-graph.schema.json",
+        "specs/diagnosis.schema.json",
+        "specs/structure-hint.schema.json",
+        "specs/step-verification.schema.json",
+    ]
+)
 
 LINK_RE = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 SKILL_ROW_RE = re.compile(r"^\|\s*\*\*(\d+)\*\*\s*\|", re.MULTILINE)
@@ -99,6 +103,7 @@ def walk_markdown() -> list[Path]:
             ROOT / "CONTRIBUTING.md",
             ROOT / "CHANGELOG.md",
             ROOT / "docs" / "adr",
+            ROOT / "docs" / "design" / "chapters",
             ROOT / "specs",
             ROOT / "apps",
             ROOT / "infra",
@@ -153,9 +158,7 @@ def check_links(errors: list[str], warnings: list[str]) -> int:
                 else (path.parent / target_part)
             ).resolve()
             if not target.exists():
-                errors.append(
-                    f"broken link: {path.relative_to(ROOT)} -> {raw}"
-                )
+                errors.append(f"broken link: {path.relative_to(ROOT)} -> {raw}")
     return checked
 
 

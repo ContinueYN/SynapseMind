@@ -1,12 +1,20 @@
-# 架构决策记录（ADR）
+# 架构决策记录
 
-这里记录**不可逆或高成本**的技术决策：语言、进程边界、数据契约、部署形态。
-每个 ADR 只回答一件事，并保留被拒绝的方案；不要写成“技术栈介绍”。
+这里记录影响架构、接口或运维成本的决策。每份 ADR 对应一个问题，写明选项、取舍、后果与改选条件。
 
-## 格式
+## 索引
+
+| 编号 | 决策 | 状态 |
+|---|---|---|
+| [0001](0001-language-and-code-architecture.md) | 语言与代码架构 | accepted |
+| [0002](0002-llm-provider-and-golden-scale.md) | 模型供应商与金标准规模 | accepted |
+| [0003](0003-generated-graph-evidence-calibration.md) | 生成图的证据权重校准 | accepted |
+| [0004](0004-first-question-latency-budget.md) | 首问 8s 预算下的生成题延迟治理 | accepted |
+
+## 写法
 
 ```text
-# ADR-0001: 标题
+# ADR-000N: 标题
 - 状态：proposed / accepted / superseded
 - 日期：
 - 决策者：
@@ -20,19 +28,4 @@
 ## 验证
 ```
 
-## 索引
-
-| 编号 | 标题 | 状态 |
-|---|---|---|
-| [0001](0001-language-and-code-architecture.md) | 语言与代码架构选择 | accepted |
-| [0002](0002-llm-provider-and-golden-scale.md) | 模型供应商与金标准规模 | accepted |
-| [0003](0003-generated-graph-evidence-calibration.md) | 生成图的证据权重校准 | accepted |
-| [0004](0004-first-question-latency-budget.md) | 首问 8s 预算下的生成题延迟治理 | accepted |
-
-## 原则
-
-1. **按工作负载选语言，不按个人偏好**；允许 polyglot，但每多一种语言必须有清晰边界。
-2. **目录按可部署单元与领域分，不按文件类型分**；`apps/` 放可运行单元，`specs/` 放契约。
-3. **先单体后拆分**；拆服务需要触发条件，不靠“看起来像大厂”。
-4. **契约先于代码**；OpenAPI / JSON Schema 是跨语言边界的唯一真源。
-5. **每个决策都要有验证实验**；没有验证的“最优”只是偏好。
+决策以可验证的约束为依据；没有验证方式的“最优”不构成决策理由。
