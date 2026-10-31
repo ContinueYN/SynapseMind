@@ -105,7 +105,7 @@ NEXT_DIST_DIR=.next        # 可选：并行跑第二份产物时指向别的目
 ## 当前边界
 
 - 只支持一道种子题；换题由 API 返回 422，前端显示错误，不做假成功。
-- 会话存在 API 内存里，API 重启后 `/diagnose/[id]` 会 404；M2 接 PostgreSQL。
+- 会话默认在 API 内存里；`run.py` 会启用本地 SQLite 快照（`SYNAPSE_SESSION_DB`），API 重启后 `/diagnose/[id]` 仍可恢复。仍未接 PostgreSQL，也没有清理/TTL。
 - 教师复核页没有鉴权，队列只含卡面结论、不含学生原文；CSV 导出按浏览器本地时间命名。
 - 历史记录只展示问答原话，不做完整时间线/回放。
 - 不用 Tailwind/组件库：设计令牌 + 语义 class 更少依赖、更好审。

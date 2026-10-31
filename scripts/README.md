@@ -82,6 +82,8 @@ python scripts/dev/run.py --check
 python scripts/dev/run.py --smoke --no-install
 ```
 
+`run.py` 会把本地状态放在仓库根的 `var/`：`review.sqlite3`（异议）和 `synapse.sqlite3`（会话 + 运行时生成题快照）。两者都在忽略目录，删文件即清空。直接起 `uvicorn` 且不设 `SYNAPSE_SESSION_DB` 时仍是内存仓储，重启即丢。
+
 ## 导出 OpenAPI 与生成 TS 类型
 
 需要先安装 API 依赖：

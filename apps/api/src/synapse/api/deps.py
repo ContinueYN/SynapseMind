@@ -55,6 +55,10 @@ from synapse.infrastructure.llm.graph import LLMGraphGenerator
 from synapse.infrastructure.llm.settings import LLMSettings
 from synapse.infrastructure.rate_limit import TokenBucketStepLimiter
 from synapse.infrastructure.review import SqliteReviewQueue
+from synapse.infrastructure.sqlite_state import (
+    SqliteProblemRepository,
+    SqliteSessionRepository,
+)
 from synapse.infrastructure.subjects.chinese import ChinesePlugin
 from synapse.infrastructure.subjects.math import MathPlugin
 from synapse.infrastructure.subjects.physics import PhysicsPlugin
@@ -85,8 +89,19 @@ def build_container(
 ) -> Container:
     resolved = settings or LLMSettings.from_env()
     flags = features or FeatureFlags.from_env()
-    sessions = InMemorySessionRepository()
-    problems = InMemoryProblemRepository()
+    # Persistence is opt-in: tests and evaluation scripts keep the in-memory
+    # adapters, while the local launcher points this at var/synapse.sqlite3.
+    # Sessions and generated problems share one file so a restored session can
+    # still resolve the graph it was diagnosed against.
+    state_db = os.environ.get("SYNAPSE_SESSION_DB", "").strip()
+    sessions: SessionRepository
+    problems: InMemoryProblemRepository
+    if state_db:
+        sessions = SqliteSessionRepository(Path(state_db))
+        problems = SqliteProblemRepository(Path(state_db))
+    else:
+        sessions = InMemorySessionRepository()
+        problems = InMemoryProblemRepository()
     answers = InMemoryAnswerStore()
     sink = auditor or JsonlCallAuditor(Path(resolved.audit_path))
     graph_generator = generator or build_graph_generator(resolved, client=llm_client, auditor=sink)

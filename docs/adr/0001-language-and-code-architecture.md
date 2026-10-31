@@ -5,7 +5,7 @@
 - **决策者**：产品与架构评审组
 - **相关**：[状态机](../../specs/dialogue-state.md)、[诊断卡 schema](../../specs/diagnosis.schema.json)、[仓库结构](../../README.md)
 
-> 本文记录目标架构。当前实现使用内存仓储；数据库、鉴权、队列与 RAG 尚未接入，现状以 [README](../../README.md) 为准。
+> 本文记录目标架构。当前实现默认使用内存仓储；本地可选用 SQLite 会话快照（`SYNAPSE_SESSION_DB`），PostgreSQL、鉴权、队列与 RAG 尚未接入，现状以 [README](../../README.md) 为准。
 
 ## 1. 背景
 

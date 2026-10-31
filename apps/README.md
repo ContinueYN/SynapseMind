@@ -51,4 +51,4 @@ npm run dev
 uv run --project apps/api arq synapse.workers.settings.WorkerSettings
 ```
 
-> 当前只跑文本链路；拍照 OCR、LLM 生成、RAG、PostgreSQL/Redis 与鉴权在 M2/M3。不要为“看起来完整”提前加空服务或第二份领域模型。
+> 当前只跑文本链路；拍照 OCR、LLM 生成、RAG、PostgreSQL/Redis 与鉴权在 M2/M3。本地可用 SQLite 会话快照（`SYNAPSE_SESSION_DB`，`run.py` 默认开启），但它不是 PostgreSQL 替代品。不要为“看起来完整”提前加空服务或第二份领域模型。

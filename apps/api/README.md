@@ -38,7 +38,9 @@ apps/api/src/synapse/
 │  └─ service.py              # SessionService（Facade）：start/get/submit/exit
 ├─ infrastructure/            # 端口实现
 │  ├─ seed.py                 # M1 唯一种子题 + 4 个探针 + 标准答案
-│  ├─ in_memory.py            # 会话/题目/答案仓储（重启即丢）
+│  ├─ in_memory.py            # 默认内存仓储（测试/评测）
+│  ├─ sqlite_state.py         # 会话快照 + 生成题的 SQLite 适配器
+│  ├─ snapshots.py            # 版本化 JSON 快照编解码
 │  ├─ guards.py               # 唯一读取答案的适配器：构造泄漏防护
 │  ├─ review.py               # 本机 SQLite 异议队列（var/review.sqlite3）
 │  ├─ system.py               # UTC 时钟 / S_ 会话 ID
@@ -81,7 +83,7 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 | Factory | `application/factory.py` | 会话组装集中一处，校验入口唯一 |
 | Decorator | `application/composer.py` | 泄漏防护、失败降级、shadow 双跑、canary 分流都在同一签名上叠加，被装饰者无感 |
 | Adapter | `infrastructure/llm/` | `LLMClient` 端口 → DeepSeek / Qwen / GLM / 回放，换供应商只换配置 |
-| Repository / Ports | `application/ports.py` | 内存适配器可替换为 PostgreSQL，不碰领域 |
+| Repository / Ports | `application/ports.py` | 内存/SQLite 适配器可替换为 PostgreSQL，不碰领域 |
 | Facade | `application/service.py` | 路由只依赖一个用例入口 |
 | DTO / Mapper | `api/schemas.py`、`api/mappers.py` | HTTP 契约与领域对象解耦 |
 
@@ -109,6 +111,16 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 - `/steps` 只验证提交的这一步（`specs/step-verification.schema.json`）：不推进状态、不出卡；`unknown` 表示未启用/读不懂/没有可判的断言，不是“这步正确”。
 - `/review/items` 只读（`specs/review-queue.schema.json`）：只返回卡面结论与位置，不含学生原文；没有鉴权，判断也不写回服务端——教师在浏览器里标记后自行导出 CSV。
 - `SessionOut.subject` 是会话所属学科；前端只在 `math` 会话显示单步检查入口，语文/物理不摆这个空承诺。
+
+## 本地会话快照
+
+会话持久化是**可选**的：只有设置 `SYNAPSE_SESSION_DB` 时才启用 SQLite，路径不存在会自动创建。`scripts/dev/run.py` 默认设到 `var/synapse.sqlite3`；直接 `uvicorn` 或评测脚本不设置时仍是内存仓储，不会静默写盘。
+
+- 同一个文件存**会话快照**和**运行时生成的题**（标注种子题仍来自 `seed.py`）。只存会话不存生成题的话，重启后生成题会话就找不到自己的图；生成题图首次写入后优先复用，换生成器/prompt 后删文件才会重建。
+- 快照是版本化 JSON（`infrastructure/snapshots.py`），不是 `pickle`；损坏或版本不匹配会抛 `SnapshotError`，不会静默读成半条会话。
+- 快照包含学生探针回答、证据链和 `work_findings`（学生自己的式子），因此这个文件是**本地学生数据**：`var/` 已忽略，没有 TTL/加密/清理任务，删文件即清空。
+- 每个操作独立连接，没有读改写锁；同一会话的并发请求是 last-write-wins。这是本机单用户工具的边界，不是多教师并发方案。
+- 没有 PostgreSQL、Alembic、Redis；`ProblemRepository` / `SessionRepository` 端口不变，换 PostgreSQL 时只换适配器。
 
 ## LLM 追问（M2）
 
@@ -196,6 +208,6 @@ python ..\..\scripts\contracts\generate.py
 
 - 不做拍照 OCR：`problem.image_url` 已在 DTO 预留，但未实现（M3）。
 - 不做 LLM 辅助步骤对齐（第 12 章 T5）：对齐结果直接决定先验与证据链，交给模型后规则基线不再可比，回滚成本高；**默认不做**。
-- 不做数据库/鉴权/多租户：仓储是内存版；重启丢会话是已知边界（M3/M4）。
+- 不做 PostgreSQL/鉴权/多租户：默认仓储是内存版；本地可选 SQLite 会话快照（`SYNAPSE_SESSION_DB`），但没有迁移框架、TTL 或多进程并发控制（M3/M4）。
 - 不返回标准答案：即使答错，也只给卡点卡和下一练。
 - 不提前拆服务：拆分触发条件见 [apps/README.md](../README.md) 与 ADR。
