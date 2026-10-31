@@ -12,6 +12,8 @@ scripts/
 │  └─ export_openapi.py  # 只导出 OpenAPI
 ├─ checks/
 │  └─ check_repo.py      # 文件、链接、JSON、skill 映射检查
+├─ demo/
+│  └─ walkthrough.py     # 四段学生旅程 → Markdown transcript
 ├─ eval/
 │  ├─ m2_exit.py         # M2 退出判定（10 条 golden 回放）
 │  ├─ m2_first_question.py # M2 首问整体 P95 门禁（20 题，含现场建图）
@@ -26,6 +28,18 @@ scripts/
 └─ release/
    └─ export_public.py   # 可选的公开树导出工具
 ```
+
+## 演示 / 回归 transcript
+
+```powershell
+# 离线：标注题 + 空白入口；需要 key 的物理/语文显式跳过
+apps/api/.venv/Scripts/python.exe scripts/demo/walkthrough.py --no-live
+
+# 有 .env key 时默认开启实时建图，四段全跑；输出默认 var/demo/walkthrough.md
+apps/api/.venv/Scripts/python.exe scripts/demo/walkthrough.py
+```
+
+它不是准确率报告：transcript 只记录真实应用层这次跑了什么，生成题没有人工复核。`--case wrong|blank|physics|chinese` 可单跑一段。
 
 ## 评测
 
