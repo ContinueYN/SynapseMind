@@ -4,7 +4,11 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { Surface } from "@/components/Surface";
-import { ApiError, disagreeWithCard } from "@/src/lib/api/client";
+import {
+  ApiError,
+  disagreeWithCard,
+  isSessionConflict,
+} from "@/src/lib/api/client";
 import type { DiagnosisCard } from "@/src/lib/api/types";
 
 interface DiagnosisCardViewProps {
@@ -43,7 +47,11 @@ export function DiagnosisCardView({
       setDisagreed(diagnosis.card.disagree);
     } catch (error) {
       setRecordError(
-        error instanceof ApiError ? error.message : "记录失败，请稍后再试。",
+        isSessionConflict(error)
+          ? "这份卡点卡已在另一个窗口更新；这次反馈没有记录。请刷新页面后再试。"
+          : error instanceof ApiError
+            ? error.message
+            : "记录失败，请稍后再试。",
       );
     } finally {
       setRecording(false);

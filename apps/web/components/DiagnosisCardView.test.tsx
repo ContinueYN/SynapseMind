@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DiagnosisCardView } from "./DiagnosisCardView";
-import { disagreeWithCard } from "@/src/lib/api/client";
+import { ApiError, disagreeWithCard } from "@/src/lib/api/client";
 import type { DiagnosisCard } from "@/src/lib/api/types";
 
 vi.mock("next/link", () => ({
@@ -13,10 +13,22 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-vi.mock("@/src/lib/api/client", () => ({
-  ApiError: class ApiError extends Error {},
-  disagreeWithCard: vi.fn(),
-}));
+vi.mock("@/src/lib/api/client", () => {
+  class ApiError extends Error {
+    readonly status: number;
+
+    constructor(status: number, message: string) {
+      super(message);
+      this.status = status;
+    }
+  }
+  return {
+    ApiError,
+    disagreeWithCard: vi.fn(),
+    isSessionConflict: (error: unknown) =>
+      error instanceof ApiError && error.status === 409,
+  };
+});
 
 const disagree = vi.mocked(disagreeWithCard);
 
@@ -61,6 +73,20 @@ describe("DiagnosisCardView", () => {
     await waitFor(() => expect(button).toHaveTextContent("已记录你的反馈"));
     expect(disagree).toHaveBeenCalledWith("S_ABC123456789");
     expect(button).toBeDisabled();
+  });
+
+  it("asks for a refresh when the card changed in another window", async () => {
+    disagree.mockRejectedValue(new ApiError(409, "stale revision"));
+
+    const user = userEvent.setup();
+    render(<DiagnosisCardView card={CARD} sessionId="S_ABC123456789" />);
+
+    await user.click(screen.getByRole("button", { name: "我不同意这个判断" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("另一个窗口");
+    expect(
+      screen.getByRole("button", { name: "我不同意这个判断" }),
+    ).toBeEnabled();
   });
 
   it("starts from the persisted flag after a reload", () => {

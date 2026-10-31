@@ -23,6 +23,15 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * The server rejected a write because the session changed after it was read.
+ * The caller must reload before offering the action again; retrying the same
+ * body could apply it on top of a state the user never saw.
+ */
+export function isSessionConflict(error: unknown): error is ApiError {
+  return error instanceof ApiError && error.status === 409;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {

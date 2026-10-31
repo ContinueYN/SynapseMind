@@ -14,7 +14,14 @@ import { StructureHintView } from "@/components/StructureHintView";
 import { Surface } from "@/components/Surface";
 import { ProbeCard } from "@/components/ProbeCard";
 import { Thread } from "@/components/Thread";
-import { ApiError, API_BASE, exitSession, getSession, submitTurn } from "@/src/lib/api/client";
+import {
+  ApiError,
+  API_BASE,
+  exitSession,
+  getSession,
+  isSessionConflict,
+  submitTurn,
+} from "@/src/lib/api/client";
 import type { SessionResponse } from "@/src/lib/api/types";
 import { adoptSession } from "@/src/lib/session-handoff";
 
@@ -85,6 +92,22 @@ export default function DiagnosePage() {
     probeRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [session]);
 
+  async function refreshAfterConflict(action: "answer" | "exit") {
+    const message =
+      action === "answer"
+        ? "这次回答没有提交：会话已在另一个窗口更新，已刷新到最新状态。请先看清当前页面再继续。"
+        : "退出没有生效：会话已在另一个窗口更新。已刷新到最新状态。";
+    try {
+      const latest = await getSession(sessionId);
+      setSession(latest);
+      setError(message);
+    } catch {
+      setError(
+        "会话已在另一个窗口更新；自动刷新失败，请手动刷新页面后再试。",
+      );
+    }
+  }
+
   async function send(optionId: string, answerText: string) {
     if (busy) return;
     setPending({ answer: answerText, unknown: optionId === "unknown" });
@@ -98,7 +121,9 @@ export default function DiagnosePage() {
         }),
       );
     } catch (caught) {
-      if (caught instanceof ApiError && caught.status === 422) {
+      if (isSessionConflict(caught)) {
+        await refreshAfterConflict("answer");
+      } else if (caught instanceof ApiError && caught.status === 422) {
         setError("这一问要从选项里选一个；也可以点「我还是不懂」，换成更低的台阶。");
       } else {
         setError(caught instanceof Error ? caught.message : "提交失败，请重试。");
@@ -115,7 +140,11 @@ export default function DiagnosePage() {
     try {
       setSession(await exitSession(sessionId));
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "退出失败，请重试。");
+      if (isSessionConflict(caught)) {
+        await refreshAfterConflict("exit");
+      } else {
+        setError(caught instanceof Error ? caught.message : "退出失败，请重试。");
+      }
     } finally {
       setBusy(false);
     }
