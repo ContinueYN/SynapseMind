@@ -20,7 +20,7 @@ test("the science page maps each mechanism to an action, a boundary and a DOI", 
   ).toHaveAttribute("href", "https://doi.org/10.1126/science.1199327");
 
   await expect(page.getByText(/不承诺提分/)).toBeVisible();
-  await expect(page.getByRole("link", { name: /五段真实 transcript/ })).toHaveAttribute(
+  await expect(page.getByRole("link", { name: /六段真实 transcript/ })).toHaveAttribute(
     "href",
     "/cases",
   );

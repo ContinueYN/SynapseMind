@@ -7,7 +7,7 @@ import { Reveal } from "@/components/Reveal";
 export const metadata: Metadata = {
   title: "演示记录 · SynapseMind 突触智学",
   description:
-    "五段真实 transcript：数学错步、空白入口、物理弃权、语文结构提示，以及通用入口的决策记录。是链路记录，不是效果研究。",
+    "六段实跑记录：数学错步、空白入口、物理弃权、语文结构提示，以及通用入口的决策与代码问题。是链路记录，不是效果研究。",
 };
 
 interface Turn {
@@ -32,7 +32,8 @@ interface CaseStudy {
 
 /*
  * 前四段抄自 2026-10-31 22:35 的 walkthrough 实跑记录，第五段是 2026-11-01
- * 新增的通用入口实跑（离线规则路径）。都来自 var/demo/walkthrough.md
+ * 新增的通用入口实跑（离线规则路径），第六段是同日的代码问题实跑
+ * （显式提交，SYNAPSE_EXEC=off）。都来自 var/demo/walkthrough.md
  * （本机生成、不入库）。只做了截断，没有改措辞；想核对原文就重跑一遍脚本。
  */
 const CASES: CaseStudy[] = [
@@ -191,6 +192,43 @@ const CASES: CaseStudy[] = [
     boundary:
       "它没有比较两个选项，也没有推荐；只把「代价」补进结构清单。线索表会漏同义说法，漏了只报缺口，不硬凑。",
   },
+  {
+    id: "code",
+    no: "06",
+    subject: "代码 · 通用入口",
+    verdict: "只问结构，不自动跑",
+    state: "intake",
+    title: "代码摆出来了，系统也不猜 bug 在哪",
+    problem:
+      "这段代码的结果不对：def add(a, b): return a - b；print(add(2, 3))  # 期望 5，实际 -1",
+    student:
+      "目标是让 add(2, 3) 返回 5；已知它现在返回 -1，也没有报错；约束是不能改测试。我看了一遍，觉得是 print 写错了。",
+    turns: [
+      {
+        ask: "入口先问（一次只问一个）",
+        answer: "最小复现是什么：哪段代码、什么输入、完整报错？",
+      },
+      {
+        ask: "学生补上复现",
+        answer: "我跑了 add(2, 3)，返回 -1；预期是 5。",
+      },
+      {
+        ask: "工具轨迹（v0.3，规则模式）",
+        answer:
+          "check_structure ok：看到 5 项结构、缺口 1 个；run_tests skipped：执行开关关闭，没有运行；ask_clarifying ok：kind=check，answered=1/3。",
+      },
+    ],
+    notes: [
+      "代码不是从题面抽的：这次显式提交了 2 行 Python 和一个 unittest；入口只把题面当文本。",
+      "「返回 -1」是学生写的，不是系统跑出来的；本轮 SYNAPSE_EXEC=off，执行步是 skipped；打开后同一步会真的跑测试，运行结果可能是 fail，仍不是诊断。",
+      "领域标签是显式写的 programming，不是自动识别；代码里的等号和括号很容易被数学线索抢走。",
+      "线索表只认动作词：只说「最小复现是…」而没有「跑了 / 试过」时，可能仍报缺复现；这段用了「我跑了…」。",
+    ],
+    outcome:
+      "状态 CLOSED；没有卡点卡。补上复现后仍缺「已经试过哪些改动」，轨迹只问结构，不判断 bug 在哪。",
+    boundary:
+      "它没有说 return a - b 就是 bug，也没有自动执行；skipped 不是 pass，跑出 fail 也只表示提交的测试没过。",
+  },
 ];
 
 export default function CasesPage() {
@@ -200,18 +238,19 @@ export default function CasesPage() {
         <Plane>
           <p className="sm-eyebrow">
             <span aria-hidden="true" className="sm-dot" />
-            演示记录 · 五段 transcript
+            演示记录 · 六段 transcript
           </p>
 
           <h1 className="sm-display">
-            五段记录，
-            <span className="sm-display-2">五种收束。</span>
+            六段记录，
+            <span className="sm-display-2">六种收束。</span>
           </h1>
 
           <p className="sm-lede">
-            下面五段来自两次实跑：2026-10-31 的四段诊断记录（数学错步出卡、空白入口给示例、
-            物理五轮后弃权、语文只给结构提示），以及 2026-11-01 新增的通用入口记录
-            （决策问题，离线规则路径）。文字按 transcript 抄录，只做截断。
+            下面六段来自三次实跑：2026-10-31 的四段诊断记录（数学错步出卡、空白入口给示例、
+            物理五轮后弃权、语文只给结构提示），2026-11-01 新增的通用入口记录
+            （决策问题，离线规则路径），以及同日的代码问题记录（显式提交、执行开关默认关闭）。
+            文字按 transcript 抄录，只做截断。
           </p>
 
           <p className="sm-fine">
@@ -224,7 +263,7 @@ export default function CasesPage() {
         <Plane>
           <h2 className="sm-label">
             <em>01</em>
-            五段记录
+            六段记录
           </h2>
 
           <p className="sm-statement">每段都标了它不能证明什么。</p>
@@ -293,24 +332,26 @@ export default function CasesPage() {
             <div className="sm-tile sm-about-card">
               <b>怎么复跑</b>
               <p>
-                <code>python scripts/demo/walkthrough.py</code> 走五段并写{" "}
+                <code>python scripts/demo/walkthrough.py</code> 走六段并写{" "}
                 <code>var/demo/walkthrough.md</code>；<code>--no-live</code>{" "}
-                只跑标注题、空白与通用入口，物理 / 语文显式跳过；
-                <code>--case decision</code> 可单跑通用入口。
+                只跑标注题、空白、通用入口与代码，物理 / 语文显式跳过；
+                <code>--case decision</code> 或 <code>--case code</code> 可单跑。
+                代码默认不执行，<code>SYNAPSE_EXEC=on</code> 才会真的跑。
               </p>
             </div>
 
             <div className="sm-tile sm-about-card sm-about-card--quiet">
               <b>重跑会变吗</b>
               <p>
-                数学、空白与通用入口走规则路径，记录稳定；物理与语文依赖实时建图，换模型或断网会变。
-                变的是链路，不是准确率。
+                数学、空白与通用入口走规则路径，记录稳定；代码也走规则路径，
+                但执行状态取决于 <code>SYNAPSE_EXEC</code>；物理与语文依赖实时建图，
+                换模型或断网会变。变的是链路，不是准确率。
               </p>
             </div>
           </div>
 
           <p className="sm-fine">
-            这些记录能证明五件事：入口能识别并收束、证据不足时会停、示例不含答案、结构提示不冒充诊断、通用入口不替你做选择。
+            这些记录能证明六件事：入口能识别并收束、证据不足时会停、示例不含答案、结构提示不冒充诊断、通用入口不替你做选择、代码不猜也不自动跑。
             不能证明「说得准」——那需要真实学生作答与双人标注，目前还没有。
           </p>
 

@@ -50,8 +50,25 @@ DECISION_WORK = (
     "要么接受新机会，钱多一点，但要搬到另一个城市，女朋友还在这边。"
     "约束是不能异地，半年内要决定。"
 )
+CODE_TEXT = (
+    "这段代码的结果不对：def add(a, b): return a - b；"
+    "print(add(2, 3))  # 期望 5，实际 -1"
+)
+CODE_WORK = (
+    "目标是让 add(2, 3) 返回 5；已知它现在返回 -1，也没有报错；"
+    "约束是不能改测试。我看了一遍，觉得是 print 写错了。"
+)
+CODE_PROBE = "我跑了 add(2, 3)，返回 -1；预期是 5。"
+CODE_SNIPPET = "def add(a, b):\n    return a - b\n"
+CODE_TESTS = (
+    "import unittest\n"
+    "from main import add\n\n"
+    "class TestAdd(unittest.TestCase):\n"
+    "    def test_add(self):\n"
+    "        self.assertEqual(add(2, 3), 5)\n"
+)
 
-CASES = ("wrong", "blank", "physics", "chinese", "decision")
+CASES = ("wrong", "blank", "physics", "chinese", "decision", "code")
 
 
 class Transcript:
@@ -283,6 +300,89 @@ def _run_decision(service: SessionService, transcript: Transcript) -> bool:
     )
 
 
+def _run_code(service: SessionService, transcript: Transcript) -> bool:
+    """A coding bug: intake, one structural answer, then an explicit run request.
+
+    The trace never extracts code from the problem text. The snippet below is
+    submitted explicitly, exactly like ``POST /agent/run``. With ``SYNAPSE_EXEC``
+    off (the default) the step is ``skipped``; the transcript records that, not a
+    pass.
+    """
+
+    transcript.heading("6. 通用入口：代码问题 → 结构问题 → 显式执行开关（规则路径）")
+    started = perf_counter()
+    view = service.start(
+        StartSessionCommand(problem_text=CODE_TEXT, answer=CODE_WORK, subject="programming")
+    )
+    if view.intake is None:
+        transcript.add("没有进入通用入口：这道题被路由到了别的路径。")
+        return False
+
+    intake = view.intake
+    transcript.bullets(
+        [
+            f"题目：{CODE_TEXT}",
+            f"学生写了：{CODE_WORK}",
+            f"领域标签：`{intake.profile.name}`（{intake.profile.label}，显式标注，可修改）；"
+            f"框架 `{intake.profile.framework.value}`；"
+            f"验证方式 `{intake.profile.verification.value}`",
+            f"入口状态：`{view.session.state.value}`；不探针、不出卡、不给答案。",
+            f"已看到：{'、'.join(intake.observed) or '（暂无）'}",
+            f"还缺：{'；'.join(intake.gaps) or '（暂无）'}",
+        ]
+    )
+    if intake.probe is not None:
+        transcript.bullets([f"一次只问一个：{intake.probe.question}"])
+        view = service.answer_intake_probe(view.session.session_id, CODE_PROBE)
+        transcript.bullets(
+            [
+                f"补充后已看到：{'、'.join(view.intake.observed) or '（暂无）'}",
+                f"还缺：{'；'.join(view.intake.gaps) or '（暂无）'}",
+                f"下一个问题：{view.intake.probe.question if view.intake.probe else '无'}",
+            ]
+        )
+
+    trace = service.agent_trace(
+        view.session.session_id,
+        code=CODE_SNIPPET,
+        tests=CODE_TESTS,
+    )
+    transcript.bullets(
+        [
+            "显式提交：一段 2 行的 Python 与一个 unittest；没有从题面抽代码。",
+            f"轨迹：`{trace.version}`；模式 `{trace.mode}`；"
+            f"规划器 `{trace.planner.status}/{trace.planner.reason}`",
+        ]
+    )
+    transcript.add("| 步骤 | 工具 | 状态 | 输入摘要 | 输出摘要 |")
+    transcript.add("|---|---|---|---|---|")
+    for step in trace.steps:
+        transcript.add(
+            f"| {step.index} | `{step.tool}` | `{step.status}` | "
+            f"{step.input_summary} | {step.output_summary} |"
+        )
+    transcript.add()
+    run = next(
+        (step for step in trace.steps if step.tool in {"run_code", "run_tests"}),
+        None,
+    )
+    transcript.bullets(
+        [
+            f"复盘：{trace.reflection.focus}",
+            f"下一步：{trace.reflection.next}",
+            f"边界：{trace.reflection.boundary}",
+            f"耗时：{perf_counter() - started:.2f}s",
+        ]
+    )
+    return (
+        bool(view.intake.observed)
+        and trace.planner.status == "off"
+        and 1 <= len(trace.steps) <= 3
+        and run is not None
+        and (run.status != "ok" or "运行状态=" in run.output_summary)
+    )
+
+
 def _run_live(
     service: SessionService,
     transcript: Transcript,
@@ -354,7 +454,7 @@ def main() -> int:
     parser.add_argument(
         "--no-live",
         action="store_true",
-        help="never call the model; decision still runs on rules, physics/chinese are skipped",
+        help="never call the model; decision/code still run on rules, physics/chinese are skipped",
     )
     parser.add_argument(
         "--out",
@@ -368,6 +468,9 @@ def main() -> int:
     # The demo wants to show the step verifier, not the default-off switch. An
     # explicit SYNAPSE_EQUALITY_CHECK=off still wins via setdefault.
     os.environ.setdefault("SYNAPSE_EQUALITY_CHECK", "on")
+    # The code case records the default-off execution boundary; an explicit
+    # SYNAPSE_EXEC=on still wins, and the step then carries a real run result.
+    os.environ.setdefault("SYNAPSE_EXEC", "off")
     settings = LLMSettings.from_env()
     # This is an explicit demo entry point: a present key is enough to run the
     # live cases, unless the caller says --no-live. Production still defaults to
@@ -431,6 +534,8 @@ def main() -> int:
             skipped.append("chinese")
     if "decision" in selected:
         results.append(_run_decision(service, transcript))
+    if "code" in selected:
+        results.append(_run_code(service, transcript))
 
     transcript.add("## 结果")
     transcript.add()
