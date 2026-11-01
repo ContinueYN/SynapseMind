@@ -25,7 +25,7 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import IO
+from typing import IO, Any
 
 from synapse.application.execution import (
     ExecutionBusy,
@@ -411,6 +411,47 @@ class _Job:
     def close(self) -> None: ...
 
 
+class _IO_COUNTERS(ctypes.Structure):
+    _fields_ = [
+        ("ReadOperationCount", ctypes.c_ulonglong),
+        ("WriteOperationCount", ctypes.c_ulonglong),
+        ("OtherOperationCount", ctypes.c_ulonglong),
+        ("ReadTransferCount", ctypes.c_ulonglong),
+        ("WriteTransferCount", ctypes.c_ulonglong),
+        ("OtherTransferCount", ctypes.c_ulonglong),
+    ]
+
+
+class _JOBOBJECT_BASIC_LIMIT_INFORMATION(ctypes.Structure):
+    _fields_ = [
+        ("PerProcessUserTimeLimit", ctypes.c_longlong),
+        ("PerJobUserTimeLimit", ctypes.c_longlong),
+        ("LimitFlags", ctypes.c_uint32),
+        ("MinimumWorkingSetSize", ctypes.c_size_t),
+        ("MaximumWorkingSetSize", ctypes.c_size_t),
+        ("ActiveProcessLimit", ctypes.c_uint32),
+        ("Affinity", ctypes.c_size_t),
+        ("PriorityClass", ctypes.c_uint32),
+        ("SchedulingClass", ctypes.c_uint32),
+    ]
+
+
+class _JOBOBJECT_EXTENDED_LIMIT_INFORMATION(ctypes.Structure):
+    _fields_ = [
+        ("BasicLimitInformation", _JOBOBJECT_BASIC_LIMIT_INFORMATION),
+        ("IoInfo", _IO_COUNTERS),
+        ("ProcessMemoryLimit", ctypes.c_size_t),
+        ("JobMemoryLimit", ctypes.c_size_t),
+        ("PeakProcessMemoryUsed", ctypes.c_size_t),
+        ("PeakJobMemoryUsed", ctypes.c_size_t),
+    ]
+
+
+def _last_error() -> int:
+    getter = getattr(ctypes, "get_last_error", None)
+    return int(getter()) if callable(getter) else 0
+
+
 class _WindowsJob(_Job):
     _KILL_ON_JOB_CLOSE = 0x00002000
     _ACTIVE_PROCESS = 0x00000008
@@ -420,28 +461,31 @@ class _WindowsJob(_Job):
     def __init__(self, memory_mb: int) -> None:
         if sys.platform != "win32":
             raise OSError("Windows job objects are unavailable")
-        self._kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-        self._kernel32.CreateJobObjectW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
-        self._kernel32.CreateJobObjectW.restype = wintypes.HANDLE
+        win_dll = getattr(ctypes, "WinDLL", None)
+        if not callable(win_dll):
+            raise OSError("ctypes.WinDLL is unavailable")
+        self._kernel32: Any = win_dll("kernel32", use_last_error=True)
+        self._kernel32.CreateJobObjectW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p]
+        self._kernel32.CreateJobObjectW.restype = ctypes.c_void_p
         self._kernel32.SetInformationJobObject.argtypes = [
-            wintypes.HANDLE,
+            ctypes.c_void_p,
             ctypes.c_int,
             ctypes.c_void_p,
-            wintypes.DWORD,
+            ctypes.c_uint32,
         ]
-        self._kernel32.SetInformationJobObject.restype = wintypes.BOOL
+        self._kernel32.SetInformationJobObject.restype = ctypes.c_int
         self._kernel32.AssignProcessToJobObject.argtypes = [
-            wintypes.HANDLE,
-            wintypes.HANDLE,
+            ctypes.c_void_p,
+            ctypes.c_void_p,
         ]
-        self._kernel32.AssignProcessToJobObject.restype = wintypes.BOOL
-        self._kernel32.TerminateJobObject.argtypes = [wintypes.HANDLE, wintypes.UINT]
-        self._kernel32.TerminateJobObject.restype = wintypes.BOOL
-        self._kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
-        self._kernel32.CloseHandle.restype = wintypes.BOOL
+        self._kernel32.AssignProcessToJobObject.restype = ctypes.c_int
+        self._kernel32.TerminateJobObject.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+        self._kernel32.TerminateJobObject.restype = ctypes.c_int
+        self._kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+        self._kernel32.CloseHandle.restype = ctypes.c_int
         self._handle: int | None = self._kernel32.CreateJobObjectW(None, None)
         if not self._handle:
-            raise OSError(ctypes.get_last_error(), "CreateJobObjectW failed")
+            raise OSError(_last_error(), "CreateJobObjectW failed")
         try:
             info = _JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
             info.BasicLimitInformation.LimitFlags = (
@@ -456,7 +500,7 @@ class _WindowsJob(_Job):
                 ctypes.sizeof(info),
             )
             if not ok:
-                raise OSError(ctypes.get_last_error(), "SetInformationJobObject failed")
+                raise OSError(_last_error(), "SetInformationJobObject failed")
         except BaseException:
             self.close()
             raise
@@ -466,7 +510,7 @@ class _WindowsJob(_Job):
         if handle is None or self._handle is None:
             raise OSError("process/job handle unavailable")
         if not self._kernel32.AssignProcessToJobObject(self._handle, handle):
-            raise OSError(ctypes.get_last_error(), "AssignProcessToJobObject failed")
+            raise OSError(_last_error(), "AssignProcessToJobObject failed")
 
     def terminate(self) -> None:
         if self._handle:
@@ -477,43 +521,6 @@ class _WindowsJob(_Job):
         if handle:
             self._kernel32.CloseHandle(handle)
             self._handle = None
-
-
-if sys.platform == "win32":
-    from ctypes import wintypes
-
-    class _IO_COUNTERS(ctypes.Structure):
-        _fields_ = [
-            ("ReadOperationCount", ctypes.c_ulonglong),
-            ("WriteOperationCount", ctypes.c_ulonglong),
-            ("OtherOperationCount", ctypes.c_ulonglong),
-            ("ReadTransferCount", ctypes.c_ulonglong),
-            ("WriteTransferCount", ctypes.c_ulonglong),
-            ("OtherTransferCount", ctypes.c_ulonglong),
-        ]
-
-    class _JOBOBJECT_BASIC_LIMIT_INFORMATION(ctypes.Structure):
-        _fields_ = [
-            ("PerProcessUserTimeLimit", ctypes.c_longlong),
-            ("PerJobUserTimeLimit", ctypes.c_longlong),
-            ("LimitFlags", wintypes.DWORD),
-            ("MinimumWorkingSetSize", ctypes.c_size_t),
-            ("MaximumWorkingSetSize", ctypes.c_size_t),
-            ("ActiveProcessLimit", wintypes.DWORD),
-            ("Affinity", ctypes.c_size_t),
-            ("PriorityClass", wintypes.DWORD),
-            ("SchedulingClass", wintypes.DWORD),
-        ]
-
-    class _JOBOBJECT_EXTENDED_LIMIT_INFORMATION(ctypes.Structure):
-        _fields_ = [
-            ("BasicLimitInformation", _JOBOBJECT_BASIC_LIMIT_INFORMATION),
-            ("IoInfo", _IO_COUNTERS),
-            ("ProcessMemoryLimit", ctypes.c_size_t),
-            ("JobMemoryLimit", ctypes.c_size_t),
-            ("PeakProcessMemoryUsed", ctypes.c_size_t),
-            ("PeakJobMemoryUsed", ctypes.c_size_t),
-        ]
 
 
 _RUNNER = r'''"""Generated harness. Keep the audit hook ahead of all student code."""
