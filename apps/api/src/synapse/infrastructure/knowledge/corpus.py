@@ -14,6 +14,7 @@ _MAX_TITLE = 60
 _MAX_BODY = 600
 _MAX_TAG = 24
 _MAX_TAGS = 8
+_MAX_SUBJECT = 40
 _CARD_ID = re.compile(r"^K_[A-Z0-9_]+$")
 
 
@@ -50,9 +51,9 @@ def _card(raw: object, where: str) -> KnowledgeCard:
     extra = set(raw) - {"id", "subject", "title", "body", "tags", "source"}
     if extra:
         raise ValueError(f"{where}: unexpected fields {sorted(extra)}")
-    subject = _text(raw.get("subject"), f"{where}.subject", limit=20)
-    if subject not in {"math", "physics", "chinese"}:
-        raise ValueError(f"{where}.subject: unsupported subject {subject!r}")
+    # The domain is an open label, not a whitelist: a card may be about a
+    # programming pattern or a decision framework just as well as a math topic.
+    subject = _text(raw.get("subject"), f"{where}.subject", limit=_MAX_SUBJECT)
     tags_raw = raw.get("tags")
     if not isinstance(tags_raw, list) or not tags_raw:
         raise ValueError(f"{where}.tags: expected a non-empty array")

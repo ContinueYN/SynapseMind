@@ -135,7 +135,7 @@ export function listReviewItems(): Promise<ReviewListing> {
  */
 export function searchKnowledge(
   query: string,
-  subject?: "math" | "physics" | "chinese",
+  subject?: string,
   limit = 3,
 ): Promise<KnowledgeSearch> {
   const params = new URLSearchParams({ q: query, limit: String(limit) });

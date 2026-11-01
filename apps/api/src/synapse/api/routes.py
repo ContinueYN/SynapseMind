@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from math import ceil
-from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
@@ -133,7 +132,7 @@ def list_review_items(
 @router.get("/knowledge/search", response_model=KnowledgeSearchOut)
 def search_knowledge(
     q: str = Query(min_length=2, max_length=200),
-    subject: Literal["math", "physics", "chinese"] | None = Query(default=None),
+    subject: str | None = Query(default=None, min_length=1, max_length=40),
     limit: int = Query(default=3, ge=1, le=5),
     knowledge: KnowledgeService = Depends(get_knowledge_service),
 ) -> KnowledgeSearchOut:

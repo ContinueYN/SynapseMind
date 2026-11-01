@@ -94,6 +94,17 @@ def test_eval_query_set_targets_existing_cards_and_covers_every_card() -> None:
     assert targeted == set(cards)
 
 
+def test_corpus_accepts_an_open_domain_label() -> None:
+    line = (
+        '{"id":"K_DECISION_TEST","subject":"decision","title":"t","body":"b",'
+        '"tags":["a"],"source":{"title":"s","url":"https://example.com","license":"CC"}}'
+    )
+
+    cards = parse_corpus(line, origin="test")
+
+    assert cards[0].subject == "decision"
+
+
 def test_corpus_rejects_duplicate_ids() -> None:
     line = (
         '{"id":"K_X","subject":"math","title":"t","body":"b","tags":["a"],'
@@ -170,6 +181,20 @@ def test_api_returns_cited_hits_and_matches_the_spec() -> None:
 
     schema = json.loads(SPEC_PATH.read_text(encoding="utf-8"))
     Draft202012Validator(schema).validate(payload)
+
+
+def test_api_accepts_an_open_domain_filter() -> None:
+    client = _client(KnowledgeService(_index()))
+
+    response = client.get(
+        "/api/v1/knowledge/search",
+        params={"q": "恒成立 参数 最值", "subject": "decision"},
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["enabled"] is True
+    assert payload["hits"] == []
 
 
 def test_api_rejects_a_too_short_query_and_too_many_hits() -> None:

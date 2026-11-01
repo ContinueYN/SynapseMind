@@ -41,7 +41,7 @@
 
 `review-queue.schema.json` 是教师复核页的只读列表契约（v0.1）。它只暴露卡片的 `layer`/`label`/`node_id`/`one_line`/`confidence` 与来源会话、时间，**不含学生原文**；`GET /api/v1/review/items` 只读，不写回复核库，也不推进任何会话。人工判断（准确 / 说得通但不对 / 空泛）由复核者在浏览器里标记并导出 CSV，不进入服务端契约。
 
-`knowledge-search.schema.json` 是本地知识卡检索的只读契约（v0.1）。`GET /api/v1/knowledge/search` 只接受概念标签（`q`）和学科过滤，**不接受学生作答原文**；返回 `card_id`、标题、摘录、出处（title/url/license）与余弦分数。`enabled=false` 表示 `SYNAPSE_RAG` 未开启，此时 `hits` 为空，客户端隐藏面板。检索不推进会话、不修改卡点卡、不写库；没有模型时 API 返回 503 并带安装提示，而不是静默返回空结果。
+`knowledge-search.schema.json` 是本地知识卡检索的只读契约（v0.1）。`GET /api/v1/knowledge/search` 只接受概念标签（`q`）和**开放领域标签**过滤（`subject`，1–40 字符，不是白名单），**不接受学生作答原文**；返回 `card_id`、标题、摘录、出处（title/url/license）与余弦分数。`enabled=false` 表示 `SYNAPSE_RAG` 未开启，此时 `hits` 为空，客户端隐藏面板。检索不推进会话、不修改卡点卡、不写库；没有模型时 API 返回 503 并带安装提示，而不是静默返回空结果。
 
 `code-execution.schema.json` 是显式代码执行的响应契约（Phase 2，v0.1）。`POST /api/v1/executions` 只接受调用方明确提交的 Python 代码与可选 unittest 文件，不读会话、不写会话、不选代码、不调模型；默认 `SYNAPSE_EXEC=off`，关闭时返回 **403**，不伪造一次运行。开启后仍有墙钟上限、内存/单进程限制、输出上限与静态闸门（导入白名单、禁止 `eval`/`exec`/`open`/进程/网络入口）；这是本地受限执行，不是容器级安全沙箱，不能用来运行恶意代码。`pass` 只表示退出码为 0 或提交的测试通过，不表示代码正确、覆盖完整或通过了隐藏测试；`timeout` 和 `rejected` 的 `exit_code` 必须为 `null`，`rejected` 至少带一条 finding。
 

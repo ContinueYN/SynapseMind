@@ -5,13 +5,6 @@ import { useEffect, useState } from "react";
 import { searchKnowledge } from "@/src/lib/api/client";
 import type { KnowledgeSearch } from "@/src/lib/api/types";
 
-const SUBJECTS = ["math", "physics", "chinese"] as const;
-type KnowledgeSubject = (typeof SUBJECTS)[number];
-
-function isSubject(value: string | undefined): value is KnowledgeSubject {
-  return value !== undefined && (SUBJECTS as readonly string[]).includes(value);
-}
-
 /**
  * Sourced concept explanations beside a diagnosis card.
  *
@@ -36,8 +29,8 @@ export function KnowledgePanel({
     const cleaned = query.trim();
     if (!cleaned) return;
 
-    const filter = isSubject(subject) ? subject : undefined;
-    searchKnowledge(cleaned, filter)
+    const filter = subject?.trim();
+    searchKnowledge(cleaned, filter ? filter : undefined)
       .then((data) => {
         if (!cancelled) setResult(data);
       })

@@ -65,6 +65,21 @@ describe("KnowledgePanel", () => {
     expect(screen.getByText(/CC BY-NC-SA 4.0/)).toBeInTheDocument();
   });
 
+  it("forwards an open domain label instead of dropping it", async () => {
+    vi.mocked(searchKnowledge).mockResolvedValue({
+      version: "0.1",
+      enabled: true,
+      query: "恒成立与最值",
+      hits: [],
+    });
+
+    render(<KnowledgePanel query="恒成立与最值" subject="decision" />);
+
+    await waitFor(() =>
+      expect(searchKnowledge).toHaveBeenCalledWith("恒成立与最值", "decision"),
+    );
+  });
+
   it("hides itself when retrieval fails, without covering the diagnosis", async () => {
     vi.mocked(searchKnowledge).mockRejectedValue(new Error("503"));
 

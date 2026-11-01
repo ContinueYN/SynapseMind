@@ -937,7 +937,7 @@ export interface operations {
         parameters: {
             query: {
                 q: string;
-                subject?: ("math" | "physics" | "chinese") | null;
+                subject?: string | null;
                 limit?: number;
             };
             header?: never;
