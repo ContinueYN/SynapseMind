@@ -164,6 +164,7 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 - 检索：按 `q` + 可选 `subject` + 可选 `verification` 过滤，余弦相似度线性扫描，默认取前 3 条、分数低于 `0.55` 的不返回。阈值由评测标定：68 张语料下无关查询最高 0.490，最弱的相关查询 0.608，`0.35` 会让六条无关查询全部通过。语料只有几十张，暂不引入 pgvector；`KnowledgeRetriever` 端口保留替换点。
 - 评测：`python scripts/eval/knowledge_retrieval.py` 用固定 80 条概念查询跑 top-1 / top-3、subject/verification 过滤、无关查询拒答与阈值扫描（top-1 66/68、top-3 68/68、过滤 6/6、拒答 6/6）；`--check` 不加载模型，只校验语料和查询集。报告写到 `eval/reports/`（不入公开树），含语料/查询集哈希和复现命令。
 - 前端在诊断页、入口页和卡点卡页渲染 `KnowledgePanel`，标题前标出卡片类型；`enabled=false`、无命中或请求失败时整块隐藏，不遮挡诊断。通用入口只用 `intake.domain.label` 这类系统标签检索领域级框架。
+- 来源维护检查（**不是运行时校验**）：`python scripts/checks/check_knowledge_sources.py` 只检查 URL 主机、凭据和 license 前缀；加 `--fetch` 才会对语料里的每个唯一 URL 发 HEAD（被拒时用 Range GET 重试），报告可达性/重定向/超时。命令从仓库根运行，可访问性只说明这次网络请求到了哪里，不证明卡片内容正确；Wikipedia 在部分网络下会超时，不能据此判定来源失效。
 
 ```powershell
 cd apps/api
