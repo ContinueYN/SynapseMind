@@ -58,7 +58,7 @@ CODE_WORK = (
     "目标是让 add(2, 3) 返回 5；已知它现在返回 -1，也没有报错；"
     "约束是不能改测试。我看了一遍，觉得是 print 写错了。"
 )
-CODE_PROBE = "我跑了 add(2, 3)，返回 -1；预期是 5。"
+CODE_PROBE = "最小复现是 add(2, 3)；输出是 -1，预期是 5。"
 CODE_SNIPPET = "def add(a, b):\n    return a - b\n"
 CODE_TESTS = (
     "import unittest\n"

@@ -94,6 +94,9 @@ _CUES: dict[NodeKind, tuple[str, ...]] = {
         "所以",
         "推理",
     ),
+    # EXECUTABLE's reproduction gap is ACTION, so a minimal-reproduction phrase
+    # belongs here. Bare "复现" is deliberately not a cue: "没有复现" would
+    # otherwise count as a reproduction. CHECK is for what was changed.
     NodeKind.ACTION: (
         "试过",
         "我做了",
@@ -103,6 +106,9 @@ _CUES: dict[NodeKind, tuple[str, ...]] = {
         "执行了",
         "尝试过",
         "已经改",
+        "最小复现",
+        "复现步骤",
+        "复现方式",
     ),
     NodeKind.EVIDENCE: (
         "因为",
@@ -119,7 +125,6 @@ _CUES: dict[NodeKind, tuple[str, ...]] = {
         "验证",
         "检查",
         "对比",
-        "复现",
         "确认",
         "怎么判断",
         "算解决",

@@ -268,6 +268,35 @@ class TestAnswerAwareIntake:
         assert physics.probe.kind is NodeKind.GIVEN
         assert "单位" in physics.probe.question
 
+    def test_a_minimal_reproduction_answer_fills_the_reproduction_gap(self) -> None:
+        """The question asks for a reproduction; the natural answer must count."""
+
+        code = build_domain_intake(
+            _problem("programming"),
+            REGISTRY.profile_for("programming"),
+            "目标是让 add(2, 3) 返回 5；已知它返回 -1；约束是不能改测试。"
+            "最小复现是 add(2, 3)；输出是 -1，预期是 5。",
+        )
+
+        assert "尝试" in code.observed
+        assert code.gaps == ("没看到已经试过哪些改动。",)
+        assert code.probe is not None
+        assert code.probe.kind is NodeKind.CHECK
+        assert "试过哪些改动" in code.probe.question
+
+    def test_a_negated_reproduction_is_still_a_gap(self) -> None:
+        """A bare "复现" is not a cue: "没有复现" must not fill the gap."""
+
+        code = build_domain_intake(
+            _problem("programming"),
+            REGISTRY.profile_for("programming"),
+            "目标是让 add(2, 3) 返回 5；已知它返回 -1；约束是不能改测试。我没有复现。",
+        )
+
+        assert code.probe is not None
+        assert code.probe.kind is NodeKind.ACTION
+        assert any("没看到复现" in gap for gap in code.gaps)
+
     def test_a_generic_probe_falls_back_to_its_shared_question(self) -> None:
         intake = build_domain_intake(
             _problem("generic"),
