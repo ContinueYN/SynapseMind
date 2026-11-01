@@ -1,11 +1,12 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
 
 import { IntakeView } from "./IntakeView";
 import type { DomainIntake } from "@/src/lib/api/types";
 
 const GENERIC: DomainIntake = {
-  version: "0.3",
+  version: "0.4",
   domain: {
     name: "generic",
     label: "通用问题",
@@ -69,6 +70,17 @@ const EXTRACTED: DomainIntake = {
   ],
 };
 
+const WITH_PROBE: DomainIntake = {
+  ...WITH_ATTEMPT,
+  clarifier: null,
+  probe: {
+    kind: "constraint",
+    question: "哪些条件不能动？写一句时间、范围或关系上的限制。",
+    answered: 1,
+    limit: 3,
+  },
+};
+
 describe("IntakeView", () => {
   it("never shows a confidence percentage when the domain is a guess", () => {
     render(<IntakeView intake={GENERIC} sessionId="S_GENERIC" />);
@@ -129,6 +141,28 @@ describe("IntakeView", () => {
     expect(screen.getByText(/形式检查 · 未检查/)).toBeInTheDocument();
     expect(screen.queryByText(/未发现反例/)).not.toBeInTheDocument();
     expect(screen.queryByText(/通过/)).not.toBeInTheDocument();
+  });
+
+  it("asks one missing structure piece and sends the answer back", async () => {
+    const onProbe = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    render(
+      <IntakeView
+        intake={WITH_PROBE}
+        onProbe={onProbe}
+        sessionId="S_DECISION"
+      />,
+    );
+
+    expect(
+      screen.getByText(/还缺一块结构：哪些条件不能动/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/已补 1\/3 次/)).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("补这个缺口"), "收入不能降。");
+    await user.click(screen.getByRole("button", { name: /补进入口整理/ }));
+
+    expect(onProbe).toHaveBeenCalledWith("收入不能降。");
   });
 
   it("keeps the student-extracted graph separate from the generated one", () => {

@@ -31,6 +31,7 @@ const MODE_LABEL: Record<DomainIntake["domain"]["verification"], string> = {
 
 type IntakeNode = NonNullable<DomainIntake["graph"]>[number];
 type IntakeCheck = NonNullable<DomainIntake["verifications"]>[number];
+type IntakeProbe = NonNullable<DomainIntake["probe"]>;
 
 const NODE_LABEL: Record<IntakeNode["kind"], string> = {
   goal: "目标",
@@ -64,6 +65,8 @@ interface IntakeViewProps {
   busy?: boolean;
   /** When present, the single clarifying question becomes answerable once. */
   onClarify?: (answer: string) => Promise<void>;
+  /** When present, the current structural follow-up becomes answerable once. */
+  onProbe?: (answer: string) => Promise<void>;
 }
 
 export function IntakeView({
@@ -72,9 +75,12 @@ export function IntakeView({
   notice,
   busy = false,
   onClarify,
+  onProbe,
 }: IntakeViewProps) {
   const [draft, setDraft] = useState("");
+  const [probeDraft, setProbeDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [sendingProbe, setSendingProbe] = useState(false);
   const domain = intake.domain;
   const mode = MODE_LABEL[domain.verification];
   const confidence = Math.round(domain.confidence * 100);
@@ -85,6 +91,7 @@ export function IntakeView({
   const graph = intake.graph ?? [];
   const verifications = intake.verifications ?? [];
   const origin = intake.origin ?? null;
+  const probe: IntakeProbe | null = intake.probe ?? null;
 
   async function clarify(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -98,6 +105,21 @@ export function IntakeView({
       // The parent surfaces the request error; keep the draft so it is not lost.
     } finally {
       setSending(false);
+    }
+  }
+
+  async function fillGap(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const text = probeDraft.trim();
+    if (!text || !onProbe || sendingProbe || busy) return;
+    setSendingProbe(true);
+    try {
+      await onProbe(text);
+      setProbeDraft("");
+    } catch {
+      // The parent surfaces the request error; keep the draft so it is not lost.
+    } finally {
+      setSendingProbe(false);
     }
   }
 
@@ -245,6 +267,44 @@ export function IntakeView({
                     </span>
                   </button>
                   <span className="sm-fine">只补充一次，仍然不定位卡点。</span>
+                </div>
+              </form>
+            ) : null}
+          </>
+        ) : null}
+
+        {probe ? (
+          <>
+            <p className="sm-note" style={{ marginTop: 16 }}>
+              还缺一块结构：{probe.question}
+            </p>
+            {onProbe ? (
+              <form className="sm-form" onSubmit={fillGap} style={{ marginTop: 16 }}>
+                <label className="sm-f">
+                  <span className="sm-f-label">补这个缺口</span>
+                  <textarea
+                    disabled={sendingProbe || busy}
+                    maxLength={500}
+                    onChange={(event) => setProbeDraft(event.target.value)}
+                    placeholder="用一句话补上；不写也可以先离开"
+                    rows={2}
+                    value={probeDraft}
+                  />
+                </label>
+                <div className="sm-form-foot">
+                  <button
+                    className="sm-cta"
+                    disabled={sendingProbe || busy || !probeDraft.trim()}
+                    type="submit"
+                  >
+                    {sendingProbe ? "正在补入" : "补进入口整理"}
+                    <span aria-hidden="true" className="sm-ar">
+                      →
+                    </span>
+                  </button>
+                  <span className="sm-fine">
+                    已补 {probe.answered}/{probe.limit} 次；只补结构，不判对错。
+                  </span>
                 </div>
               </form>
             ) : null}

@@ -87,7 +87,7 @@ def test_the_decision_intake_reads_the_students_own_words(client: TestClient) ->
 
     intake = body["intake"]
     assert intake is not None
-    assert intake["version"] == "0.3"
+    assert intake["version"] == "0.4"
     # What the submission mentions, and only that.
     assert "目标" in intake["observed"]
     assert "选项" in intake["observed"]
@@ -250,6 +250,86 @@ def test_a_blank_or_oversized_clarifier_is_rejected(client: TestClient) -> None:
 
     oversized = client.post(
         f"/api/v1/sessions/{session_id}/intake",
+        json={"answer": "补" * 501},
+    )
+    assert oversized.status_code == 422, oversized.text
+
+
+def test_structural_follow_ups_are_one_at_a_time_and_stop_after_three(
+    client: TestClient,
+) -> None:
+    created = _start(client, DECISION)
+    session_id = created["session_id"]
+    intake = created["intake"]
+    assert intake["clarifier"] is None
+    assert intake["probe"] is not None
+    assert intake["probe"]["kind"] == "goal"
+    assert intake["probe"]["answered"] == 0
+    assert intake["probe"]["limit"] == 3
+
+    first = client.post(
+        f"/api/v1/sessions/{session_id}/intake/probe",
+        json={"answer": "目标：我想两年内转做后端。"},
+    )
+    assert first.status_code == 200, first.text
+    after_first = first.json()
+    assert after_first["state"] == "CLOSED"
+    assert after_first["diagnosis"] is None
+    assert after_first["intake"]["probe"]["answered"] == 1
+    assert after_first["intake"]["probe"]["kind"] != "goal"
+    assert "目标" in after_first["intake"]["observed"]
+
+    for answer in (
+        "选项：要么留在公司转岗，要么跳槽去小厂。",
+        "约束：收入不能下降。",
+    ):
+        response = client.post(
+            f"/api/v1/sessions/{session_id}/intake/probe",
+            json={"answer": answer},
+        )
+        assert response.status_code == 200, response.text
+
+    # The budget is three answers; the third response no longer offers a question.
+    last = response.json()
+    assert last["intake"]["probe"] is None
+    assert last["intake"]["clarifier"] is None
+
+    fourth = client.post(
+        f"/api/v1/sessions/{session_id}/intake/probe",
+        json={"answer": "再补一句。"},
+    )
+    assert fourth.status_code == 409, fourth.text
+
+    reloaded = client.get(f"/api/v1/sessions/{session_id}").json()
+    assert reloaded["intake"]["probe"] is None
+    assert reloaded["intake"]["observed"] == last["intake"]["observed"]
+
+
+def test_an_open_clarifier_blocks_a_structural_follow_up(client: TestClient) -> None:
+    created = _start(client, UNKNOWN)
+    assert created["intake"]["clarifier"] is not None
+    assert created["intake"]["probe"] is None
+
+    response = client.post(
+        f"/api/v1/sessions/{created['session_id']}/intake/probe",
+        json={"answer": "目标：先把问题说清楚。"},
+    )
+
+    assert response.status_code == 409, response.text
+
+
+def test_a_blank_or_oversized_structural_answer_is_rejected(client: TestClient) -> None:
+    created = _start(client, DECISION)
+    session_id = created["session_id"]
+
+    blank = client.post(
+        f"/api/v1/sessions/{session_id}/intake/probe",
+        json={"answer": "   "},
+    )
+    assert blank.status_code == 422, blank.text
+
+    oversized = client.post(
+        f"/api/v1/sessions/{session_id}/intake/probe",
         json={"answer": "补" * 501},
     )
     assert oversized.status_code == 422, oversized.text

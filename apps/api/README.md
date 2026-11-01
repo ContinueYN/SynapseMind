@@ -100,7 +100,8 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 | `POST` | `/api/v1/sessions` | 交题 + 过程，返回首问 |
 | `GET` | `/api/v1/sessions/{id}` | 恢复会话/当前问题 |
 | `POST` | `/api/v1/sessions/{id}/turns` | 回答当前探针 |
-| `POST` | `/api/v1/sessions/{id}/intake` | 入口整理的唯一一次补充（不推进会话、不出卡） |
+| `POST` | `/api/v1/sessions/{id}/intake` | 入口整理的领域澄清（唯一一次；不推进会话、不出卡） |
+| `POST` | `/api/v1/sessions/{id}/intake/probe` | 入口整理的结构补充（一次一个缺口，最多 3 次；不推进会话、不出卡） |
 | `POST` | `/api/v1/sessions/{id}/steps` | 验证一条步骤（只读，不推进会话） |
 | `POST` | `/api/v1/sessions/{id}/card/disagree` | 记录卡点卡异议（写回会话 + 本地复核队列） |
 | `GET` | `/api/v1/review/items` | 只读列出异议队列（不含学生原文） |
@@ -114,12 +115,13 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 - 一次只返回一个 `prompt.question`；最多 6 轮。
 - 后验 `≥0.80` 且领先 `≥0.25` 才出卡；到轮次上限仍 `<0.55` 明确不出确定卡点。
 - `/intake` 只接受入口整理里的那一个澄清问题（body `{"answer": "..."}`，1–500 字）：把补充并入 `initial_answer`、重新派生 `observed`/`gaps`，然后让 `clarifier` 变成 `null`。如果补充明确说了“这是决策问题/代码问题/…”，会话的展示领域和清单会切到对应标签（只把 `domain_override` 存在会话上，不改提交的题面）；`domain_confidence` 记为 0.8，仍然没有验证。会话仍是 `CLOSED`，不推进状态、不出卡、不给答案；第二次补充返回 200 + notice「只接受一次」，没有待补充问题时返回 409，空白/超长返回 422。
+- `/intake/probe` 只回答当前那**一个**结构缺口（body `{"answer": "..."}`，1–500 字）：把补充并入 `initial_answer`、重新派生 `observed`/`gaps`，然后把 `intake.probe` 换成下一个缺口或 `null`。最多接受 3 次，一次只显示一个问题；没有待补充缺口、澄清问题还没回答或次数用完时返回 **409**，空白/超长返回 **422**。它不推进状态、不出卡、不给答案，不会因为这段补充重新判定领域，也不会判断对错。
 - `/steps` 只验证提交的这一步（`specs/step-verification.schema.json`）：不推进状态、不出卡；`unknown` 表示未启用/读不懂/没有可判的断言，不是“这步正确”。
 - `/review/items` 只读（`specs/review-queue.schema.json`）：只返回卡面结论与位置，不含学生原文；没有鉴权，判断也不写回服务端——教师在浏览器里标记后自行导出 CSV。
 - `/knowledge/search` 只读（`specs/knowledge-search.schema.json` v0.2）：`q` 是概念标签，不是学生作答原文；`subject` 是开放标签（1–40 字符），可选 `verification` 过滤（formal/executable/empirical/argumentative）；返回卡片的五类 `kind`、`subject`、`verifications`、标题、摘录、出处（title/url/license）和余弦分数。`enabled=false` 表示 `SYNAPSE_RAG` 未开启；开启但模型不可用时返回 **503**，不会静默返回空结果。
 - `SessionOut.subject` 是插件键（内部路由用）；`SessionOut.domain` 才是展示用的开放领域标签与验证方式（`formal`/`executable`/`empirical`/`argumentative`）。入口澄清若点名了领域，只改 `domain`（展示/清单/检索），`subject` 仍是提交时的插件键。前端只在 `domain.name` 为数学/物理时显示单步检查入口。
 - 没有参考结构的问题（开放领域、未知领域，或本环境没有生成器）返回 `SessionOut.intake`（`specs/` 未单列 schema，字段见 `DomainIntakeOut`）；它不是卡点卡的简化版：不定位卡点、不估把握、不给唯一答案。
-- `intake` v0.2 会读学生自己那段话（随会话保存的 `initial_answer`）：`observed` 列出被认出的结构项（目标/约束/选项/风险…），`gaps` 列出该验证方式要求但没提到的项（最多 3 条）。两者都只是“有没有写到”，不是对错判断；选项只列出、不排序，决策问题也不会被推荐其中一个。没有作答时两段都为空。识别是确定性线索匹配（`application/generic_slots.py`），不调用模型，因此离线模式同样可用。
+- `intake` v0.4 会读学生自己那段话（随会话保存的 `initial_answer`）：`observed` 列出被认出的结构项（目标/约束/选项/风险…），`gaps` 列出该验证方式要求但没提到的项（最多 3 条）。两者都只是“有没有写到”，不是对错判断；选项只列出、不排序，决策问题也不会被推荐其中一个。没有作答时两段都为空。识别是确定性线索匹配（`application/generic_slots.py`），不调用模型，因此离线模式同样可用。
 
 ## 本地会话快照
 
@@ -127,7 +129,7 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 
 - 同一个文件存**会话快照**和**运行时生成的题**（标注种子题仍来自 `seed.py`）。只存会话不存生成题的话，重启后生成题会话就找不到自己的图；生成题图首次写入后优先复用，换生成器/prompt 后删文件才会重建。
 - 快照是版本化 JSON（`infrastructure/snapshots.py`），不是 `pickle`；损坏或版本不匹配会抛 `SnapshotError`，不会静默读成半条会话。
-- 快照包含学生探针回答、证据链、`initial_answer`（含最多一次澄清补充）、`domain_override` 和 `work_findings`（学生自己的式子），因此这个文件是**本地学生数据**：`var/` 已忽略，没有 TTL/加密/清理任务，删文件即清空。
+- 快照包含学生探针回答、证据链、`initial_answer`（含澄清与最多三次结构补充）、`domain_override`、`intake_probe_count` 和 `work_findings`（学生自己的式子），因此这个文件是**本地学生数据**：`var/` 已忽略，没有 TTL/加密/清理任务，删文件即清空。
 - 每个操作独立连接；同一会话的写入是 compare-and-swap（`revision`），过期写返回 **409**，不会覆盖新状态；服务层不自动重试。SQLite 仍是单写者，多进程下 CAS 只保证不丢更新，不保证吞吐。这是本机单用户工具的边界，不是多教师并发方案。
 - 没有 PostgreSQL、Alembic、Redis；`ProblemRepository` / `SessionRepository` 端口不变，换 PostgreSQL 时只换适配器。
 

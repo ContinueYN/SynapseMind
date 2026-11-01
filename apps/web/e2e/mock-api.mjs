@@ -136,7 +136,7 @@ const SESSIONS = {
       confidence: 1,
     },
     intake: {
-      version: "0.3",
+      version: "0.4",
       domain: {
         name: "programming",
         label: "编程",

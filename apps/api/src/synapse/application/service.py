@@ -27,7 +27,12 @@ from synapse.application.domains import (
 )
 from synapse.application.factory import SessionFactory
 from synapse.application.hint_builder import build_structure_hint
-from synapse.application.intake import INTAKE_NOTICE, DomainIntake, build_domain_intake
+from synapse.application.intake import (
+    INTAKE_NOTICE,
+    MAX_INTAKE_PROBES,
+    DomainIntake,
+    build_domain_intake,
+)
 from synapse.application.limits import StepRateLimited, StepRateLimiter
 from synapse.application.planner import ProbePlanner
 from synapse.application.ports import (
@@ -70,6 +75,10 @@ class InvalidAnswer(ValueError):
 
 class ClarifierUnavailable(RuntimeError):
     """The intake has no open clarifying question (or already used its one)."""
+
+
+class IntakeProbeUnavailable(RuntimeError):
+    """The intake has no open structural follow-up (or its budget is used)."""
 
 
 # A student-named domain is not a detector score. Keep the displayed confidence
@@ -288,6 +297,39 @@ class SessionService:
             session=session,
             intake=self._intake_for(session),
             notice=notice,
+        )
+
+    def answer_intake_probe(self, session_id: str, answer: str) -> SessionView:
+        """Append one answer to the intake's structural follow-up.
+
+        This is not a probe turn: state, hypotheses and diagnosis stay untouched,
+        and the text is only used to re-derive ``observed``/``gaps``. The
+        two counters are independent: the domain clarifier can be used once,
+        while structural follow-ups stop at ``MAX_INTAKE_PROBES``.
+        """
+
+        session = self._get(session_id)
+        intake = self._intake_for(session)
+        if intake is None or intake.probe is None:
+            raise IntakeProbeUnavailable("this intake has no open structural question")
+
+        cleaned = answer.strip()
+        if not cleaned:
+            raise InvalidAnswer("structural answer is empty")
+        if len(cleaned) > 500:
+            raise InvalidAnswer("structural answer is too long")
+
+        parts = [part for part in (session.initial_answer.strip(), cleaned) if part]
+        session.initial_answer = "\n".join(parts)
+        session.intake_probe_count = min(
+            session.intake_probe_count + 1,
+            MAX_INTAKE_PROBES,
+        )
+        self._sessions.save(session)
+        return SessionView(
+            session=session,
+            intake=self._intake_for(session),
+            notice="补充只增加你写到的结构；它不判断对错，也不定位卡点。",
         )
 
     def mark_card_disagree(self, session_id: str) -> DiagnosisCard:
@@ -785,6 +827,7 @@ class SessionService:
             profile,
             session.initial_answer,
             clarifier_answered=session.clarifier_answered,
+            probe_count=session.intake_probe_count,
         )
 
     def _hint(self, session: DialogueSession) -> StructureHint | None:

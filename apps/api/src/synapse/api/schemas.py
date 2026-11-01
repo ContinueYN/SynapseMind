@@ -218,6 +218,32 @@ class IntakeVerificationOut(StrictModel):
     detail: str = Field(min_length=1, max_length=400)
 
 
+class IntakeProbeOut(StrictModel):
+    """One bounded structural follow-up; not a diagnostic probe.
+
+    ``answered`` is the number already stored, so the client can show
+    ``answered/limit`` without guessing. The question asks for a missing piece
+    (goal, constraint, option…), never for an answer or a verdict.
+    """
+
+    kind: Literal[
+        "goal",
+        "given",
+        "constraint",
+        "assumption",
+        "plan",
+        "action",
+        "evidence",
+        "check",
+        "decision",
+        "risk",
+        "next",
+    ]
+    question: str = Field(min_length=1, max_length=200)
+    answered: int = Field(ge=0, le=3)
+    limit: int = Field(ge=1, le=3)
+
+
 class DomainIntakeOut(StrictModel):
     """The reference-free generic entry: structure, never a diagnosis.
 
@@ -225,10 +251,11 @@ class DomainIntakeOut(StrictModel):
     mentions, ``gaps`` is what the mode requires and the text does not mention
     (at most three). v0.3 adds ``origin``/``graph`` (the generated or extracted
     structure, with its source) and ``verifications`` (formal/empirical only).
+    v0.4 adds ``probe``: one at-a-time structural follow-up, capped at three.
     None of these is a verdict on the student's work.
     """
 
-    version: Literal["0.3"]
+    version: Literal["0.4"]
     domain: DomainOut
     one_line: str = Field(min_length=1, max_length=200)
     checklist: list[str] = Field(min_length=1, max_length=6)
@@ -238,6 +265,7 @@ class DomainIntakeOut(StrictModel):
     graph: list[IntakeNodeOut] = Field(default_factory=list, max_length=12)
     verifications: list[IntakeVerificationOut] = Field(default_factory=list, max_length=2)
     clarifier: str | None = Field(default=None, max_length=200)
+    probe: IntakeProbeOut | None = None
     next_step: str = Field(min_length=1, max_length=300)
     disclaimer: str = Field(min_length=1, max_length=300)
 
@@ -281,6 +309,12 @@ class ExitRequest(StrictModel):
 
 class ClarifierRequest(StrictModel):
     """One answer to the intake's single clarifying question."""
+
+    answer: str = Field(min_length=1, max_length=500)
+
+
+class IntakeProbeRequest(StrictModel):
+    """One answer to the intake's current structural follow-up."""
 
     answer: str = Field(min_length=1, max_length=500)
 

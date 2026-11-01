@@ -33,7 +33,7 @@ from synapse.application.domains import (
     IntakeFramework,
     VerificationMode,
 )
-from synapse.application.generic_check import structure_gaps
+from synapse.application.generic_check import StructureGap, structure_gaps
 from synapse.application.generic_slots import CueSlotExtractor
 from synapse.domain.problem.generic import (
     KIND_LABELS,
@@ -46,7 +46,7 @@ from synapse.domain.problem.generic import (
 )
 from synapse.domain.problem.models import Problem
 
-VERSION: Literal["0.3"] = "0.3"
+VERSION: Literal["0.4"] = "0.4"
 
 # Shown as the closed session's notice so a client that only reads ``notice``
 # still learns why there is no card.
@@ -55,6 +55,11 @@ INTAKE_NOTICE = "通用模式：这一轮只做结构整理和入口说明，不
 # At most three missing pieces at a time: a longer list is a checklist again, and
 # the point of ``gaps`` is to name the next thing to write, not to grade.
 _MAX_GAPS = 3
+
+# A structural follow-up is one question at a time and stops after three. It is
+# not a dialogue ladder: every answer is appended to the same local text and the
+# intake is re-derived, so the session never leaves CLOSED and no card appears.
+MAX_INTAKE_PROBES = 3
 
 _EXTRACTOR = CueSlotExtractor()
 
@@ -69,6 +74,24 @@ _CLARIFIER = (
     "只问一个：这更像代码问题、决策问题，还是学习/证明题？"
     "可以在下面补一句；说清是哪一类，就会换到对应的检查方式。"
 )
+
+# One question per missing structure kind. They only ask the student to write a
+# piece that is absent; none asks for an answer, a verdict or a recommendation.
+_GAP_QUESTIONS: dict[NodeKind, str] = {
+    NodeKind.GOAL: "先用一句话写下目标：这一轮你最想解决或得到什么？",
+    NodeKind.GIVEN: "把你手上已经有的条件、材料或已知量写一句。",
+    NodeKind.CONSTRAINT: "哪些条件不能动？写一句时间、范围或关系上的限制。",
+    NodeKind.ASSUMPTION: "你依赖了哪个假设？写一句就行。",
+    NodeKind.PLAN: "你打算按什么步骤做，或者用了哪条规则、定律？",
+    NodeKind.ACTION: "你已经试过哪一步，结果如何？",
+    NodeKind.EVIDENCE: "有哪些事实、数据或引文在支撑你的结论？",
+    NodeKind.CHECK: "什么算「解决了」，或者你打算怎么检查？",
+    NodeKind.DECISION: "先摆出两个选项（含「什么都不做」），各写一句。",
+    NodeKind.RISK: "每个选项最怕失去什么？",
+    NodeKind.NEXT: "1–2 周内能先做哪个可逆的小实验？",
+}
+
+_PROBE_NEXT_STEP = "用下面这一个问题补一句；不用重交整题，也不会判定对错。"
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,6 +191,20 @@ class IntakeNode:
 
 
 @dataclass(frozen=True, slots=True)
+class IntakeProbe:
+    """One structural follow-up question, not a diagnostic probe.
+
+    It targets a missing node kind (goal, constraint, option…), is answered at
+    most ``MAX_INTAKE_PROBES`` times, and never advances the dialogue state.
+    """
+
+    kind: NodeKind
+    question: str
+    answered: int
+    limit: int
+
+
+@dataclass(frozen=True, slots=True)
 class IntakeVerification:
     """One verifier's outcome, or ``unknown`` when it never ran."""
 
@@ -186,7 +223,7 @@ class DomainIntake:
     (student); ``verifications`` exists only for modes that have a verifier.
     """
 
-    version: Literal["0.3"]
+    version: Literal["0.4"]
     profile: DomainProfile
     confidence: float
     one_line: str
@@ -197,6 +234,7 @@ class DomainIntake:
     graph: tuple[IntakeNode, ...]
     verifications: tuple[IntakeVerification, ...]
     clarifier: str | None
+    probe: IntakeProbe | None
     next_step: str
     disclaimer: str
 
@@ -215,6 +253,7 @@ def build_domain_intake(
     attempt: str = "",
     *,
     clarifier_answered: bool = False,
+    probe_count: int = 0,
 ) -> DomainIntake:
     """Compose the intake for a reference-free problem.
 
@@ -232,13 +271,13 @@ def build_domain_intake(
     copy = _COPY[profile.framework]
     confidence = max(0.0, min(1.0, problem.domain_confidence))
     observed: tuple[str, ...] = ()
-    gaps: tuple[str, ...] = ()
+    structured_gaps: tuple[StructureGap, ...] = ()
     student_graph: GenericGraph | None = None
     if attempt.strip():
         student_graph = _EXTRACTOR.extract(problem.id, attempt)
         observed = tuple(KIND_LABELS[kind] for kind in student_graph.kinds())
-        gaps = tuple(gap.text for gap in structure_gaps(profile.framework, student_graph))
-        gaps = gaps[:_MAX_GAPS]
+        structured_gaps = structure_gaps(profile.framework, student_graph)
+    gaps = tuple(gap.text for gap in structured_gaps[:_MAX_GAPS])
 
     generated = problem.generic
     structure = generated if generated is not None and generated.nodes else student_graph
@@ -255,6 +294,10 @@ def build_domain_intake(
     if origin == "system":
         disclaimer += _GENERATED_DISCLAIMER
 
+    clarifier = _CLARIFIER if confidence < MIN_CONFIDENCE and not clarifier_answered else None
+    # One question at a time: the domain clarifier comes first, then the first
+    # missing structure piece. The count is stored per session, not per read.
+    probe = _gap_probe(structured_gaps, probe_count) if clarifier is None else None
     return DomainIntake(
         version=VERSION,
         profile=profile,
@@ -266,10 +309,33 @@ def build_domain_intake(
         origin=origin,
         graph=_intake_nodes(structure),
         verifications=_verifications(profile, structure, problem.generic_checks),
-        clarifier=(_CLARIFIER if confidence < MIN_CONFIDENCE and not clarifier_answered else None),
-        next_step=copy.next_step,
+        clarifier=clarifier,
+        probe=probe,
+        next_step=_PROBE_NEXT_STEP if probe is not None else copy.next_step,
         disclaimer=disclaimer,
     )
+
+
+def _gap_probe(
+    gaps: tuple[StructureGap, ...],
+    probe_count: int,
+) -> IntakeProbe | None:
+    """Pick the first answerable gap, unless the three-question budget is used."""
+
+    if probe_count >= MAX_INTAKE_PROBES:
+        return None
+    for gap in gaps:
+        if gap.kind is None:
+            continue
+        question = _GAP_QUESTIONS.get(gap.kind)
+        if question is not None:
+            return IntakeProbe(
+                kind=gap.kind,
+                question=question,
+                answered=probe_count,
+                limit=MAX_INTAKE_PROBES,
+            )
+    return None
 
 
 def _intake_nodes(graph: GenericGraph | None) -> tuple[IntakeNode, ...]:

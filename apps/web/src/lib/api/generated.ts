@@ -153,6 +153,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sessions/{session_id}/intake/probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Answer Intake Probe
+         * @description Append one structural answer to a reference-free intake.
+         *
+         *     The session stays closed. This is not a diagnostic probe: it adds a sentence
+         *     to the student's local text and re-derives the coverage view. There are at
+         *     most three such answers per session, and one question is shown at a time.
+         */
+        post: operations["answer_intake_probe_api_v1_sessions__session_id__intake_probe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sessions/{session_id}/steps": {
         parameters: {
             query?: never;
@@ -345,6 +369,7 @@ export interface components {
          *     mentions, ``gaps`` is what the mode requires and the text does not mention
          *     (at most three). v0.3 adds ``origin``/``graph`` (the generated or extracted
          *     structure, with its source) and ``verifications`` (formal/empirical only).
+         *     v0.4 adds ``probe``: one at-a-time structural follow-up, capped at three.
          *     None of these is a verdict on the student's work.
          */
         DomainIntakeOut: {
@@ -352,7 +377,7 @@ export interface components {
              * Version
              * @constant
              */
-            version: "0.3";
+            version: "0.4";
             domain: components["schemas"]["DomainOut"];
             /** One Line */
             one_line: string;
@@ -370,6 +395,7 @@ export interface components {
             verifications?: components["schemas"]["IntakeVerificationOut"][];
             /** Clarifier */
             clarifier?: string | null;
+            probe?: components["schemas"]["IntakeProbeOut"] | null;
             /** Next Step */
             next_step: string;
             /** Disclaimer */
@@ -572,6 +598,35 @@ export interface components {
              * @enum {string}
              */
             source: "student" | "system";
+        };
+        /**
+         * IntakeProbeOut
+         * @description One bounded structural follow-up; not a diagnostic probe.
+         *
+         *     ``answered`` is the number already stored, so the client can show
+         *     ``answered/limit`` without guessing. The question asks for a missing piece
+         *     (goal, constraint, option…), never for an answer or a verdict.
+         */
+        IntakeProbeOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "goal" | "given" | "constraint" | "assumption" | "plan" | "action" | "evidence" | "check" | "decision" | "risk" | "next";
+            /** Question */
+            question: string;
+            /** Answered */
+            answered: number;
+            /** Limit */
+            limit: number;
+        };
+        /**
+         * IntakeProbeRequest
+         * @description One answer to the intake's current structural follow-up.
+         */
+        IntakeProbeRequest: {
+            /** Answer */
+            answer: string;
         };
         /**
          * IntakeVerificationOut
@@ -1084,6 +1139,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ClarifierRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    answer_intake_probe_api_v1_sessions__session_id__intake_probe_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IntakeProbeRequest"];
             };
         };
         responses: {

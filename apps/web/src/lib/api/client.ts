@@ -106,6 +106,20 @@ export function answerClarifier(
   );
 }
 
+/**
+ * Append one answer to the intake's current structural follow-up. The session
+ * stays closed; this only re-derives the coverage view from the local text.
+ */
+export function answerProbe(
+  sessionId: string,
+  answer: string,
+): Promise<SessionResponse> {
+  return request<SessionResponse>(
+    `/api/v1/sessions/${encodeURIComponent(sessionId)}/intake/probe`,
+    { method: "POST", body: JSON.stringify({ answer }) },
+  );
+}
+
 /** Verify one step; read-only, so it never advances the dialogue. */
 export function verifyStep(
   sessionId: string,

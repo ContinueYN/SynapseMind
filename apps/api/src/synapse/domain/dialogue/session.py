@@ -65,6 +65,10 @@ class DialogueSession:
     # so the intake and the displayed domain keep the student's label after a
     # reload. ``None`` means the detector's original label still applies.
     domain_override: str | None = None
+    # How many structural follow-up questions the intake has accepted. Capped by
+    # ``application/intake.MAX_INTAKE_PROBES``; the answer text itself lives in
+    # ``initial_answer`` and nothing here is a diagnosis.
+    intake_probe_count: int = 0
     # Optimistic-concurrency token owned by the repository adapter. 0 means
     # "not stored yet"; each successful save increments it. It is internal
     # storage metadata and is never exposed by the HTTP API.

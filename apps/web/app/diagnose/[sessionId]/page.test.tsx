@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import DiagnosePage from "./page";
 import {
   answerClarifier,
+  answerProbe,
   ApiError,
   exitSession,
   getSession,
@@ -41,6 +42,7 @@ vi.mock("@/src/lib/api/client", () => {
     ApiError,
     API_BASE: "http://localhost:8000",
     answerClarifier: vi.fn(),
+    answerProbe: vi.fn(),
     getSession: vi.fn(),
     submitTurn: vi.fn(),
     exitSession: vi.fn(),
@@ -137,7 +139,7 @@ const GENERIC_DOMAIN = {
 };
 
 const GENERIC_INTAKE = {
-  version: "0.3" as const,
+  version: "0.4" as const,
   domain: GENERIC_DOMAIN,
   one_line: "按「通用问题」处理（论证结构）。没有参考结构，先不判断卡点。",
   checklist: ["目标：这一轮想解决什么", "约束：哪些条件不能动"],
@@ -216,6 +218,7 @@ describe("DiagnosePage generic entry", () => {
     vi.mocked(submitTurn).mockReset();
     vi.mocked(exitSession).mockReset();
     vi.mocked(answerClarifier).mockReset();
+    vi.mocked(answerProbe).mockReset();
     vi.mocked(searchKnowledge).mockReset();
     vi.mocked(searchKnowledge).mockResolvedValue({
       version: "0.2",
@@ -292,6 +295,44 @@ describe("DiagnosePage generic entry", () => {
         verification: "argumentative",
       }),
     );
+  });
+
+  it("submits one structural follow-up without leaving the intake", async () => {
+    const probe = {
+      kind: "constraint" as const,
+      question: "哪些条件不能动？写一句时间、范围或关系上的限制。",
+      answered: 0,
+      limit: 3,
+    };
+    vi.mocked(getSession).mockResolvedValueOnce({
+      ...GENERIC,
+      intake: {
+        ...GENERIC_INTAKE,
+        clarifier: null,
+        probe,
+      },
+    });
+    vi.mocked(answerProbe).mockResolvedValueOnce({
+      ...GENERIC,
+      notice: "补充只增加你写到的结构；它不判断对错，也不定位卡点。",
+      intake: {
+        ...GENERIC_INTAKE,
+        clarifier: null,
+        probe: { ...probe, answered: 1 },
+        observed: ["约束"],
+      },
+    });
+
+    const user = userEvent.setup();
+    render(<DiagnosePage />);
+
+    await screen.findByText(/还缺一块结构：哪些条件不能动/);
+    await user.type(screen.getByLabelText("补这个缺口"), "收入不能降。");
+    await user.click(screen.getByRole("button", { name: /补进入口整理/ }));
+
+    expect(answerProbe).toHaveBeenCalledWith("S_CONFLICT", "收入不能降。");
+    expect(await screen.findByText(/补充只增加你写到的结构/)).toBeInTheDocument();
+    expect(screen.getByText(/已补 1\/3 次/)).toBeInTheDocument();
   });
 
   it("labels a confident domain without calling it generic", async () => {

@@ -29,6 +29,7 @@ from synapse.api.schemas import (
     ExecutionRequestIn,
     ExitRequest,
     HealthOut,
+    IntakeProbeRequest,
     KnowledgeSearchOut,
     ReviewItemsOut,
     SessionOut,
@@ -54,6 +55,7 @@ from synapse.application.review import ReviewService
 from synapse.application.service import (
     ClarifierUnavailable,
     DiagnosisNotReady,
+    IntakeProbeUnavailable,
     InvalidAnswer,
     SessionNotFound,
     SessionService,
@@ -224,6 +226,38 @@ def answer_intake_clarifier(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="这次入口没有待补充的问题，或补充机会已经用过。",
+        ) from exc
+    except InvalidAnswer as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except SessionConflict as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"会话已被另一个请求更新，请刷新后重试（{exc}）。",
+        ) from exc
+    return _session_out(view, service)
+
+
+@router.post("/sessions/{session_id}/intake/probe", response_model=SessionOut)
+def answer_intake_probe(
+    session_id: str,
+    request: IntakeProbeRequest,
+    service: SessionService = Depends(get_service),
+) -> SessionOut:
+    """Append one structural answer to a reference-free intake.
+
+    The session stays closed. This is not a diagnostic probe: it adds a sentence
+    to the student's local text and re-derives the coverage view. There are at
+    most three such answers per session, and one question is shown at a time.
+    """
+
+    try:
+        view = service.answer_intake_probe(session_id, request.answer)
+    except SessionNotFound as exc:
+        raise HTTPException(status_code=404, detail="session not found") from exc
+    except IntakeProbeUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="这次入口没有待补充的结构问题，或补充次数已经用完。",
         ) from exc
     except InvalidAnswer as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

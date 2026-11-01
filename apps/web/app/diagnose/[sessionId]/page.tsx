@@ -19,6 +19,7 @@ import { ProbeCard } from "@/components/ProbeCard";
 import { Thread } from "@/components/Thread";
 import {
   answerClarifier,
+  answerProbe,
   ApiError,
   API_BASE,
   exitSession,
@@ -98,11 +99,13 @@ export default function DiagnosePage() {
     probeRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [session]);
 
-  async function refreshAfterConflict(action: "answer" | "exit" | "clarify") {
+  async function refreshAfterConflict(
+    action: "answer" | "exit" | "clarify" | "probe",
+  ) {
     const message =
       action === "answer"
         ? "这次回答没有提交：会话已在另一个窗口更新，已刷新到最新状态。请先看清当前页面再继续。"
-        : action === "clarify"
+        : action === "clarify" || action === "probe"
           ? "这次补充没有提交：会话已在另一个窗口更新，已刷新到最新状态。"
           : "退出没有生效：会话已在另一个窗口更新。已刷新到最新状态。";
     try {
@@ -151,6 +154,25 @@ export default function DiagnosePage() {
     } catch (caught) {
       if (isSessionConflict(caught)) {
         await refreshAfterConflict("clarify");
+      } else {
+        setError(caught instanceof Error ? caught.message : "补充没有提交，请重试。");
+      }
+      // Keep the student's draft in IntakeView when the request failed.
+      throw caught;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendProbe(answer: string) {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setSession(await answerProbe(sessionId, answer));
+    } catch (caught) {
+      if (isSessionConflict(caught)) {
+        await refreshAfterConflict("probe");
       } else {
         setError(caught instanceof Error ? caught.message : "补充没有提交，请重试。");
       }
@@ -433,6 +455,7 @@ export default function DiagnosePage() {
                   intake={intake}
                   notice={session.notice ?? undefined}
                   onClarify={sendClarifier}
+                  onProbe={sendProbe}
                   sessionId={sessionId}
                 />
                 <KnowledgePanel

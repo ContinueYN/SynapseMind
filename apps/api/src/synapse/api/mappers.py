@@ -19,6 +19,7 @@ from synapse.api.schemas import (
     HintStepOut,
     HistoryItemOut,
     IntakeNodeOut,
+    IntakeProbeOut,
     IntakeVerificationOut,
     KnowledgeHitOut,
     KnowledgeSearchOut,
@@ -278,6 +279,16 @@ def intake_out(intake: DomainIntake) -> DomainIntakeOut:
             for check in intake.verifications[:2]
         ],
         clarifier=_clip(intake.clarifier, 200) if intake.clarifier else None,
+        probe=(
+            IntakeProbeOut(
+                kind=intake.probe.kind.value,
+                question=_clip(intake.probe.question, 200),
+                answered=intake.probe.answered,
+                limit=intake.probe.limit,
+            )
+            if intake.probe is not None
+            else None
+        ),
         next_step=_clip(intake.next_step, 300),
         disclaimer=_clip(intake.disclaimer, 300),
     )

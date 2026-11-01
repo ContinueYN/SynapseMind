@@ -168,12 +168,14 @@ def test_snapshot_round_trip_carries_the_used_clarifier_and_domain_override() ->
     session.clarifier_answered = True
     session.initial_answer = "不知道\n我纠结要不要换城市工作。"
     session.domain_override = "decision"
+    session.intake_probe_count = 2
 
     restored = decode_session(encode_session(session))
 
     assert restored.clarifier_answered is True
     assert restored.initial_answer == "不知道\n我纠结要不要换城市工作。"
     assert restored.domain_override == "decision"
+    assert restored.intake_probe_count == 2
 
 
 def test_legacy_session_snapshot_is_rejected_with_a_migration_hint() -> None:

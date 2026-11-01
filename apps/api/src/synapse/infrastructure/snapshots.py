@@ -520,6 +520,9 @@ def encode_session(
             # Additive in v0.2: a clarification can name a registered domain;
             # the override is display/intake-only and old rows have none.
             "domain_override": session.domain_override,
+            # Additive in v0.2: bounded structural follow-up counter; the answer
+            # text itself is already in ``initial_answer``.
+            "intake_probe_count": session.intake_probe_count,
         },
     }
 
@@ -565,6 +568,10 @@ def decode_session(snapshot: object) -> DialogueSession:
             data.get("clarifier_answered", False), "session.clarifier_answered"
         ),
         domain_override=_optional_text(data.get("domain_override"), "session.domain_override"),
+        intake_probe_count=max(
+            0,
+            _integer(data.get("intake_probe_count", 0), "session.intake_probe_count"),
+        ),
         revision=_revision(data.get("revision"), "session.revision"),
     )
 
