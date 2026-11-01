@@ -136,7 +136,7 @@ const SESSIONS = {
       confidence: 1,
     },
     intake: {
-      version: "0.1",
+      version: "0.2",
       domain: {
         name: "programming",
         label: "编程",
@@ -149,6 +149,8 @@ const SESSIONS = {
         "复现：能不能稳定重现同一个报错",
         "定位：报错发生在哪一行、哪个值为空",
       ],
+      observed: ["目标", "尝试"],
+      gaps: ["没看到复现：最小片段、输入或完整报错。"],
       clarifier: null,
       next_step: "把最小可复现的那几行贴出来，比整份脚本更有用。",
       disclaimer: "没有运行你的代码，所以这一轮不声称找到 bug，也不给唯一修法。",

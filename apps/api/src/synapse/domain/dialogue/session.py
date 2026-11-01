@@ -49,6 +49,12 @@ class DialogueSession:
     # scaffold submissions. Persisted so a reload can continue the same ladder.
     scaffold_level: int = 0
     scaffold_work: str = ""
+    # The answer submitted with the problem, verbatim. The generic intake derives
+    # "what the attempt mentions / does not mention" from it on every read, so it
+    # has to survive a reload; probe answers were already stored, so this does
+    # not widen what the snapshot holds in kind, only what the reference-free
+    # path keeps. Empty for sessions created before this field existed.
+    initial_answer: str = ""
     # Optimistic-concurrency token owned by the repository adapter. 0 means
     # "not stored yet"; each successful save increments it. It is internal
     # storage metadata and is never exposed by the HTTP API.

@@ -1,18 +1,25 @@
 """The generic intake: what a domain with no reference graph can honestly say.
 
-Phase 0 opens the entry but does not invent a generic graph. When a submission
-has no annotated graph and no plugin can build one (unknown domain, or
+Phase 0 opened the entry without inventing a generic graph. When a submission has
+no annotated graph and no plugin can build one (unknown domain, or
 ``SYNAPSE_LLM_MODE=off``), the session still starts — but it may only report:
 
 * the resolved domain label and its verification mode;
 * a checklist derived from that mode (goal / constraints / reproduction /
   trade-offs…), which is guidance, not a diagnosis;
+* **v0.2**: which of those the submission actually *mentions* (``observed``), and
+  which required pieces it does not (``gaps``), both computed from the student's
+  own words by ``application/generic_slots.py`` + ``generic_check.py``;
 * at most one clarifying question when the label was not confident;
 * one next step, and a disclaimer naming what was **not** checked.
 
-It must not claim the student missed a step, must not produce a 卡点卡, and for
-a decision it must not produce a single right answer. Those are Phase 1+
-capabilities; this module is the honest floor until then.
+The gap list is still coverage, not correctness: "没看到约束" means the text never
+mentions one, never that the constraint is wrong. An empty attempt produces no
+gaps at all, because there is nothing to compare; the checklist alone is shown.
+
+It must not claim the student missed a step in a *solution*, must not produce a
+卡点卡, and for a decision it must not produce a single right answer. Those need
+a verifier (Phase 1/2); this module is the honest floor until then.
 """
 
 from __future__ import annotations
@@ -26,13 +33,22 @@ from synapse.application.domains import (
     IntakeFramework,
     VerificationMode,
 )
+from synapse.application.generic_check import structure_gaps
+from synapse.application.generic_slots import CueSlotExtractor
+from synapse.domain.problem.generic import KIND_LABELS
 from synapse.domain.problem.models import Problem
 
-VERSION: Literal["0.1"] = "0.1"
+VERSION: Literal["0.2"] = "0.2"
 
 # Shown as the closed session's notice so a client that only reads ``notice``
 # still learns why there is no card.
 INTAKE_NOTICE = "通用模式：这一轮只做入口整理，不给出卡点结论。"
+
+# At most three missing pieces at a time: a longer list is a checklist again, and
+# the point of ``gaps`` is to name the next thing to write, not to grade.
+_MAX_GAPS = 3
+
+_EXTRACTOR = CueSlotExtractor()
 
 _MODE_LABELS: dict[VerificationMode, str] = {
     VerificationMode.FORMAL: "形式验证",
@@ -131,28 +147,44 @@ _COPY: dict[IntakeFramework, _IntakeCopy] = {
 
 @dataclass(frozen=True, slots=True)
 class DomainIntake:
-    """The view a reference-free session returns; derived, never stored."""
+    """The view a reference-free session returns; derived, never stored.
 
-    version: Literal["0.1"]
+    ``observed``/``gaps`` are computed from the submitted attempt on every read,
+    so a reloaded session shows the same words without the snapshot storing them.
+    """
+
+    version: Literal["0.2"]
     profile: DomainProfile
     confidence: float
     one_line: str
     checklist: tuple[str, ...]
+    observed: tuple[str, ...]
+    gaps: tuple[str, ...]
     clarifier: str | None
     next_step: str
     disclaimer: str
 
 
-def build_domain_intake(problem: Problem, profile: DomainProfile) -> DomainIntake:
+def build_domain_intake(
+    problem: Problem, profile: DomainProfile, attempt: str = ""
+) -> DomainIntake:
     """Compose the intake for a reference-free problem.
 
-    ``problem.domain_confidence`` carries the detector's confidence from
-    intake; it decides the single clarifying question, not whether the session
-    may start.
+    ``problem.domain_confidence`` carries the detector's confidence from intake;
+    it decides the single clarifying question, not whether the session may start.
+    ``attempt`` is the student's own text; when it is blank no gap is reported,
+    because there is nothing to compare and "你什么都没写" is not a finding.
     """
 
     copy = _COPY[profile.framework]
     confidence = max(0.0, min(1.0, problem.domain_confidence))
+    observed: tuple[str, ...] = ()
+    gaps: tuple[str, ...] = ()
+    if attempt.strip():
+        graph = _EXTRACTOR.extract(problem.id, attempt)
+        observed = tuple(KIND_LABELS[kind] for kind in graph.kinds())
+        gaps = tuple(gap.text for gap in structure_gaps(profile.framework, graph))
+        gaps = gaps[:_MAX_GAPS]
     one_line = f"按「{profile.label}」处理（{_MODE_LABELS[profile.verification]}）。{copy.summary}"
     return DomainIntake(
         version=VERSION,
@@ -160,6 +192,8 @@ def build_domain_intake(problem: Problem, profile: DomainProfile) -> DomainIntak
         confidence=confidence,
         one_line=one_line,
         checklist=copy.checklist,
+        observed=observed,
+        gaps=gaps,
         clarifier=_CLARIFIER if confidence < MIN_CONFIDENCE else None,
         next_step=copy.next_step,
         disclaimer=copy.disclaimer,

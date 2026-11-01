@@ -5,7 +5,7 @@ import { IntakeView } from "./IntakeView";
 import type { DomainIntake } from "@/src/lib/api/types";
 
 const GENERIC: DomainIntake = {
-  version: "0.1",
+  version: "0.2",
   domain: {
     name: "generic",
     label: "通用问题",
@@ -15,6 +15,8 @@ const GENERIC: DomainIntake = {
   },
   one_line: "按「通用问题」处理（论证结构）。没有参考结构，先不判断卡点。",
   checklist: ["目标：这一轮想解决什么", "约束：哪些条件不能动"],
+  observed: [],
+  gaps: [],
   clarifier: "只问一个：这更像代码问题、决策问题，还是学习/证明题？",
   next_step: "补一句话：卡住的那一步在哪个动作上。",
   disclaimer: "不提供唯一正确答案，也不替代医疗、法律或金融专业建议。",
@@ -31,6 +33,12 @@ const CODE: DomainIntake = {
   },
   clarifier: null,
   disclaimer: "没有运行你的代码，所以这一轮不声称找到 bug。",
+};
+
+const WITH_ATTEMPT: DomainIntake = {
+  ...GENERIC,
+  observed: ["目标", "选项", "风险"],
+  gaps: ["没看到约束：时间、钱、关系、不可逆性。", "没看到可逆实验：1–2 周内能先试哪一步。"],
 };
 
 describe("IntakeView", () => {
@@ -57,5 +65,23 @@ describe("IntakeView", () => {
 
     expect(screen.getByText("目标：这一轮想解决什么")).toBeInTheDocument();
     expect(screen.getByText(/不猜卡点、不给唯一答案/)).toBeInTheDocument();
+  });
+
+  it("reads the attempt back as seen and missing pieces, never as a verdict", () => {
+    render(<IntakeView intake={WITH_ATTEMPT} sessionId="S_DECISION" />);
+
+    expect(screen.getByText(/你写的里面看到了：目标、选项、风险/)).toBeInTheDocument();
+    expect(screen.getByText("你写的里面还缺")).toBeInTheDocument();
+    expect(
+      screen.getByText("没看到约束：时间、钱、关系、不可逆性。"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/错了|不对/)).not.toBeInTheDocument();
+  });
+
+  it("shows no seen/missing section when the attempt said nothing", () => {
+    render(<IntakeView intake={GENERIC} sessionId="S_GENERIC" />);
+
+    expect(screen.queryByText(/你写的里面看到了/)).not.toBeInTheDocument();
+    expect(screen.queryByText("你写的里面还缺")).not.toBeInTheDocument();
   });
 });

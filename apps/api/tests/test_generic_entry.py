@@ -78,6 +78,24 @@ def test_a_life_decision_starts_without_a_right_answer(client: TestClient) -> No
     assert "卡点卡" not in body.get("notice", "")
 
 
+def test_the_decision_intake_reads_the_students_own_words(client: TestClient) -> None:
+    body = _start(
+        client,
+        DECISION,
+        answer=("我想两年内转做后端；要么留在公司转岗，要么跳槽去小厂；但我怕收入下降。"),
+    )
+
+    intake = body["intake"]
+    assert intake is not None
+    assert intake["version"] == "0.2"
+    # What the submission mentions, and only that.
+    assert "目标" in intake["observed"]
+    assert "选项" in intake["observed"]
+    assert "风险" in intake["observed"]
+    assert len(intake["gaps"]) <= 3
+    assert not any("两个选项" in gap for gap in intake["gaps"])
+
+
 def test_an_unknown_domain_starts_in_generic_mode(client: TestClient) -> None:
     body = _start(client, UNKNOWN)
 
@@ -121,6 +139,9 @@ def test_a_generic_session_can_be_reloaded(client: TestClient) -> None:
     assert reloaded["domain"] == created["domain"]
     assert reloaded["intake"]["checklist"] == created["intake"]["checklist"]
     assert reloaded["intake"]["clarifier"] == created["intake"]["clarifier"]
+    # The gap list is derived from the stored attempt, so a reload cannot drift.
+    assert reloaded["intake"]["observed"] == created["intake"]["observed"]
+    assert reloaded["intake"]["gaps"] == created["intake"]["gaps"]
 
 
 def test_a_generic_session_has_no_answer_to_reveal(client: TestClient) -> None:

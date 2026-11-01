@@ -190,12 +190,19 @@ class DomainOut(StrictModel):
 
 
 class DomainIntakeOut(StrictModel):
-    """The reference-free generic entry: guidance, never a diagnosis."""
+    """The reference-free generic entry: guidance, never a diagnosis.
 
-    version: Literal["0.1"]
+    v0.2 adds the answer-aware part: ``observed`` is what the student's own text
+    mentions, ``gaps`` is what the mode requires and the text does not mention
+    (at most three). Both are coverage statements, not verdicts.
+    """
+
+    version: Literal["0.2"]
     domain: DomainOut
     one_line: str = Field(min_length=1, max_length=200)
     checklist: list[str] = Field(min_length=1, max_length=6)
+    observed: list[str] = Field(default_factory=list, max_length=12)
+    gaps: list[str] = Field(default_factory=list, max_length=3)
     clarifier: str | None = Field(default=None, max_length=200)
     next_step: str = Field(min_length=1, max_length=300)
     disclaimer: str = Field(min_length=1, max_length=300)

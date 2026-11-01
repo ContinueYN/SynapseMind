@@ -117,6 +117,7 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 - `/knowledge/search` 只读（`specs/knowledge-search.schema.json` v0.1）：`q` 是概念标签，不是学生作答原文；返回卡片的标题、摘录、出处（title/url/license）和余弦分数。`enabled=false` 表示 `SYNAPSE_RAG` 未开启；开启但模型不可用时返回 **503**，不会静默返回空结果。
 - `SessionOut.subject` 是插件键（内部路由用）；`SessionOut.domain` 才是展示用的开放领域标签与验证方式（`formal`/`executable`/`empirical`/`argumentative`）。前端只在 `domain.name` 为数学/物理时显示单步检查入口。
 - 没有参考结构的问题（开放领域、未知领域，或本环境没有生成器）返回 `SessionOut.intake`（`specs/` 未单列 schema，字段见 `DomainIntakeOut`）；它不是卡点卡的简化版：不定位卡点、不估把握、不给唯一答案。
+- `intake` v0.2 会读学生自己那段话（随会话保存的 `initial_answer`）：`observed` 列出被认出的结构项（目标/约束/选项/风险…），`gaps` 列出该验证方式要求但没提到的项（最多 3 条）。两者都只是“有没有写到”，不是对错判断；选项只列出、不排序，决策问题也不会被推荐其中一个。没有作答时两段都为空。识别是确定性线索匹配（`application/generic_slots.py`），不调用模型，因此离线模式同样可用。
 
 ## 本地会话快照
 

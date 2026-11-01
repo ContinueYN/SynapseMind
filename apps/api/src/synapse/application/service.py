@@ -157,6 +157,11 @@ class SessionService:
         findings = self._check_work(command.work)
         session = self._factory.create(command)
         session.work_findings = findings
+        # The reference-free path reads the attempt back on every reload to
+        # derive what it does and does not mention (application/intake.py). Same
+        # lifetime and same class of data as probe answers, so it is kept on the
+        # aggregate instead of being re-sent by the client.
+        session.initial_answer = command.answer
         problem = self._problem(session.problem_id)
 
         if self._is_reference_free(problem):
@@ -699,7 +704,7 @@ class SessionService:
         if not self._is_reference_free(problem):
             return None
         profile = self._domains.profile_for(problem.subject)
-        return build_domain_intake(problem, profile)
+        return build_domain_intake(problem, profile, session.initial_answer)
 
     def _hint(self, session: DialogueSession) -> StructureHint | None:
         """Rebuild the structure hint for a NONE-tier session.

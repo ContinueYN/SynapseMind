@@ -502,6 +502,10 @@ def encode_session(
             "work_findings": [_work_finding_to_json(finding) for finding in session.work_findings],
             "scaffold_level": session.scaffold_level,
             "scaffold_work": session.scaffold_work,
+            # Additive in v0.2: the generic intake re-derives its gap list from
+            # this text, so it must survive a reload. Old rows get "" and show no
+            # gap, which is the same as an attempt that mentioned nothing.
+            "initial_answer": session.initial_answer,
         },
     }
 
@@ -542,6 +546,7 @@ def decode_session(snapshot: object) -> DialogueSession:
         ),
         scaffold_level=_integer(data.get("scaffold_level", 0), "session.scaffold_level"),
         scaffold_work=_text(data.get("scaffold_work", ""), "session.scaffold_work"),
+        initial_answer=_text(data.get("initial_answer", ""), "session.initial_answer"),
         revision=_revision(data.get("revision"), "session.revision"),
     )
 

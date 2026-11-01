@@ -249,6 +249,8 @@ def intake_out(intake: DomainIntake) -> DomainIntakeOut:
         ),
         one_line=_clip(intake.one_line, 200),
         checklist=[_clip(item, 80) for item in intake.checklist[:6]],
+        observed=[_clip(item, 20) for item in intake.observed[:12]],
+        gaps=[_clip(item, 120) for item in intake.gaps[:3]],
         clarifier=_clip(intake.clarifier, 200) if intake.clarifier else None,
         next_step=_clip(intake.next_step, 300),
         disclaimer=_clip(intake.disclaimer, 300),

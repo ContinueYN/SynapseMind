@@ -142,7 +142,17 @@ test("a reference-free problem shows the intake instead of a probe", async ({
   await expect(
     page.getByRole("heading", { name: "按「编程」处理" }),
   ).toBeVisible();
-  await expect(page.getByText(/复现：/)).toBeVisible();
+  await expect(page.getByText(/复现：能不能稳定重现/)).toBeVisible();
+  // The mock attempt mentions a goal and an attempt but no reproduction, so the
+  // card says what it saw and what is missing — never that the code is wrong.
+  await expect(page.getByText(/你写的里面看到了：目标、尝试/)).toBeVisible();
+  await expect(
+    page.getByText("没看到复现：最小片段、输入或完整报错。"),
+  ).toBeVisible();
+  // Gaps are rendered as quiet notes, not as a verdict block.
+  await expect(page.locator(".sm-note-quiet").first()).toHaveText(
+    "没看到复现：最小片段、输入或完整报错。",
+  );
   // No probe to answer and no step check: there is no verified structure.
   await expect(page.getByRole("button", { name: /有一步拿不准/ })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "看完整解法" })).toHaveCount(0);

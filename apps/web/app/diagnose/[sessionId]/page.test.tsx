@@ -129,10 +129,12 @@ const GENERIC_DOMAIN = {
 };
 
 const GENERIC_INTAKE = {
-  version: "0.1" as const,
+  version: "0.2" as const,
   domain: GENERIC_DOMAIN,
   one_line: "按「通用问题」处理（论证结构）。没有参考结构，先不判断卡点。",
   checklist: ["目标：这一轮想解决什么", "约束：哪些条件不能动"],
+  observed: [],
+  gaps: [],
   clarifier: "只问一个：这更像代码问题、决策问题，还是学习/证明题？",
   next_step: "补一句话：卡住的那一步在哪个动作上。",
   disclaimer: "不提供唯一正确答案，也不替代医疗、法律或金融专业建议。",

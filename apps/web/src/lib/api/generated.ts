@@ -282,18 +282,26 @@ export interface components {
         /**
          * DomainIntakeOut
          * @description The reference-free generic entry: guidance, never a diagnosis.
+         *
+         *     v0.2 adds the answer-aware part: ``observed`` is what the student's own text
+         *     mentions, ``gaps`` is what the mode requires and the text does not mention
+         *     (at most three). Both are coverage statements, not verdicts.
          */
         DomainIntakeOut: {
             /**
              * Version
              * @constant
              */
-            version: "0.1";
+            version: "0.2";
             domain: components["schemas"]["DomainOut"];
             /** One Line */
             one_line: string;
             /** Checklist */
             checklist: string[];
+            /** Observed */
+            observed?: string[];
+            /** Gaps */
+            gaps?: string[];
             /** Clarifier */
             clarifier?: string | null;
             /** Next Step */
