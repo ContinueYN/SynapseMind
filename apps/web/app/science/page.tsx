@@ -267,7 +267,7 @@ export default function SciencePage() {
           </p>
 
           <p className="sm-about-back">
-            <Link href="/cases">看四段真实 transcript →</Link>
+            <Link href="/cases">看五段真实 transcript →</Link>
             <span aria-hidden="true"> · </span>
             <Link href="/about">为什么这样设计 →</Link>
             <span aria-hidden="true"> · </span>

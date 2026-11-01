@@ -49,7 +49,7 @@ describe("SciencePage", () => {
     expect(screen.getAllByText(/不承诺提分/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/没有做对照实验/).length).toBeGreaterThan(0);
     expect(
-      screen.getByRole("link", { name: /四段真实 transcript/ }),
+      screen.getByRole("link", { name: /五段真实 transcript/ }),
     ).toHaveAttribute("href", "/cases");
   });
 });

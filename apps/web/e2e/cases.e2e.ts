@@ -1,16 +1,18 @@
 import { expect, test } from "@playwright/test";
 
-test("the case page shows four transcripts, including the refusal", async ({
+test("the case page shows five transcripts, including the refusal", async ({
   page,
 }) => {
   await page.goto("/cases");
 
   await expect(page.getByRole("heading", { level: 1 })).toContainText(
-    "四段记录",
+    "五段记录",
   );
-  await expect(page.getByRole("heading", { level: 3 })).toHaveCount(4);
+  await expect(page.getByRole("heading", { level: 3 })).toHaveCount(5);
   await expect(page.getByText(/弃权：没有出卡/)).toBeVisible();
   await expect(page.getByText(/没有把低置信的猜测包装成诊断/)).toBeVisible();
+  await expect(page.getByText(/只给结构问题/)).toBeVisible();
+  await expect(page.getByText(/compare_options/)).toBeVisible();
   await expect(page.getByText(/演示样例，不是效果研究；不放准确率/)).toBeVisible();
 });
 

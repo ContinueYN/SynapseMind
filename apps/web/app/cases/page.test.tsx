@@ -13,14 +13,23 @@ vi.mock("next/link", () => ({
 }));
 
 describe("CasesPage", () => {
-  it("shows four transcripts, each with what it cannot prove", () => {
+  it("shows five transcripts, each with what it cannot prove", () => {
     render(<CasesPage />);
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-      "四段记录",
+      "五段记录",
     );
-    expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(4);
-    expect(screen.getAllByText("不能证明")).toHaveLength(4);
+    expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(5);
+    expect(screen.getAllByText("不能证明")).toHaveLength(5);
+  });
+
+  it("shows the generic decision case without ranking its options", () => {
+    render(<CasesPage />);
+
+    expect(screen.getByText(/只给结构问题/)).toBeInTheDocument();
+    expect(screen.getByText(/compare_options ok/)).toBeInTheDocument();
+    expect(screen.getByText(/只并列不排序/)).toBeInTheDocument();
+    expect(screen.getAllByText(/没有卡点卡/).length).toBeGreaterThan(0);
   });
 
   it("keeps the refusal case visible instead of papering over it", () => {

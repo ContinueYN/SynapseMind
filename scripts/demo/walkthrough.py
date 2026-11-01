@@ -36,17 +36,22 @@ from synapse.application.service import SessionService, SessionView
 from synapse.infrastructure.llm.settings import LLMSettings, load_dotenv
 from synapse.infrastructure.seed import SAMPLE_PROBLEM
 
-WRONG_WORK = (
-    "定义域 x>0。f'(x)=1/x-a，令 f'(x)=0 得 x=1/a。"
-    "a>0 时最大值为 -ln a-1≤0，所以 a≥1/e。"
-)
+WRONG_WORK = "定义域 x>0。f'(x)=1/x-a，令 f'(x)=0 得 x=1/a。a>0 时最大值为 -ln a-1≤0，所以 a≥1/e。"
 PHYSICS_TEXT = (
     "质量为 2 kg 的物块放在水平面上，受到与水平方向成 30° 的拉力 F=10 N，"
     "动摩擦因数 0.2，求物块的加速度。"
 )
 CHINESE_TEXT = "阅读下面的文字，完成题目：文中两次写到“灯”，请结合全文简要分析其作用。"
+DECISION_TEXT = (
+    "要不要换工作：现在的工作稳定但学不到东西；新机会钱多一点，但要搬到另一个城市，女朋友在这边。"
+)
+DECISION_WORK = (
+    "目标是两年内能持续学东西。要么留在现在的工作，稳定、离家近，但学不到新东西；"
+    "要么接受新机会，钱多一点，但要搬到另一个城市，女朋友还在这边。"
+    "约束是不能异地，半年内要决定。"
+)
 
-CASES = ("wrong", "blank", "physics", "chinese")
+CASES = ("wrong", "blank", "physics", "chinese", "decision")
 
 
 class Transcript:
@@ -121,9 +126,7 @@ def _render_card(view: SessionView, transcript: Transcript) -> None:
         transcript.add(f"没有出卡；当前状态 `{view.session.state.value}`。")
         transcript.add()
         return
-    transcript.add(
-        f"**卡点**：{card.label}（`{card.layer}`，置信 {card.confidence:.2f}）"
-    )
+    transcript.add(f"**卡点**：{card.label}（`{card.layer}`，置信 {card.confidence:.2f}）")
     transcript.add()
     transcript.add(f"> {card.one_line}")
     transcript.add()
@@ -211,6 +214,75 @@ def _run_blank(service: SessionService, transcript: Transcript) -> bool:
     return view.prompt is not None
 
 
+def _run_decision(service: SessionService, transcript: Transcript) -> bool:
+    """A reference-free decision: intake, one structural answer, then the trace.
+
+    This case is offline by construction: it reads ``observed``/``gaps`` from
+    the cue table and runs the rule trace. It never asserts that the cue table
+    understood the student; it records what it did and did not catch.
+    """
+
+    transcript.heading("5. 通用入口：决策问题 → 结构问题 → 工具轨迹（规则路径）")
+    started = perf_counter()
+    view = service.start(StartSessionCommand(problem_text=DECISION_TEXT, answer=DECISION_WORK))
+    if view.intake is None:
+        transcript.add("没有进入通用入口：这道题被路由到了别的路径。")
+        return False
+
+    intake = view.intake
+    transcript.bullets(
+        [
+            f"题目：{DECISION_TEXT}",
+            f"学生写了：{DECISION_WORK}",
+            f"识别：`{intake.profile.name}`（{intake.profile.label}）；"
+            f"框架 `{intake.profile.framework.value}`；"
+            f"验证方式 `{intake.profile.verification.value}`",
+            f"入口状态：`{view.session.state.value}`；不探针、不出卡、不给答案。",
+            f"已看到：{'、'.join(intake.observed) or '（暂无）'}",
+            f"还缺：{'；'.join(intake.gaps) or '（暂无）'}",
+        ]
+    )
+    if intake.probe is not None:
+        transcript.bullets([f"一次只问一个：{intake.probe.question}"])
+        view = service.answer_intake_probe(
+            view.session.session_id,
+            "留在原地的代价是继续学不到东西；换的代价是要异地、重新租房。",
+        )
+        transcript.bullets(
+            [
+                f"补充后已看到：{'、'.join(view.intake.observed) or '（暂无）'}",
+                f"下一个问题：{view.intake.probe.question if view.intake.probe else '无'}",
+            ]
+        )
+
+    trace = service.agent_trace(view.session.session_id)
+    transcript.bullets(
+        [
+            f"轨迹：`{trace.version}`；模式 `{trace.mode}`；"
+            f"规划器 `{trace.planner.status}/{trace.planner.reason}`",
+        ]
+    )
+    transcript.add("| 步骤 | 工具 | 状态 | 输入摘要 | 输出摘要 |")
+    transcript.add("|---|---|---|---|---|")
+    for step in trace.steps:
+        transcript.add(
+            f"| {step.index} | `{step.tool}` | `{step.status}` | "
+            f"{step.input_summary} | {step.output_summary} |"
+        )
+    transcript.add()
+    transcript.bullets(
+        [
+            f"复盘：{trace.reflection.focus}",
+            f"下一步：{trace.reflection.next}",
+            f"边界：{trace.reflection.boundary}",
+            f"耗时：{perf_counter() - started:.2f}s",
+        ]
+    )
+    return (
+        bool(view.intake.observed) and trace.planner.status == "off" and 1 <= len(trace.steps) <= 3
+    )
+
+
 def _run_live(
     service: SessionService,
     transcript: Transcript,
@@ -282,7 +354,7 @@ def main() -> int:
     parser.add_argument(
         "--no-live",
         action="store_true",
-        help="never call the model, even when a key is present",
+        help="never call the model; decision still runs on rules, physics/chinese are skipped",
     )
     parser.add_argument(
         "--out",
@@ -357,6 +429,8 @@ def main() -> int:
             )
         else:
             skipped.append("chinese")
+    if "decision" in selected:
+        results.append(_run_decision(service, transcript))
 
     transcript.add("## 结果")
     transcript.add()

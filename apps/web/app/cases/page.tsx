@@ -7,7 +7,7 @@ import { Reveal } from "@/components/Reveal";
 export const metadata: Metadata = {
   title: "演示记录 · SynapseMind 突触智学",
   description:
-    "四段真实 transcript：数学错步、空白入口、物理弃权、语文结构提示。是链路记录，不是效果研究。",
+    "五段真实 transcript：数学错步、空白入口、物理弃权、语文结构提示，以及通用入口的决策记录。是链路记录，不是效果研究。",
 };
 
 interface Turn {
@@ -20,7 +20,7 @@ interface CaseStudy {
   no: string;
   subject: string;
   verdict: string;
-  state: "card" | "scaffold" | "stop" | "hint";
+  state: "card" | "scaffold" | "stop" | "hint" | "intake";
   title: string;
   problem: string;
   student: string;
@@ -31,9 +31,9 @@ interface CaseStudy {
 }
 
 /*
- * 下面四段内容抄自 2026-10-31 22:35 的 walkthrough 实跑记录
- * （var/demo/walkthrough.md，本机生成、不入库）。只做了截断，没有改措辞；
- * 想核对原文就重跑一遍脚本。
+ * 前四段抄自 2026-10-31 22:35 的 walkthrough 实跑记录，第五段是 2026-11-01
+ * 新增的通用入口实跑（离线规则路径）。都来自 var/demo/walkthrough.md
+ * （本机生成、不入库）。只做了截断，没有改措辞；想核对原文就重跑一遍脚本。
  */
 const CASES: CaseStudy[] = [
   {
@@ -155,6 +155,42 @@ const CASES: CaseStudy[] = [
     outcome: "状态 CLOSED；只给结构提示，没有卡点卡。",
     boundary: "结构提示不是诊断；它只说「你没写到哪一步」，不说「你哪里想错了」。",
   },
+  {
+    id: "decision",
+    no: "05",
+    subject: "生活决策 · 通用入口",
+    verdict: "只给结构问题",
+    state: "intake",
+    title: "选项摆出来了，系统仍不替你排序",
+    problem:
+      "要不要换工作：现在的工作稳定但学不到东西；新机会钱多一点，但要搬到另一个城市，女朋友在这边。",
+    student:
+      "目标是两年内能持续学东西。要么留在现在的工作，稳定、离家近，但学不到新东西；要么接受新机会，钱多一点，但要搬到另一个城市，女朋友还在这边。约束是不能异地，半年内要决定。",
+    turns: [
+      {
+        ask: "入口先问（一次只问一个）",
+        answer: "每个选项会失去什么？",
+      },
+      {
+        ask: "学生补上代价",
+        answer:
+          "留在原地的代价是继续学不到东西；换的代价是要异地、重新租房。",
+      },
+      {
+        ask: "工具轨迹（v0.3，规则模式）",
+        answer:
+          "check_structure ok：看到 4 项结构、缺口 1 个；compare_options ok：2 个选项、1 条约束、1 条代价，只并列不排序；ask_clarifying ok：kind=next，answered=1/3。",
+      },
+    ],
+    notes: [
+      "规划器 `off/planner_off`：没有 key，中间一步仍由规则选；轨迹仍是 3 步。",
+      "线索表只认「要么 / 还是 / 或者」这类连接词；换成「现在的工作 / 新机会」可能数不出两个选项。",
+    ],
+    outcome:
+      "状态 CLOSED；没有卡点卡。补上代价后，只剩「可逆实验」一个结构问题。",
+    boundary:
+      "它没有比较两个选项，也没有推荐；只把「代价」补进结构清单。线索表会漏同义说法，漏了只报缺口，不硬凑。",
+  },
 ];
 
 export default function CasesPage() {
@@ -164,17 +200,18 @@ export default function CasesPage() {
         <Plane>
           <p className="sm-eyebrow">
             <span aria-hidden="true" className="sm-dot" />
-            演示记录 · 四段 transcript
+            演示记录 · 五段 transcript
           </p>
 
           <h1 className="sm-display">
-            四段记录，
-            <span className="sm-display-2">四种收束。</span>
+            五段记录，
+            <span className="sm-display-2">五种收束。</span>
           </h1>
 
           <p className="sm-lede">
-            下面四段来自同一次实跑（2026-10-31 22:35，本机）：数学错步出卡、空白入口给示例、
-            物理五轮后弃权、语文只给结构提示。文字按 transcript 抄录，只做截断。
+            下面五段来自两次实跑：2026-10-31 的四段诊断记录（数学错步出卡、空白入口给示例、
+            物理五轮后弃权、语文只给结构提示），以及 2026-11-01 新增的通用入口记录
+            （决策问题，离线规则路径）。文字按 transcript 抄录，只做截断。
           </p>
 
           <p className="sm-fine">
@@ -187,7 +224,7 @@ export default function CasesPage() {
         <Plane>
           <h2 className="sm-label">
             <em>01</em>
-            四段记录
+            五段记录
           </h2>
 
           <p className="sm-statement">每段都标了它不能证明什么。</p>
@@ -256,23 +293,24 @@ export default function CasesPage() {
             <div className="sm-tile sm-about-card">
               <b>怎么复跑</b>
               <p>
-                <code>python scripts/demo/walkthrough.py</code> 走四段并写{" "}
-                <code>var/demo/walkthrough.md</code>；<code>--no-live</code> 只跑标注题与空白，
-                物理 / 语文显式跳过；<code>--case physics</code> 可单跑一段。
+                <code>python scripts/demo/walkthrough.py</code> 走五段并写{" "}
+                <code>var/demo/walkthrough.md</code>；<code>--no-live</code>{" "}
+                只跑标注题、空白与通用入口，物理 / 语文显式跳过；
+                <code>--case decision</code> 可单跑通用入口。
               </p>
             </div>
 
             <div className="sm-tile sm-about-card sm-about-card--quiet">
               <b>重跑会变吗</b>
               <p>
-                数学与空白走规则路径，记录稳定；物理与语文依赖实时建图，换模型或断网会变。
+                数学、空白与通用入口走规则路径，记录稳定；物理与语文依赖实时建图，换模型或断网会变。
                 变的是链路，不是准确率。
               </p>
             </div>
           </div>
 
           <p className="sm-fine">
-            这些记录能证明四件事：三个入口都在、证据不足时会停、示例不含答案、结构提示不冒充诊断。
+            这些记录能证明五件事：入口能识别并收束、证据不足时会停、示例不含答案、结构提示不冒充诊断、通用入口不替你做选择。
             不能证明「说得准」——那需要真实学生作答与双人标注，目前还没有。
           </p>
 

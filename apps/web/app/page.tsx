@@ -266,7 +266,7 @@ export default function HomePage() {
           <p className="sm-ground-more">
             <Link href="/science">五条机制与逐条引用 →</Link>
             <span aria-hidden="true"> · </span>
-            <Link href="/cases">四段演示记录 →</Link>
+            <Link href="/cases">五段演示记录 →</Link>
           </p>
         </Plane>
       </Reveal>
