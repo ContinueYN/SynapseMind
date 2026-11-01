@@ -202,6 +202,12 @@ def build_container(
     review_queue = SqliteReviewQueue(
         Path(os.environ.get("SYNAPSE_REVIEW_DB", "var/review.sqlite3"))
     )
+    knowledge_service = (
+        knowledge if knowledge is not None else build_knowledge_service(enabled=flags.rag)
+    )
+    # The feature flag is the outer switch: an injected adapter cannot turn the
+    # endpoint on when ``SYNAPSE_EXEC`` is off.
+    code_executor = executor if executor is not None and flags.execution else build_executor(flags)
     service = SessionService(
         sessions=sessions,
         problems=problems,
@@ -217,13 +223,9 @@ def build_container(
         review_queue=review_queue,
         answers=answers,
         chc_attribution=flags.chc_attribution,
+        knowledge=knowledge_service,
+        code_executor=code_executor,
     )
-    knowledge_service = (
-        knowledge if knowledge is not None else build_knowledge_service(enabled=flags.rag)
-    )
-    # The feature flag is the outer switch: an injected adapter cannot turn the
-    # endpoint on when ``SYNAPSE_EXEC`` is off.
-    code_executor = executor if executor is not None and flags.execution else build_executor(flags)
     return Container(
         sessions=sessions,
         problems=problems,

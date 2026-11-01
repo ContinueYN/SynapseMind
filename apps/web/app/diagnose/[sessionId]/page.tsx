@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import { AgentTracePanel } from "@/components/AgentTracePanel";
 import { Dendrite, type DendriteStop } from "@/components/Dendrite";
 import { DiagnosisCardView } from "@/components/DiagnosisCardView";
 import { IntakeView } from "@/components/IntakeView";
@@ -461,6 +462,10 @@ export default function DiagnosePage() {
                 <KnowledgePanel
                   query={intake.domain.label}
                   subject={intake.domain.name}
+                  verification={session.domain.verification}
+                />
+                <AgentTracePanel
+                  sessionId={sessionId}
                   verification={session.domain.verification}
                 />
               </>

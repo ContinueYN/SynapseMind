@@ -1,4 +1,6 @@
 import type {
+  AgentRunInput,
+  AgentTrace,
   CreateSessionInput,
   Diagnosis,
   KnowledgeSearch,
@@ -117,6 +119,31 @@ export function answerProbe(
   return request<SessionResponse>(
     `/api/v1/sessions/${encodeURIComponent(sessionId)}/intake/probe`,
     { method: "POST", body: JSON.stringify({ answer }) },
+  );
+}
+
+/**
+ * Read the bounded tool trace for a generic intake. Read-only: no code runs,
+ * no session state changes, and the answer store is not read.
+ */
+export function getAgentTrace(sessionId: string): Promise<AgentTrace> {
+  return request<AgentTrace>(
+    `/api/v1/sessions/${encodeURIComponent(sessionId)}/agent`,
+  );
+}
+
+/**
+ * Run one explicitly pasted Python reproduction and return the same trace
+ * shape. Only an executable framework accepts this; with `SYNAPSE_EXEC=off`
+ * the trace records a skipped step instead of a fake pass.
+ */
+export function runAgentTrace(
+  sessionId: string,
+  input: AgentRunInput,
+): Promise<AgentTrace> {
+  return request<AgentTrace>(
+    `/api/v1/sessions/${encodeURIComponent(sessionId)}/agent/run`,
+    { method: "POST", body: JSON.stringify(input) },
   );
 }
 

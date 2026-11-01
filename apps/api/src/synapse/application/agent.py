@@ -1,0 +1,483 @@
+"""Bounded, read-only tool trace for a generic intake (Phase 4, no state writes).
+
+The trace is not a mind dump and not a diagnosis. It records *which bounded
+tools ran*, what they were allowed to see, and a short summary. The runner is
+deliberately deterministic in v0.1: there is no model planner, so a checkout
+with ``SYNAPSE_LLM_MODE=off`` produces the same tool order and summary every
+time. Only wall-clock durations vary.
+
+Three boundaries are enforced here rather than left to the UI:
+
+* at most three tools run;
+* the answer store is never read and no tool can set dialogue state;
+* code is executed only when the caller explicitly submits it to the run
+  endpoint, and only for an EXECUTABLE framework. The runner never extracts
+  code from the attempt or the problem statement.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from time import perf_counter
+from typing import Literal
+
+from synapse.application.domains import IntakeFramework
+from synapse.application.execution import (
+    CodeExecutor,
+    ExecutionBusy,
+    RunCodeCommand,
+)
+from synapse.application.intake import DomainIntake
+from synapse.application.knowledge import KnowledgeService, KnowledgeUnavailable
+from synapse.domain.knowledge.models import KnowledgeHit
+from synapse.domain.problem.generic import NodeKind
+from synapse.domain.problem.models import Problem
+
+AgentTool = Literal[
+    "check_structure",
+    "search_patterns",
+    "compare_options",
+    "ask_clarifying",
+    "run_code",
+    "run_tests",
+]
+AgentStepStatus = Literal["ok", "skipped", "failed"]
+AgentSuggestionKind = Literal["structure", "source", "experiment", "clarify"]
+AgentSuggestionSource = Literal["rule", "knowledge", "execution", "system"]
+
+MAX_AGENT_STEPS = 3
+_NOTICE = "只读工具轨迹：不推进会话、不判断对错、不替你做选择，也没有读取答案。"
+
+
+class AgentUnavailable(RuntimeError):
+    """The session has no generic intake, so there is nothing for this runner."""
+
+
+class AgentInputRejected(ValueError):
+    """Explicit code was malformed or offered for a non-executable framework."""
+
+
+@dataclass(frozen=True, slots=True)
+class AgentCitation:
+    card_id: str
+    title: str
+    source_title: str
+    source_url: str
+    license: str
+
+
+@dataclass(frozen=True, slots=True)
+class AgentStep:
+    index: int
+    tool: AgentTool
+    status: AgentStepStatus
+    input_summary: str
+    output_summary: str
+    duration_ms: float
+    citations: tuple[AgentCitation, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class AgentSuggestion:
+    kind: AgentSuggestionKind
+    text: str
+    source: AgentSuggestionSource
+
+
+@dataclass(frozen=True, slots=True)
+class AgentLimits:
+    max_steps: int
+    steps_used: int
+
+
+@dataclass(frozen=True, slots=True)
+class AgentTrace:
+    version: Literal["0.1"]
+    session_id: str
+    mode: Literal["rules"]
+    steps: tuple[AgentStep, ...]
+    suggestions: tuple[AgentSuggestion, ...]
+    limits: AgentLimits
+    notice: str
+
+
+def run_agent_trace(
+    session_id: str,
+    problem: Problem,
+    intake: DomainIntake,
+    knowledge: KnowledgeService,
+    executor: CodeExecutor | None,
+    *,
+    code: str | None = None,
+    tests: str | None = None,
+) -> AgentTrace:
+    """Run at most three read-only tools and return their trace.
+
+    ``code``/``tests`` are accepted only through the explicit run endpoint; a
+    caller that does not pass them gets a trace with no execution step.
+    """
+
+    if tests is not None and code is None:
+        raise AgentInputRejected("tests require an explicit code submission")
+    if code is not None and intake.profile.framework is not IntakeFramework.EXECUTABLE:
+        raise AgentInputRejected("explicit code is only accepted for executable frameworks")
+
+    steps: list[AgentStep] = []
+    suggestions: list[AgentSuggestion] = []
+
+    _add_check_structure(steps, suggestions, intake)
+
+    if code is not None:
+        _add_execution(steps, suggestions, executor, code, tests or "")
+    elif intake.profile.framework is IntakeFramework.DECISION:
+        _add_compare_options(steps, suggestions, intake)
+    else:
+        _add_search_patterns(steps, suggestions, problem, intake, knowledge)
+
+    _add_clarifying(steps, suggestions, intake)
+
+    return AgentTrace(
+        version="0.1",
+        session_id=session_id,
+        mode="rules",
+        steps=tuple(steps[:MAX_AGENT_STEPS]),
+        suggestions=tuple(suggestions[:MAX_AGENT_STEPS]),
+        limits=AgentLimits(
+            max_steps=MAX_AGENT_STEPS,
+            steps_used=len(steps[:MAX_AGENT_STEPS]),
+        ),
+        notice=_NOTICE,
+    )
+
+
+def _add_check_structure(
+    steps: list[AgentStep],
+    suggestions: list[AgentSuggestion],
+    intake: DomainIntake,
+) -> None:
+    started = perf_counter()
+    observed = len(intake.observed)
+    gaps = intake.gaps
+    if not observed and not gaps:
+        status: AgentStepStatus = "skipped"
+        summary = "入口里还没有可检查的结构；先写一句你遇到什么。"
+    else:
+        status = "ok"
+        summary = f"看到 {observed} 项结构，缺口 {len(gaps)} 个；缺口只说明没写到，不判断对错。"
+    if gaps:
+        suggestions.append(AgentSuggestion("structure", _clip(gaps[0]), "rule"))
+    steps.append(
+        AgentStep(
+            index=len(steps) + 1,
+            tool="check_structure",
+            status=status,
+            input_summary=(
+                f"domain={intake.profile.name}; "
+                f"verification={intake.profile.verification.value}; intake=generic"
+            ),
+            output_summary=summary,
+            duration_ms=_elapsed_ms(started),
+        )
+    )
+
+
+def _add_search_patterns(
+    steps: list[AgentStep],
+    suggestions: list[AgentSuggestion],
+    problem: Problem,
+    intake: DomainIntake,
+    knowledge: KnowledgeService,
+) -> None:
+    started = perf_counter()
+    tool: AgentTool = "search_patterns"
+    if not knowledge.enabled:
+        steps.append(
+            AgentStep(
+                index=len(steps) + 1,
+                tool=tool,
+                status="skipped",
+                input_summary=f"domain={intake.profile.name}; rag=off",
+                output_summary="RAG 未开启；本轮没有外部知识卡，也不伪造引用。",
+                duration_ms=_elapsed_ms(started),
+            )
+        )
+        return
+
+    subject = None if problem.subject == "generic" else problem.subject
+    query = f"{intake.profile.label} 方法 模式 检查"
+    try:
+        result = knowledge.search(
+            query,
+            subject=subject,
+            verification=intake.profile.verification.value,
+            limit=2,
+        )
+    except KnowledgeUnavailable:
+        steps.append(
+            AgentStep(
+                index=len(steps) + 1,
+                tool=tool,
+                status="failed",
+                input_summary=f"domain={intake.profile.name}; query=concept-label",
+                output_summary="检索运行时不可用；本轮没有引用，以下只保留结构线索。",
+                duration_ms=_elapsed_ms(started),
+            )
+        )
+        suggestions.append(
+            AgentSuggestion(
+                "source",
+                "本轮没有可用的知识卡；不要把系统推断当成引用。",
+                "system",
+            )
+        )
+        return
+
+    citations = tuple(_citation(hit) for hit in result.hits)
+    if not citations:
+        steps.append(
+            AgentStep(
+                index=len(steps) + 1,
+                tool=tool,
+                status="skipped",
+                input_summary=f"domain={intake.profile.name}; query=concept-label",
+                output_summary="没有命中的知识卡；本轮不伪造引用。",
+                duration_ms=_elapsed_ms(started),
+            )
+        )
+        return
+
+    first = result.hits[0].card
+    steps.append(
+        AgentStep(
+            index=len(steps) + 1,
+            tool=tool,
+            status="ok",
+            input_summary=f"domain={intake.profile.name}; query=concept-label",
+            output_summary=f"检索到 {len(citations)} 张卡；只作参考，不替代你的判断。",
+            duration_ms=_elapsed_ms(started),
+            citations=citations,
+        )
+    )
+    suggestions.append(
+        AgentSuggestion(
+            "source",
+            _clip(f"可参考：{first.title}（{first.source.title}）"),
+            "knowledge",
+        )
+    )
+
+
+def _add_compare_options(
+    steps: list[AgentStep],
+    suggestions: list[AgentSuggestion],
+    intake: DomainIntake,
+) -> None:
+    started = perf_counter()
+    options = sum(1 for node in intake.graph if node.kind is NodeKind.DECISION)
+    constraints = sum(1 for node in intake.graph if node.kind is NodeKind.CONSTRAINT)
+    risks = sum(1 for node in intake.graph if node.kind is NodeKind.RISK)
+    status: AgentStepStatus = "ok" if options >= 2 else "skipped"
+    summary = (
+        f"读到 {options} 个选项、{constraints} 条约束、{risks} 条代价；只并列，不排序，也不替你选。"
+    )
+    if options < 2:
+        summary = "只读到少于两个选项；决策至少需要两个，含「什么都不做」。"
+        suggestions.append(
+            AgentSuggestion(
+                "structure",
+                "先至少摆出两个选项（含「什么都不做」），各写一句。",
+                "rule",
+            )
+        )
+    else:
+        suggestions.append(
+            AgentSuggestion(
+                "experiment",
+                "把每个选项在时间、钱、关系、不可逆性上各写一句；系统不替你排序。",
+                "rule",
+            )
+        )
+    steps.append(
+        AgentStep(
+            index=len(steps) + 1,
+            tool="compare_options",
+            status=status,
+            input_summary=f"domain={intake.profile.name}; framework=decision",
+            output_summary=summary,
+            duration_ms=_elapsed_ms(started),
+        )
+    )
+
+
+def _add_clarifying(
+    steps: list[AgentStep],
+    suggestions: list[AgentSuggestion],
+    intake: DomainIntake,
+) -> None:
+    started = perf_counter()
+    if intake.probe is not None:
+        question = intake.probe.question
+        detail = (
+            f"kind={intake.probe.kind.value}; answered={intake.probe.answered}/{intake.probe.limit}"
+        )
+        summary = "入口还有一个结构问题；一次只问一个，不推进会话。"
+    elif intake.clarifier is not None:
+        question = intake.clarifier
+        detail = "clarifier=open"
+        summary = "入口还有一个领域澄清问题；先回答它，再整理结构。"
+    else:
+        steps.append(
+            AgentStep(
+                index=len(steps) + 1,
+                tool="ask_clarifying",
+                status="skipped",
+                input_summary="questions=0",
+                output_summary="没有待补的问题；不重复追问。",
+                duration_ms=_elapsed_ms(started),
+            )
+        )
+        return
+
+    suggestions.append(AgentSuggestion("clarify", _clip(f"先回答：{question}"), "system"))
+    steps.append(
+        AgentStep(
+            index=len(steps) + 1,
+            tool="ask_clarifying",
+            status="ok",
+            input_summary=detail,
+            output_summary=summary,
+            duration_ms=_elapsed_ms(started),
+        )
+    )
+
+
+def _add_execution(
+    steps: list[AgentStep],
+    suggestions: list[AgentSuggestion],
+    executor: CodeExecutor | None,
+    code: str,
+    tests: str,
+) -> None:
+    started = perf_counter()
+    tool: AgentTool = "run_tests" if tests else "run_code"
+    input_summary = (
+        f"language=python; code_chars={len(code)}; tests_chars={len(tests)}; explicit=true"
+    )
+    if executor is None:
+        steps.append(
+            AgentStep(
+                index=len(steps) + 1,
+                tool=tool,
+                status="skipped",
+                input_summary=input_summary,
+                output_summary="执行开关关闭：没有运行代码，也不把未运行当作通过。",
+                duration_ms=_elapsed_ms(started),
+            )
+        )
+        suggestions.append(
+            AgentSuggestion(
+                "experiment",
+                "需要复现时，显式开启 SYNAPSE_EXEC=on 后再提交同一段代码；本轮未执行。",
+                "system",
+            )
+        )
+        return
+
+    try:
+        result = executor.run(RunCodeCommand(language="python", code=code, tests=tests))
+    except ExecutionBusy:
+        steps.append(
+            AgentStep(
+                index=len(steps) + 1,
+                tool=tool,
+                status="failed",
+                input_summary=input_summary,
+                output_summary="执行槽被占用；代码没有运行，不据此判断对错。",
+                duration_ms=_elapsed_ms(started),
+            )
+        )
+        suggestions.append(
+            AgentSuggestion(
+                "experiment",
+                "稍后重试；本轮没有执行，也没有产生运行结果。",
+                "system",
+            )
+        )
+        return
+    except Exception as exc:  # tool boundary: a broken adapter must not crash the trace
+        steps.append(
+            AgentStep(
+                index=len(steps) + 1,
+                tool=tool,
+                status="failed",
+                input_summary=input_summary,
+                output_summary=(f"执行器失败（{type(exc).__name__}）；这次没有完成可解释的运行。"),
+                duration_ms=_elapsed_ms(started),
+            )
+        )
+        suggestions.append(
+            AgentSuggestion(
+                "experiment",
+                "这次没有拿到运行结果；先检查执行器状态，不要把失败当成代码诊断。",
+                "system",
+            )
+        )
+        return
+
+    summary = (
+        f"运行状态={result.status}；退出码={result.exit_code}；"
+        f"执行器耗时={result.duration_ms}ms；"
+        f"stdout {len(result.stdout)} 字符，stderr {len(result.stderr)} 字符。"
+    )
+    if result.truncated:
+        summary += " 输出已截断。"
+    if result.detail:
+        summary += f" {result.detail}"
+    if result.stdout.strip():
+        summary += f" stdout 摘要：{result.stdout.strip()}"
+    if result.stderr.strip():
+        summary += f" stderr 摘要：{result.stderr.strip()}"
+    if result.findings:
+        summary += " findings=" + ",".join(item.code for item in result.findings)
+
+    steps.append(
+        AgentStep(
+            index=len(steps) + 1,
+            tool=tool,
+            status="ok",
+            input_summary=input_summary,
+            output_summary=summary[:600],
+            duration_ms=_elapsed_ms(started),
+        )
+    )
+
+    if result.status == "pass":
+        text = "这次运行通过了；只说明这次输入/测试通过，不说明代码正确。"
+    elif result.status == "fail":
+        text = "先看失败断言或第一个异常，把输入缩到最小；这次运行不是最终判定。"
+    elif result.status == "timeout":
+        text = "运行超时；先缩小输入或加日志，不能据此判断对错。"
+    else:
+        text = "执行被静态闸门拒绝，代码没有运行；先移除被禁止的导入或调用。"
+    suggestions.append(AgentSuggestion("experiment", text, "execution"))
+
+
+def _citation(hit: KnowledgeHit) -> AgentCitation:
+    card = hit.card
+    return AgentCitation(
+        card_id=card.id,
+        title=card.title,
+        source_title=card.source.title,
+        source_url=card.source.url,
+        license=card.source.license,
+    )
+
+
+def _clip(text: str, limit: int = 300) -> str:
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1] + "…"
+
+
+def _elapsed_ms(started: float) -> float:
+    return round((perf_counter() - started) * 1000, 1)

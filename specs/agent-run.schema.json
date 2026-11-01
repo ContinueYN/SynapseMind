@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://synapsemind.dev/schemas/agent-run.schema.json",
+  "title": "AgentRunRequest",
+  "description": "显式代码复现请求 v0.1：只接受调用方粘贴的 Python 代码与可选 unittest，不从题面或会话里自动抽取；执行默认关闭。",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "code": {"type": "string", "minLength": 1, "maxLength": 20000},
+    "tests": {"type": "string", "minLength": 1, "maxLength": 20000}
+  },
+  "dependentRequired": {"tests": ["code"]},
+  "anyOf": [{"required": ["code"]}],
+  "description": "至少提交 code；tests 只能和 code 一起提交。"
+}

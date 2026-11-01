@@ -28,7 +28,15 @@ export type KnowledgeHit = Schemas["KnowledgeHitOut"];
 export type KnowledgeSearch = Schemas["KnowledgeSearchOut"];
 export type Domain = Schemas["DomainOut"];
 export type DomainIntake = Schemas["DomainIntakeOut"];
+export type AgentTrace = Schemas["AgentTraceOut"];
+export type AgentStep = Schemas["AgentStepOut"];
+export type AgentSuggestion = Schemas["AgentSuggestionOut"];
 export type VerificationMode = Domain["verification"];
+
+export interface AgentRunInput {
+  code: string;
+  tests?: string;
+}
 
 export type SessionState =
   | "INGEST"

@@ -129,6 +129,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sessions/{session_id}/agent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Agent Trace
+         * @description Read-only bounded tool trace; no code execution and no state changes.
+         */
+        get: operations["get_agent_trace_api_v1_sessions__session_id__agent_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sessions/{session_id}/agent/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Agent Trace
+         * @description Trace with one explicitly submitted Python reproduction.
+         *
+         *     This endpoint never pulls code out of the problem or the attempt; with
+         *     ``SYNAPSE_EXEC=off`` the trace records a skipped execution instead of a
+         *     fake pass. It does not write the session or read the answer store.
+         */
+        post: operations["run_agent_trace_api_v1_sessions__session_id__agent_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sessions/{session_id}/intake": {
         parameters: {
             query?: never;
@@ -255,6 +299,102 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AgentCitationOut */
+        AgentCitationOut: {
+            /** Card Id */
+            card_id: string;
+            /** Title */
+            title: string;
+            /** Source Title */
+            source_title: string;
+            /** Source Url */
+            source_url: string;
+            /** License */
+            license: string;
+        };
+        /** AgentLimitsOut */
+        AgentLimitsOut: {
+            /** Max Steps */
+            max_steps: number;
+            /** Steps Used */
+            steps_used: number;
+        };
+        /**
+         * AgentRunRequest
+         * @description Explicit code submission for one bounded trace.
+         *
+         *     The API never extracts code from the problem or the attempt; the caller
+         *     must paste it. ``tests`` is optional and requires ``code``.
+         */
+        AgentRunRequest: {
+            /** Code */
+            code?: string | null;
+            /** Tests */
+            tests?: string | null;
+        };
+        /** AgentStepOut */
+        AgentStepOut: {
+            /** Index */
+            index: number;
+            /**
+             * Tool
+             * @enum {string}
+             */
+            tool: "check_structure" | "search_patterns" | "compare_options" | "ask_clarifying" | "run_code" | "run_tests";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "skipped" | "failed";
+            /** Input Summary */
+            input_summary: string;
+            /** Output Summary */
+            output_summary: string;
+            /** Duration Ms */
+            duration_ms: number;
+            /** Citations */
+            citations?: components["schemas"]["AgentCitationOut"][];
+        };
+        /** AgentSuggestionOut */
+        AgentSuggestionOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "structure" | "source" | "experiment" | "clarify";
+            /** Text */
+            text: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "rule" | "knowledge" | "execution" | "system";
+        };
+        /**
+         * AgentTraceOut
+         * @description A bounded tool trace, not a diagnosis and not a chain of thought.
+         */
+        AgentTraceOut: {
+            /**
+             * Version
+             * @constant
+             */
+            version: "0.1";
+            /** Session Id */
+            session_id: string;
+            /**
+             * Mode
+             * @constant
+             */
+            mode: "rules";
+            /** Steps */
+            steps?: components["schemas"]["AgentStepOut"][];
+            /** Suggestions */
+            suggestions?: components["schemas"]["AgentSuggestionOut"][];
+            limits: components["schemas"]["AgentLimitsOut"];
+            /** Notice */
+            notice: string;
+        };
         /** AttemptIn */
         AttemptIn: {
             /** Answer */
@@ -1114,6 +1254,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_agent_trace_api_v1_sessions__session_id__agent_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTraceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_agent_trace_api_v1_sessions__session_id__agent_run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTraceOut"];
                 };
             };
             /** @description Validation Error */

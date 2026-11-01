@@ -10,6 +10,12 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from time import perf_counter
 
+from synapse.application.agent import (
+    AgentInputRejected,
+    AgentTrace,
+    AgentUnavailable,
+    run_agent_trace,
+)
 from synapse.application.audit import AuditEntry, CallAuditor
 from synapse.application.card_builder import build_diagnosis_card
 from synapse.application.commands import (
@@ -25,6 +31,7 @@ from synapse.application.domains import (
     DomainRegistry,
     verifiability_level,
 )
+from synapse.application.execution import CodeExecutor
 from synapse.application.factory import SessionFactory
 from synapse.application.hint_builder import build_structure_hint
 from synapse.application.intake import (
@@ -33,6 +40,7 @@ from synapse.application.intake import (
     DomainIntake,
     build_domain_intake,
 )
+from synapse.application.knowledge import KnowledgeService
 from synapse.application.limits import StepRateLimited, StepRateLimiter
 from synapse.application.planner import ProbePlanner
 from synapse.application.ports import (
@@ -134,6 +142,8 @@ class SessionService:
         review_queue: ReviewQueue | None = None,
         answers: AnswerStore | None = None,
         chc_attribution: bool = False,
+        knowledge: KnowledgeService | None = None,
+        code_executor: CodeExecutor | None = None,
     ) -> None:
         self._sessions = sessions
         self._problems = problems
@@ -168,6 +178,12 @@ class SessionService:
         self._review_queue = review_queue
         self._answers = answers
         self._chc_attribution = chc_attribution
+        # The agent trace is a read-only side path. ``KnowledgeService(None)``
+        # keeps it deterministic and offline when RAG is not wired.
+        self._knowledge = knowledge or KnowledgeService(None)
+        # Explicit code execution is optional here too; ``None`` means the
+        # trace must say "not executed" instead of pretending it ran.
+        self._code_executor = code_executor
 
     def start(self, command: StartSessionCommand) -> SessionView:
         # Check the student's own equals signs before alignment: a provable
@@ -249,6 +265,44 @@ class SessionService:
             diagnosis=session.diagnosis,
             hint=self._hint(session),
             intake=self._intake_for(session),
+        )
+
+    def agent_trace(
+        self,
+        session_id: str,
+        *,
+        code: str | None = None,
+        tests: str | None = None,
+    ) -> AgentTrace:
+        """Return a bounded tool trace for a reference-free intake.
+
+        This is a side path: it reads the derived intake and never touches the
+        session, the answer store, the probe budget or the diagnosis. Explicit
+        code is accepted only for an EXECUTABLE framework and is still subject
+        to the ``SYNAPSE_EXEC`` switch (``None`` executor means "not run").
+        """
+
+        session = self._get(session_id)
+        intake = self._intake_for(session)
+        if intake is None:
+            raise AgentUnavailable("agent trace is only available for generic intake sessions")
+
+        if tests is not None:
+            if code is None:
+                raise AgentInputRejected("tests require an explicit code submission")
+            if not tests.strip() or len(tests) > 20000:
+                raise AgentInputRejected("explicit tests must be 1-20000 characters")
+        if code is not None and (not code.strip() or len(code) > 20000):
+            raise AgentInputRejected("explicit code must be 1-20000 characters")
+
+        return run_agent_trace(
+            session_id,
+            self._effective_problem(session),
+            intake,
+            self._knowledge,
+            self._code_executor,
+            code=code,
+            tests=tests,
         )
 
     def answer_clarifier(self, session_id: str, answer: str) -> SessionView:

@@ -14,6 +14,7 @@ from synapse.api.deps import (
     get_service,
 )
 from synapse.api.mappers import (
+    agent_trace_out,
     diagnosis_out,
     execution_out,
     knowledge_search_out,
@@ -22,6 +23,8 @@ from synapse.api.mappers import (
     step_verdict_out,
 )
 from synapse.api.schemas import (
+    AgentRunRequest,
+    AgentTraceOut,
     ClarifierRequest,
     CreateSessionRequest,
     DiagnosisOut,
@@ -37,6 +40,7 @@ from synapse.api.schemas import (
     StepVerdictOut,
     TurnRequest,
 )
+from synapse.application.agent import AgentInputRejected, AgentUnavailable
 from synapse.application.commands import (
     StartSessionCommand,
     SubmitAnswerCommand,
@@ -203,6 +207,56 @@ def get_session(
     except SessionNotFound as exc:
         raise HTTPException(status_code=404, detail="session not found") from exc
     return _session_out(view, service)
+
+
+@router.get("/sessions/{session_id}/agent", response_model=AgentTraceOut)
+def get_agent_trace(
+    session_id: str,
+    service: SessionService = Depends(get_service),
+) -> AgentTraceOut:
+    """Read-only bounded tool trace; no code execution and no state changes."""
+
+    try:
+        trace = service.agent_trace(session_id)
+    except SessionNotFound as exc:
+        raise HTTPException(status_code=404, detail="session not found") from exc
+    except AgentUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="工具轨迹只用于通用入口会话；这道题已经有参考结构。",
+        ) from exc
+    return agent_trace_out(trace)
+
+
+@router.post("/sessions/{session_id}/agent/run", response_model=AgentTraceOut)
+def run_agent_trace(
+    session_id: str,
+    request: AgentRunRequest,
+    service: SessionService = Depends(get_service),
+) -> AgentTraceOut:
+    """Trace with one explicitly submitted Python reproduction.
+
+    This endpoint never pulls code out of the problem or the attempt; with
+    ``SYNAPSE_EXEC=off`` the trace records a skipped execution instead of a
+    fake pass. It does not write the session or read the answer store.
+    """
+
+    try:
+        trace = service.agent_trace(
+            session_id,
+            code=request.code,
+            tests=request.tests,
+        )
+    except SessionNotFound as exc:
+        raise HTTPException(status_code=404, detail="session not found") from exc
+    except AgentUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="工具轨迹只用于通用入口会话；这道题已经有参考结构。",
+        ) from exc
+    except AgentInputRejected as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return agent_trace_out(trace)
 
 
 @router.post("/sessions/{session_id}/intake", response_model=SessionOut)

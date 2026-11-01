@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://synapsemind.dev/schemas/agent-trace.schema.json",
+  "title": "AgentTrace",
+  "description": "有界工具轨迹 v0.1：只读、最多 3 步、不推进会话、不读答案；记录工具名、状态、输入/输出摘要与引用，不记录思维链。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "session_id", "mode", "steps", "suggestions", "limits", "notice"],
+  "properties": {
+    "version": {"type": "string", "const": "0.1"},
+    "session_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "mode": {
+      "type": "string",
+      "enum": ["rules"],
+      "description": "v0.1 只有确定性规则轨迹；LLM 规划器未接。"
+    },
+    "steps": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "index",
+          "tool",
+          "status",
+          "input_summary",
+          "output_summary",
+          "duration_ms",
+          "citations"
+        ],
+        "properties": {
+          "index": {"type": "integer", "minimum": 1, "maximum": 3},
+          "tool": {
+            "type": "string",
+            "enum": [
+              "check_structure",
+              "search_patterns",
+              "compare_options",
+              "ask_clarifying",
+              "run_code",
+              "run_tests"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["ok", "skipped", "failed"],
+            "description": "工具调用本身的状态，不是代码/回答的对错结论。"
+          },
+          "input_summary": {"type": "string", "minLength": 1, "maxLength": 200},
+          "output_summary": {"type": "string", "minLength": 1, "maxLength": 600},
+          "duration_ms": {"type": "number", "minimum": 0, "maximum": 60000},
+          "citations": {
+            "type": "array",
+            "maxItems": 3,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["card_id", "title", "source_title", "source_url", "license"],
+              "properties": {
+                "card_id": {"type": "string", "pattern": "^K_[A-Z0-9_]+$"},
+                "title": {"type": "string", "minLength": 1, "maxLength": 60},
+                "source_title": {"type": "string", "minLength": 1, "maxLength": 120},
+                "source_url": {"type": "string", "pattern": "^https://"},
+                "license": {"type": "string", "minLength": 1, "maxLength": 80}
+              }
+            }
+          }
+        }
+      }
+    },
+    "suggestions": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "text", "source"],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["structure", "source", "experiment", "clarify"]
+          },
+          "text": {"type": "string", "minLength": 1, "maxLength": 300},
+          "source": {
+            "type": "string",
+            "enum": ["rule", "knowledge", "execution", "system"]
+          }
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_steps", "steps_used"],
+      "properties": {
+        "max_steps": {"type": "integer", "minimum": 1, "maximum": 3},
+        "steps_used": {"type": "integer", "minimum": 0, "maximum": 3}
+      }
+    },
+    "notice": {"type": "string", "minLength": 1, "maxLength": 300}
+  }
+}
