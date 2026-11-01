@@ -38,6 +38,7 @@ class AttributionDimension:
 class Attribution:
     dimensions: tuple[AttributionDimension, ...]
     note: str
+    all_dimensions: tuple[AttributionDimension, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

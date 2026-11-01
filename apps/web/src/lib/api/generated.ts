@@ -456,6 +456,11 @@ export interface components {
         AttributionOut: {
             /** Dimensions */
             dimensions: components["schemas"]["AttributionDimensionOut"][];
+            /**
+             * All Dimensions
+             * @description Full seven-dimension demand vector; 0 marks a dimension without a tag.
+             */
+            all_dimensions?: components["schemas"]["AttributionDimensionOut"][];
             /** Note */
             note: string;
         };

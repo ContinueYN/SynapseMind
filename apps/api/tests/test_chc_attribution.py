@@ -59,6 +59,24 @@ def test_attribution_carries_the_focus_nodes_top_two_demands(
     assert [item["key"] for item in attribution["dimensions"]] == ["Gf", "WM"]
     assert attribution["dimensions"][0]["label"] == "流体推理"
     assert attribution["dimensions"][0]["weight"] == 0.7
+    assert [item["key"] for item in attribution["all_dimensions"]] == [
+        "V",
+        "Gf",
+        "Gv",
+        "WM",
+        "Gs",
+        "LTS",
+        "M",
+    ]
+    assert [item["weight"] for item in attribution["all_dimensions"]] == [
+        0.0,
+        0.7,
+        0.0,
+        0.5,
+        0.0,
+        0.0,
+        0.4,
+    ]
     assert attribution["note"] == "题目需求标签，不是能力测评；单题不足以断言。"
 
 
@@ -129,6 +147,15 @@ def test_snapshot_round_trip_keeps_attribution() -> None:
             "disagree": False,
             "attribution": {
                 "dimensions": [{"key": "Gf", "label": "流体推理", "weight": 0.7}],
+                "all_dimensions": [
+                    {"key": "V", "label": "言语理解", "weight": 0.0},
+                    {"key": "Gf", "label": "流体推理", "weight": 0.7},
+                    {"key": "Gv", "label": "视觉空间", "weight": 0.0},
+                    {"key": "WM", "label": "工作记忆", "weight": 0.5},
+                    {"key": "Gs", "label": "加工速度", "weight": 0.0},
+                    {"key": "LTS", "label": "长时存取", "weight": 0.0},
+                    {"key": "M", "label": "元认知", "weight": 0.4},
+                ],
                 "note": "题目需求标签，不是能力测评；单题不足以断言。",
             },
         },
@@ -139,3 +166,5 @@ def test_snapshot_round_trip_keeps_attribution() -> None:
 
     assert payload["version"] == "0.2"
     assert payload["attribution"]["dimensions"][0]["key"] == "Gf"
+    assert len(payload["attribution"]["all_dimensions"]) == 7
+    assert payload["attribution"]["all_dimensions"][3]["key"] == "WM"

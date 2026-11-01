@@ -103,6 +103,11 @@ class AttributionDimensionOut(StrictModel):
 
 class AttributionOut(StrictModel):
     dimensions: list[AttributionDimensionOut] = Field(min_length=1, max_length=2)
+    all_dimensions: list[AttributionDimensionOut] = Field(
+        default_factory=list,
+        max_length=7,
+        description="Full seven-dimension demand vector; 0 marks a dimension without a tag.",
+    )
     note: str = Field(min_length=1, max_length=100)
 
 

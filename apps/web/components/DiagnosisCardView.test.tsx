@@ -107,7 +107,7 @@ describe("DiagnosisCardView", () => {
   });
 
   it("shows the problem-side CHC tags without an ability score", () => {
-    render(
+    const { container } = render(
       <DiagnosisCardView
         card={{
           ...CARD,
@@ -115,6 +115,15 @@ describe("DiagnosisCardView", () => {
             dimensions: [
               { key: "Gf", label: "流体推理", weight: 0.7 },
               { key: "WM", label: "工作记忆", weight: 0.5 },
+            ],
+            all_dimensions: [
+              { key: "V", label: "言语理解", weight: 0 },
+              { key: "Gf", label: "流体推理", weight: 0.7 },
+              { key: "Gv", label: "视觉空间", weight: 0 },
+              { key: "WM", label: "工作记忆", weight: 0.5 },
+              { key: "Gs", label: "加工速度", weight: 0 },
+              { key: "LTS", label: "长时存取", weight: 0 },
+              { key: "M", label: "元认知", weight: 0.4 },
             ],
             note: "题目需求标签，不是能力测评；单题不足以断言。",
           },
@@ -124,11 +133,15 @@ describe("DiagnosisCardView", () => {
     );
 
     expect(screen.getByText("本题的认知需求")).toBeInTheDocument();
-    expect(screen.getByText("流体推理")).toBeInTheDocument();
-    expect(screen.getByText("0.70")).toBeInTheDocument();
+    expect(screen.getAllByText("流体推理").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("0.70").length).toBeGreaterThan(0);
     expect(
       screen.getByText("题目需求标签，不是能力测评；单题不足以断言。"),
     ).toBeInTheDocument();
+    expect(screen.getByText("查看七维需求向量")).toBeInTheDocument();
+    expect(container.querySelectorAll(".sm-attr-vector .sm-attr-chip")).toHaveLength(
+      7,
+    );
     expect(screen.queryByText(/你的.*能力/)).not.toBeInTheDocument();
   });
 });

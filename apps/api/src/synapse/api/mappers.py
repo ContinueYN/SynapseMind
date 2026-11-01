@@ -151,6 +151,14 @@ def diagnosis_out(card: DiagnosisCard) -> DiagnosisOut:
                         )
                         for dimension in card.attribution.dimensions
                     ],
+                    all_dimensions=[
+                        AttributionDimensionOut(
+                            key=dimension.key,
+                            label=dimension.label,
+                            weight=dimension.weight,
+                        )
+                        for dimension in card.attribution.all_dimensions
+                    ],
                     note=card.attribution.note,
                 )
                 if card.attribution is not None

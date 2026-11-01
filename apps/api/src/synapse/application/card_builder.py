@@ -94,28 +94,31 @@ _CHC_LABELS = {
     "M": "元认知",
 }
 _CHC_NOTE = "题目需求标签，不是能力测评；单题不足以断言。"
+_CHC_ORDER = tuple(_CHC_LABELS)
 
 
 def _attribution(problem: Problem, node_id: str) -> Attribution | None:
     node = next((item for item in problem.graph.nodes if item.id == node_id), None)
     if node is None or not node.demand:
         return None
-    ranked = sorted(
-        node.demand.items(),
-        key=lambda item: (-item[1], item[0]),
-    )[:2]
-    dimensions = tuple(
+
+    vector = tuple(
         AttributionDimension(
             key=key,
-            label=_CHC_LABELS.get(key, key),
-            weight=round(min(max(value, 0.0), 1.0), 2),
+            label=_CHC_LABELS[key],
+            weight=round(min(max(node.demand.get(key, 0.0), 0.0), 1.0), 2),
         )
-        for key, value in ranked
-        if value > 0
+        for key in _CHC_ORDER
     )
-    if not dimensions:
+    ranked = tuple(
+        sorted(
+            (dimension for dimension in vector if dimension.weight > 0),
+            key=lambda item: (-item.weight, item.key),
+        )[:2]
+    )
+    if not ranked:
         return None
-    return Attribution(dimensions=dimensions, note=_CHC_NOTE)
+    return Attribution(dimensions=ranked, note=_CHC_NOTE, all_dimensions=vector)
 
 
 def build_diagnosis_card(

@@ -118,6 +118,20 @@ export function DiagnosisCardView({
                 </span>
               ))}
               <p className="sm-attr-note">{card.attribution.note}</p>
+              {(card.attribution.all_dimensions?.length ?? 0) > 0 ? (
+                <details className="sm-attr-all">
+                  <summary>查看七维需求向量</summary>
+                  <div className="sm-attr-vector">
+                    {card.attribution.all_dimensions?.map((dimension) => (
+                      <span className="sm-attr-chip" key={dimension.key}>
+                        <b>{dimension.key}</b> {dimension.label}
+                        <i>{dimension.weight.toFixed(2)}</i>
+                      </span>
+                    ))}
+                  </div>
+                  <p className="sm-attr-note">未标注维度记 0；只描述本题节点的认知需求。</p>
+                </details>
+              ) : null}
             </div>
           ) : null}
 

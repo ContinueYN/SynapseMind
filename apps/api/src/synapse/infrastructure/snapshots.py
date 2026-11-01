@@ -344,16 +344,33 @@ def _card_to_json(card: DiagnosisCard) -> dict[str, object]:
     if card.attribution is not None:
         data["attribution"] = {
             "dimensions": [
-                {
-                    "key": dimension.key,
-                    "label": dimension.label,
-                    "weight": dimension.weight,
-                }
+                _attribution_dimension_to_json(dimension)
                 for dimension in card.attribution.dimensions
+            ],
+            "all_dimensions": [
+                _attribution_dimension_to_json(dimension)
+                for dimension in card.attribution.all_dimensions
             ],
             "note": card.attribution.note,
         }
     return data
+
+
+def _attribution_dimension_to_json(dimension: AttributionDimension) -> dict[str, object]:
+    return {
+        "key": dimension.key,
+        "label": dimension.label,
+        "weight": dimension.weight,
+    }
+
+
+def _attribution_dimension_from_json(value: object, where: str) -> AttributionDimension:
+    item = _object(value, where)
+    return AttributionDimension(
+        key=_text(item.get("key"), f"{where}.key"),
+        label=_text(item.get("label"), f"{where}.label"),
+        weight=_number(item.get("weight"), f"{where}.weight"),
+    )
 
 
 def _attribution_from_json(value: object, where: str) -> Attribution:
@@ -362,17 +379,24 @@ def _attribution_from_json(value: object, where: str) -> Attribution:
     if not 1 <= len(raw_dimensions) <= 2:
         raise SnapshotError(f"{where}.dimensions: expected 1 or 2 items")
     dimensions = tuple(
-        AttributionDimension(
-            key=_text(item.get("key"), f"{where}.dimensions[{index}].key"),
-            label=_text(item.get("label"), f"{where}.dimensions[{index}].label"),
-            weight=_number(item.get("weight"), f"{where}.dimensions[{index}].weight"),
-        )
+        _attribution_dimension_from_json(raw, f"{where}.dimensions[{index}]")
         for index, raw in enumerate(raw_dimensions)
-        for item in (_object(raw, f"{where}.dimensions[{index}]"),)
     )
+    raw_all = data.get("all_dimensions")
+    if raw_all is None:
+        all_dimensions: tuple[AttributionDimension, ...] = ()
+    else:
+        all_raw = _array(raw_all, f"{where}.all_dimensions")
+        if len(all_raw) > 7:
+            raise SnapshotError(f"{where}.all_dimensions: expected at most 7 items")
+        all_dimensions = tuple(
+            _attribution_dimension_from_json(raw, f"{where}.all_dimensions[{index}]")
+            for index, raw in enumerate(all_raw)
+        )
     return Attribution(
         dimensions=dimensions,
         note=_text(data.get("note"), f"{where}.note"),
+        all_dimensions=all_dimensions,
     )
 
 

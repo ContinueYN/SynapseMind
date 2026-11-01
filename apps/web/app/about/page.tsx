@@ -179,8 +179,8 @@ export default function AboutPage() {
           </div>
 
           <p className="sm-fine">
-            这张页面列出七维坐标；卡面默认关闭，打开 `SYNAPSE_CHC_ATTRIBUTION` 后只显示本题 focus
-            节点需求最高的两维，措辞是「题目需求标签，不是能力测评」。后验与探针独立计算，对外只呈现节点需求。
+            这张页面列出七维坐标；卡面默认关闭，打开 `SYNAPSE_CHC_ATTRIBUTION` 后默认只显示本题 focus
+            节点需求最高的两维，展开可看完整七维向量，措辞是「题目需求标签，不是能力测评」。后验与探针独立计算，对外只呈现节点需求。
             我们不输出 IQ、百分位或「能力分」；单题也不足以断言任何一项能力。
           </p>
         </Plane>

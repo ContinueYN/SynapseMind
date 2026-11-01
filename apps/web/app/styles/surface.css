@@ -3112,6 +3112,31 @@ html[data-read="done"] .sm-orb-fill {
   line-height: 1.65;
 }
 
+.sm-attr-all {
+  flex-basis: 100%;
+  margin-top: 1px;
+}
+
+.sm-attr-all summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--ink-3);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  line-height: 1.6;
+}
+
+.sm-attr-all summary:hover {
+  color: var(--ink);
+}
+
+.sm-attr-vector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 7px;
+}
+
 .sm-ev {
   display: grid;
   gap: 11px;
