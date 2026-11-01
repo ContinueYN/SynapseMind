@@ -280,6 +280,50 @@ export interface components {
             card: components["schemas"]["CardOut"];
         };
         /**
+         * DomainIntakeOut
+         * @description The reference-free generic entry: guidance, never a diagnosis.
+         */
+        DomainIntakeOut: {
+            /**
+             * Version
+             * @constant
+             */
+            version: "0.1";
+            domain: components["schemas"]["DomainOut"];
+            /** One Line */
+            one_line: string;
+            /** Checklist */
+            checklist: string[];
+            /** Clarifier */
+            clarifier?: string | null;
+            /** Next Step */
+            next_step: string;
+            /** Disclaimer */
+            disclaimer: string;
+        };
+        /**
+         * DomainOut
+         * @description The resolved open domain label (Phase 0).
+         *
+         *     ``subject`` remains for compatibility and is the plugin key; this object is
+         *     what a client displays and what decides the verification promise.
+         */
+        DomainOut: {
+            /** Name */
+            name: string;
+            /** Label */
+            label: string;
+            /**
+             * Verification
+             * @enum {string}
+             */
+            verification: "formal" | "executable" | "empirical" | "argumentative";
+            /** Generic */
+            generic: boolean;
+            /** Confidence */
+            confidence: number;
+        };
+        /**
          * ExitRequest
          * @description Explicit opt-in to the answer store; the default exit reveals nothing.
          */
@@ -458,9 +502,9 @@ export interface components {
             image_url?: string | null;
             /**
              * Subject
-             * @description 可选；省略时由系统识别学科，置信不足返回 422。
+             * @description 可选领域标签（开放取值）。省略时自动识别；识别不出进入通用模式，不返回 422。
              */
-            subject?: ("math" | "physics" | "chinese") | null;
+            subject?: string | null;
             /**
              * Grade
              * @default high_school
@@ -555,6 +599,7 @@ export interface components {
             problem_text: string;
             /** Subject */
             subject: string;
+            domain: components["schemas"]["DomainOut"];
             /** Mode */
             mode: string;
             /** Turn */
@@ -565,6 +610,7 @@ export interface components {
             diagnosis?: components["schemas"]["DiagnosisOut"] | null;
             hint?: components["schemas"]["HintOut"] | null;
             scaffold?: components["schemas"]["ScaffoldOut"] | null;
+            intake?: components["schemas"]["DomainIntakeOut"] | null;
             /** Notice */
             notice?: string | null;
             /** Answer */

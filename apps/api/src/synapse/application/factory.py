@@ -16,7 +16,7 @@ from synapse.application.ports import (
     ProblemRepository,
 )
 from synapse.application.problem_resolver import ProblemResolver
-from synapse.application.subject import SubjectRegistry, VerifiabilityLevel
+from synapse.application.subject import SubjectRegistry
 from synapse.domain.diagnosis.hypotheses import (
     EvidenceWeights,
     HypothesisSet,
@@ -43,6 +43,18 @@ _ALIGNMENT_SUPPORT = {
 __all__ = ["ProblemNotSupported", "SessionFactory", "UnsupportedMode"]
 
 
+_REFERENCE_FREE_ALIGNMENT = AlignmentResult(
+    # "none" downstream means "the process is complete"; this sentinel means
+    # "there is no reference structure to compare against". The intake path
+    # never reads it, but the two must not be confused if Phase 1 starts
+    # building generic graphs.
+    first_divergence="no_reference",
+    matched_node_ids=(),
+    missing_node_ids=(),
+    evidence=("这道题还没有参考结构，这一轮不做步骤对齐。",),
+)
+
+
 class SessionFactory:
     def __init__(
         self,
@@ -63,23 +75,6 @@ class SessionFactory:
         # catalog and refuses everything else — generation needs a store to
         # keep the new problem and a plugin that can build graphs.
         self._resolver = resolver or ProblemResolver(problems, subjects)
-
-    def level_for(self, subject: str) -> VerifiabilityLevel:
-        """The subject's promise tier (M2.5 S7); used by the service gate.
-
-        Without a registry this is the M1 rule baseline, which is STRONG: the
-        annotated catalog is the one subject the product can actually verify.
-        An unknown subject must never reach here — the resolver refuses it
-        first — but if it does, STRONG keeps the pre-S7 behaviour instead of
-        silently downgrading a working path.
-        """
-
-        if self._subjects is None:
-            return VerifiabilityLevel.STRONG
-        plugin = self._subjects.for_subject(subject)
-        if plugin is None:
-            return VerifiabilityLevel.STRONG
-        return plugin.level
 
     def _evidence_for(self, subject: str, graph: SolutionGraph) -> EvidenceWeights | None:
         """Ask the subject plugin for its evidence model; ``None`` = M1 default.
@@ -156,7 +151,11 @@ class SessionFactory:
         not double-count the same prior.
         """
 
-        alignment = self._aligner_for(problem).align(problem, attempt)
+        alignment = (
+            _REFERENCE_FREE_ALIGNMENT
+            if not problem.graph.nodes
+            else self._aligner_for(problem).align(problem, attempt)
+        )
         session.alignment = alignment
         supports = self._supports_for(problem, alignment)
         for index, claim in enumerate(alignment.evidence):
@@ -183,7 +182,11 @@ class SessionFactory:
             confidence=command.confidence,
             self_report=command.self_report,
         )
-        alignment = self._aligner_for(problem).align(problem, attempt)
+        alignment = (
+            _REFERENCE_FREE_ALIGNMENT
+            if not problem.graph.nodes
+            else self._aligner_for(problem).align(problem, attempt)
+        )
         focus = self._focus_for(problem, alignment)
         session = DialogueSession(
             session_id=self._ids.new_session_id(),

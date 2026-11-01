@@ -66,7 +66,8 @@ class ChinesePlugin:
 
         This hook only identifies reviewed problems owned by the plugin. The
         decision to send an undeclared stem to the Chinese graph generator is
-        made by ``application.subject_detection`` before this hook is reached.
+        made by ``application.domains.DomainResolver`` before this hook is
+        reached.
         """
 
         del text

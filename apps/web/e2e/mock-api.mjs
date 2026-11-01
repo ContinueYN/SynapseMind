@@ -2,6 +2,30 @@ import { createServer } from "node:http";
 
 const PORT = Number(process.env.MOCK_API_PORT ?? 8100);
 
+const DOMAINS = {
+  math: {
+    name: "math",
+    label: "数学",
+    verification: "formal",
+    generic: false,
+    confidence: 1,
+  },
+  physics: {
+    name: "physics",
+    label: "物理",
+    verification: "empirical",
+    generic: false,
+    confidence: 1,
+  },
+  generic: {
+    name: "generic",
+    label: "通用问题",
+    verification: "argumentative",
+    generic: true,
+    confidence: 0,
+  },
+};
+
 const SESSIONS = {
   S_MATH_E2E: {
     problem_id: "P_E2E_MATH",
@@ -97,6 +121,39 @@ const SESSIONS = {
     prompt: null,
     notice: "已退出学习模式；本次不生成卡点卡，也不展示最终答案。",
   },
+  S_INTAKE_E2E: {
+    problem_id: "P_E2E_INTAKE",
+    problem_title: "Python 报错",
+    problem_text: "我的 Python 脚本报错了：IndexError: list index out of range。",
+    subject: "programming",
+    state: "CLOSED",
+    prompt: null,
+    domain: {
+      name: "programming",
+      label: "编程",
+      verification: "executable",
+      generic: false,
+      confidence: 1,
+    },
+    intake: {
+      version: "0.1",
+      domain: {
+        name: "programming",
+        label: "编程",
+        verification: "executable",
+        generic: false,
+        confidence: 1,
+      },
+      one_line: "按「编程」处理（可执行验证）。这一轮没有参考结构，先不判断卡点。",
+      checklist: [
+        "复现：能不能稳定重现同一个报错",
+        "定位：报错发生在哪一行、哪个值为空",
+      ],
+      clarifier: null,
+      next_step: "把最小可复现的那几行贴出来，比整份脚本更有用。",
+      disclaimer: "没有运行你的代码，所以这一轮不声称找到 bug，也不给唯一修法。",
+    },
+  },
 };
 
 const REVIEW_ITEMS = [
@@ -129,6 +186,8 @@ function sessionBody(id) {
     session_id: id,
     state: preset.state ?? (diagnosis ? "DIAGNOSE" : "PROBE"),
     ...preset,
+    domain: preset.domain ?? DOMAINS[preset.subject] ?? DOMAINS.generic,
+    intake: preset.intake ?? null,
     mode: "learning",
     turn: 0,
     max_turns: 6,

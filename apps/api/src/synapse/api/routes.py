@@ -42,10 +42,24 @@ from synapse.application.service import (
     InvalidAnswer,
     SessionNotFound,
     SessionService,
+    SessionView,
 )
 from synapse.domain.dialogue.table import IllegalTransition
 
 router = APIRouter(prefix="/api/v1")
+
+
+def _session_out(view: SessionView, service: SessionService) -> SessionOut:
+    """One place that gathers the problem metadata a session response needs."""
+
+    problem_id = view.session.problem_id
+    return session_out(
+        view,
+        service.problem_title(problem_id),
+        service.problem_text(problem_id),
+        service.problem_subject(problem_id),
+        service.problem_domain(problem_id),
+    )
 
 
 @router.get("/health", response_model=HealthOut)
@@ -115,12 +129,7 @@ def create_session(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"会话创建冲突，请重试（{exc}）。",
         ) from exc
-    return session_out(
-        view,
-        service.problem_title(view.session.problem_id),
-        service.problem_text(view.session.problem_id),
-        service.problem_subject(view.session.problem_id),
-    )
+    return _session_out(view, service)
 
 
 @router.get("/sessions/{session_id}", response_model=SessionOut)
@@ -132,12 +141,7 @@ def get_session(
         view = service.get(session_id)
     except SessionNotFound as exc:
         raise HTTPException(status_code=404, detail="session not found") from exc
-    return session_out(
-        view,
-        service.problem_title(view.session.problem_id),
-        service.problem_text(view.session.problem_id),
-        service.problem_subject(view.session.problem_id),
-    )
+    return _session_out(view, service)
 
 
 @router.post("/sessions/{session_id}/steps", response_model=StepVerdictOut)
@@ -191,12 +195,7 @@ def submit_turn(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"会话已被另一个请求更新，请刷新后重试（{exc}）。",
         ) from exc
-    return session_out(
-        view,
-        service.problem_title(view.session.problem_id),
-        service.problem_text(view.session.problem_id),
-        service.problem_subject(view.session.problem_id),
-    )
+    return _session_out(view, service)
 
 
 @router.post("/sessions/{session_id}/card/disagree", response_model=DiagnosisOut)
@@ -238,9 +237,4 @@ def exit_session(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"会话已被另一个请求更新，请刷新后重试（{exc}）。",
         ) from exc
-    return session_out(
-        view,
-        service.problem_title(view.session.problem_id),
-        service.problem_text(view.session.problem_id),
-        service.problem_subject(view.session.problem_id),
-    )
+    return _session_out(view, service)

@@ -5,7 +5,6 @@ Acceptance from chapter 13 §13.7: "数学插件包装现有种子题，行为�
 
 from __future__ import annotations
 
-import copy
 from dataclasses import replace
 
 from fastapi.testclient import TestClient
@@ -223,17 +222,27 @@ def test_generated_graphs_do_not_reuse_the_seed_topic_in_the_l1_label() -> None:
     assert labels["H_L2"] == MATH_HYPOTHESIS_LABELS["H_L2"]
 
 
-def test_physics_is_accepted_by_the_dto_but_still_422(
+def test_a_known_domain_without_a_graph_is_still_an_explicit_422(
     client: TestClient,
-    sample_payload: dict[str, object],
 ) -> None:
-    """S1 widened the enum; a subject we cannot serve is still an explicit 422."""
-    payload = copy.deepcopy(sample_payload)
-    problem = payload["problem"]
-    assert isinstance(problem, dict)
-    problem["subject"] = "physics"
+    """Phase 0 falls back to generic for *unknown* domains, not for a domain
+    the system recognises but cannot build a graph for in this environment.
 
-    response = client.post("/api/v1/sessions", json=payload)
+    A physics stem is confidently detected; with ``SYNAPSE_LLM_MODE=off`` there
+    is no generator, so the honest answer is still 422 rather than pretending
+    it is a generic problem.
+    """
+
+    response = client.post(
+        "/api/v1/sessions",
+        json={
+            "problem": {
+                "text": "质量为 2 kg 的物块放在水平面上，动摩擦因数 0.2，求物块受到的摩擦力。",
+            },
+            "attempt": {"answer": "4 N"},
+            "mode": "learning",
+        },
+    )
 
     assert response.status_code == 422
-    assert "no annotated problem" in response.json()["detail"]
+    assert "没有标注解法图" in response.json()["detail"]

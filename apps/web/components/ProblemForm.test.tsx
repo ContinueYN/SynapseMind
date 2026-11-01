@@ -27,11 +27,32 @@ function Harness({
 }
 
 describe("ProblemForm", () => {
-  it("does not ask the student to pick a subject", () => {
+  it("offers an optional domain label instead of a subject picker", () => {
     render(<Harness />);
 
     expect(screen.queryByLabelText("学科")).not.toBeInTheDocument();
-    expect(screen.getByText("自动识别")).toBeInTheDocument();
+    expect(screen.getByLabelText(/领域/).getAttribute("placeholder")).toContain(
+      "留空自动判断",
+    );
+    expect(screen.getByText("可留空，自动判断")).toBeInTheDocument();
+  });
+
+  it("sends the domain label only when the student typed one", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn(async () => {});
+    render(<Harness onSubmit={onSubmit} />);
+
+    await user.type(screen.getByPlaceholderText(/粘贴题目/), "我的 Python 脚本报错了");
+    await user.type(screen.getByPlaceholderText(/完全不会就写“不会”/), "不会");
+    await user.type(screen.getByLabelText(/领域/), "  编程  ");
+    await user.click(screen.getByRole("button", { name: "开始拆题" }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        problem: { text: "我的 Python 脚本报错了", subject: "编程" },
+      }),
+    );
   });
 
   it("blocks an empty problem before calling the API", async () => {

@@ -101,16 +101,18 @@ export default function HomePage() {
         <Plane className="sm-hero-lead">
           <p className="sm-eyebrow">
             <span aria-hidden="true" className="sm-dot" />
-            数学 · 物理 · 语文 · 自动识别
+            通用问题诊断 · 不是只做数学
           </p>
 
           <h1 className="sm-display">
-            把题给我，
+            把问题给我，
             <span className="sm-display-2">写到哪算哪</span>
           </h1>
 
           <p className="sm-lede">
-            过程写一半也行。停在哪一行，第一问就从哪一行开始。
+            数学题、代码报错、写作草稿、要不要换工作——同一个入口。
+            过程写一半也行，停在哪一行，第一问就从哪一行开始；
+            判断不出领域就按通用问题处理，不拦你。
           </p>
 
           <CluePreview draft={draft} hotId={hotField} />

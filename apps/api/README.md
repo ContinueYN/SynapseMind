@@ -115,7 +115,8 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 - `/steps` 只验证提交的这一步（`specs/step-verification.schema.json`）：不推进状态、不出卡；`unknown` 表示未启用/读不懂/没有可判的断言，不是“这步正确”。
 - `/review/items` 只读（`specs/review-queue.schema.json`）：只返回卡面结论与位置，不含学生原文；没有鉴权，判断也不写回服务端——教师在浏览器里标记后自行导出 CSV。
 - `/knowledge/search` 只读（`specs/knowledge-search.schema.json` v0.1）：`q` 是概念标签，不是学生作答原文；返回卡片的标题、摘录、出处（title/url/license）和余弦分数。`enabled=false` 表示 `SYNAPSE_RAG` 未开启；开启但模型不可用时返回 **503**，不会静默返回空结果。
-- `SessionOut.subject` 是会话所属学科；前端只在 `math` 会话显示单步检查入口，语文/物理不摆这个空承诺。
+- `SessionOut.subject` 是插件键（内部路由用）；`SessionOut.domain` 才是展示用的开放领域标签与验证方式（`formal`/`executable`/`empirical`/`argumentative`）。前端只在 `domain.name` 为数学/物理时显示单步检查入口。
+- 没有参考结构的问题（开放领域、未知领域，或本环境没有生成器）返回 `SessionOut.intake`（`specs/` 未单列 schema，字段见 `DomainIntakeOut`）；它不是卡点卡的简化版：不定位卡点、不估把握、不给唯一答案。
 
 ## 本地会话快照
 
@@ -208,7 +209,7 @@ NONE 档会话在 `ALIGN` 之后直接收束到 `STOP → CLOSED`：不追问、
 | `evidence_model()` | 生成图读图内 `probe.evidence`；只有已标注种子图回退手写 `EVIDENCE` | 只读图内权重，不回退数学 `EVIDENCE` | 恒空 |
 | `verify()` | 单步等式链：读 `text`，可证伪时 `fail`（带反例），否则 `unknown`；从不 `pass`，`data` 忽略。图顶层 `claim` 另由反例搜索核对（`pass`/`fail`/`unknown`） | `StudentStep.data` 的量纲与数值回代；纯文本 `unknown` | 恒 `unknown`（NONE 档没有可自动验证的真值） |
 
-`subject` 可省略：显式声明仍优先；未声明时 `application/subject_detection.py` 先用数学/物理/语文术语与公式打分，≥0.6 直接路由，否则才调用模型分类器（`off`/`shadow` 不调用）；仍不确定返回 **422**，不默认数学。标注题匹配优先于这一切：题面确实包含已标注题时永远用自带图。
+`subject` 是**开放标签**，不是白名单：显式声明优先（未知标签也接受，按通用模式处理）；未声明时 `application/domain_detection.py` 先用各领域术语与公式打分，≥0.6 直接路由，否则才调用模型分类器（`off`/`shadow` 不调用）；仍不确定就落到 `GenericProfile`，**不再返回 422**。真正决定承诺的是验证方式（`application/domains.py` 的 `VerificationMode`）：`FORMAL → STRONG`、`EMPIRICAL → PARTIAL`、`EXECUTABLE`/`ARGUMENTATIVE → NONE`。已知领域但本环境没有生成器时仍是显式 **422**，不会被静默降级成通用模式。标注题匹配优先于这一切：题面确实包含已标注题时永远用自带图，客户端标签只当提示。
 
 识别是**严格**的：只接受确实包含已标注题原文的提交（比较前忽略空白、标点、全半角与 LaTeX 转义），其余走生成或 422。关键字匹配会把「同一知识点、另一道题」也当成种子题，用错的解法图解释学生的错误——那比拒绝更糟。
 

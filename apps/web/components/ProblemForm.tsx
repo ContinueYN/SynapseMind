@@ -9,6 +9,8 @@ export type SelfReport = NonNullable<CreateSessionInput["attempt"]["self_report"
 
 export interface Draft {
   problem: string;
+  /** 可选领域标签。留空由系统判断；填了也只是标签，不是路由白名单。 */
+  domain: string;
   answer: string;
   work: string;
   stuckAt: string;
@@ -17,6 +19,7 @@ export interface Draft {
 
 export const EMPTY_DRAFT: Draft = {
   problem: "",
+  domain: "",
   answer: "",
   work: "",
   stuckAt: "",
@@ -104,6 +107,7 @@ export function ProblemForm({
   function fillSample() {
     onChange({
       problem: SAMPLE_PROBLEM,
+      domain: "",
       answer: "a≥1/e",
       work: SAMPLE_WORK,
       stuckAt: "令导数为 0 那一步，不确定要不要先管 a 是正是负",
@@ -127,7 +131,10 @@ export function ProblemForm({
     }
 
     await onSubmit({
-      problem: { text: value.problem.trim() },
+      problem: {
+        text: value.problem.trim(),
+        ...(value.domain.trim() ? { subject: value.domain.trim() } : {}),
+      },
       attempt: {
         answer: value.answer.trim(),
         work: value.work.trim(),
@@ -152,14 +159,20 @@ export function ProblemForm({
         </span>
       </div>
 
-      <div>
-        <div className="sm-f-label" style={{ marginBottom: 8 }}>
-          学科 <em>自动识别</em>
-        </div>
-        <p className="sm-fine" style={{ margin: 0 }}>
-          不用选。系统从题面判断数学 / 物理 / 语文；识别不准时会明确说明。
-        </p>
-      </div>
+      <label className="sm-f">
+        <span className="sm-f-label">
+          领域 <em>可留空，自动判断</em>
+        </span>
+        <input
+          id="field-domain"
+          onBlur={() => onFocusField?.(null)}
+          onChange={(event) => patch({ domain: event.target.value })}
+          onFocus={() => onFocusField?.("domain")}
+          placeholder="留空自动判断；也可以写编程、写作、研究、决策、任何领域"
+          type="text"
+          value={value.domain}
+        />
+      </label>
 
       <label className="sm-f">
         <span className="sm-f-label">
@@ -170,7 +183,7 @@ export function ProblemForm({
           onBlur={() => onFocusField?.(null)}
           onChange={(event) => patch({ problem: event.target.value })}
           onFocus={() => onFocusField?.("problem")}
-          placeholder="粘贴题目；只有照片的话，把题干敲成一行也行"
+          placeholder="粘贴题目、报错、草稿或一段还没想清楚的问题；只有照片的话，敲成一行也行"
           ref={problemRef}
           rows={2}
           value={value.problem}
@@ -291,8 +304,9 @@ export function ProblemForm({
       ) : null}
 
       <p className="sm-fine" style={{ marginTop: 0 }}>
-        数学走已标注的种子题；物理与语文现场建图，需要服务端配置模型 key。
-        语文按“只给结构提示”承诺：不追问、不判断卡点。前 3 轮不给最终答案。
+        领域只是标签，留空就由系统判断；判断不出会进入通用模式，不拦你的问题。
+        这一轮能说多硬的话，取决于能不能验证：能证、能跑、能查，还是只能讲结构。
+        前 3 轮不给最终答案。
       </p>
     </form>
   );

@@ -140,7 +140,7 @@ Nginx（SSE 关闭缓冲、限流、超时）
 | 状态机 | 显式转移表，不用图引擎——可单测、可回放、可静态审查 |
 | LLM 接入 | 只落在 `infrastructure/llm`；受控结构化输出 + 重试 + 降级 |
 | 解法图来源 | 学科插件提供；可手写也可生成，生成物必须过同一份 `solution-graph.schema.json`，否则显式失败、不生成卡点卡 |
-| 对外承诺 | 按学科可验证性分档，由 `application/commitment.py` 一处决定：可自动验证的学科追问并出卡点卡；无客观真值的学科（`level=NONE`）只出结构提示（`specs/structure-hint.schema.json`），不追问、不定位卡点 |
+| 对外承诺 | 按**验证方式**分档（FORMAL / EXECUTABLE / EMPIRICAL / ARGUMENTATIVE），由 `application/commitment.py` 一处决定：能形式化或经验验证的追问并出卡点卡；只能讲论证结构的（或当前环境无法执行验证的）只出结构提示或入口整理，不追问、不定位卡点。领域是开放标签，不是白名单 |
 | 诊断证据 | 种子题用人工标定的 log-odds 表；生成图由模型为每个选项给出权重，结构规则强制覆盖与正负对比，未知图不借用别题的权重 |
 | 异步任务 | 只跑离线活；**LLM 主链路绝不进队列**——进队列就破首问预算 |
 | 迁移 | Alembic 向前兼容，不做自动 down migration |

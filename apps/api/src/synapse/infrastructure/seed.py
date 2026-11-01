@@ -140,4 +140,8 @@ SAMPLE_PROBLEM = Problem(
         ),
         claim=SAMPLE_CLAIM,
     ),
+    # The annotated problem owns its domain: a client label is a hint, not a
+    # way to re-label reviewed material.
+    domain_confidence=1.0,
+    domain_method="annotated",
 )

@@ -91,6 +91,8 @@ def _generated_problem(problem_id: str) -> Problem:
             edges=(),
         ),
         annotated=False,
+        domain_confidence=0.42,
+        domain_method="heuristic",
     )
 
 
@@ -203,6 +205,23 @@ def test_migrate_snapshot_upgrades_a_legacy_problem() -> None:
     assert migrated["version"] == SNAPSHOT_VERSION
     restored = decode_problem(migrated)
     assert restored.id == "P_LEGACY"
+    assert restored.domain_confidence == pytest.approx(0.42)
+    assert restored.domain_method == "heuristic"
+
+
+def test_a_problem_snapshot_without_domain_provenance_uses_defaults() -> None:
+    """Phase 0 added the keys additively: older v0.2 rows are still readable."""
+
+    snapshot = encode_problem(_generated_problem("P_OLD_DOMAIN"))
+    data = snapshot["data"]
+    assert isinstance(data, dict)
+    data.pop("domain_confidence")
+    data.pop("domain_method")
+
+    restored = decode_problem(snapshot)
+
+    assert restored.domain_confidence == 1.0
+    assert restored.domain_method == "declared"
 
 
 def test_legacy_file_is_structurally_upgraded_but_snapshots_need_migration(

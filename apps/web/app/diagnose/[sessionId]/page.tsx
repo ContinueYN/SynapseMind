@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { Dendrite, type DendriteStop } from "@/components/Dendrite";
 import { DiagnosisCardView } from "@/components/DiagnosisCardView";
+import { IntakeView } from "@/components/IntakeView";
 import { KnowledgePanel } from "@/components/KnowledgePanel";
 import { Plane } from "@/components/Plane";
 import { PhysicsStepCheck } from "@/components/PhysicsStepCheck";
@@ -234,6 +235,13 @@ export default function DiagnosePage() {
   /* NONE 档学科（语文/英语/历史）没有可自动验证的真值：只出结构提示 */
   const hint = session.hint ?? null;
   const scaffold = session.scaffold ?? null;
+  /* 没有参考结构时，服务端返回入口整理，而不是探针或卡点卡 */
+  const intake = session.intake ?? null;
+  const domainLabel = session.domain
+    ? session.domain.generic
+      ? `${session.domain.label}（通用）`
+      : session.domain.label
+    : null;
   const hintSteps = hint?.steps ?? [];
   const hintTouched = hintSteps.filter((step) => step.status !== "missing").length;
   const confidence = Math.round((session.progress?.confidence ?? 0) * 100);
@@ -269,6 +277,13 @@ export default function DiagnosePage() {
       detail: "先照着写一行",
       state: "stuck",
     });
+  } else if (intake) {
+    stops.push({
+      id: "intake",
+      label: "入口",
+      detail: session.domain?.generic ? "通用模式" : session.domain?.label ?? "通用模式",
+      state: "stuck",
+    });
   } else if (session.prompt) {
     stops.push({
       id: "now",
@@ -287,7 +302,15 @@ export default function DiagnosePage() {
             <p className="sm-lab">诊断进度</p>
             <p className="sm-rail-turn">
               {session.turn}
-              <small>{scaffold ? "先看一步，不追问" : hint ? "只给结构，不追问" : `/ ${session.max_turns} 轮`}</small>
+              <small>
+                {scaffold
+                  ? "先看一步，不追问"
+                  : hint
+                    ? "只给结构，不追问"
+                    : intake
+                      ? "只做入口，不追问"
+                      : `/ ${session.max_turns} 轮`}
+              </small>
             </p>
             <p className="sm-rail-phase">{PHASE[session.state] ?? session.state}</p>
           </div>
@@ -314,6 +337,16 @@ export default function DiagnosePage() {
                 <p className="sm-signal-note">
                   {hint.subject === "chinese" ? "语文" : hint.subject}
                   没有可自动验证的标准答案：不估算把握，也不判断卡点。
+                </p>
+              </>
+            ) : intake ? (
+              <>
+                <div className="sm-signal-top">
+                  <span className="sm-signal-lab">本轮输出</span>
+                  <span className="sm-signal-v">入口整理</span>
+                </div>
+                <p className="sm-signal-note">
+                  还没有参考结构：先核对目标与约束，不估算把握，也不判断卡点。
                 </p>
               </>
             ) : (
@@ -343,10 +376,17 @@ export default function DiagnosePage() {
         <section className="sm-stage sm-plane">
           <div className="sm-stage-head">
             <p className="sm-stage-title">{session.problem_title}</p>
-<span className="sm-stage-tag">
-              {scaffold ? "示例" : hint ? "结构" : located ? "定位" : "追问"}
+            <span className="sm-stage-tag">
+              {scaffold ? "示例" : hint ? "结构" : located ? "定位" : intake ? "入口" : "追问"}
             </span>
           </div>
+
+          {domainLabel ? (
+            <p className="sm-fine" style={{ marginTop: 0 }}>
+              领域 <b>{domainLabel}</b>
+              {session.domain?.generic ? " · 判断不出具体领域，按通用问题处理" : ""}
+            </p>
+          ) : null}
 
           <ProblemBrief text={session.problem_text} />
 
@@ -363,6 +403,8 @@ export default function DiagnosePage() {
               </>
             ) : hint ? (
               <StructureHintView hint={hint} sessionId={sessionId} />
+            ) : intake ? (
+              <IntakeView intake={intake} sessionId={sessionId} />
             ) : scaffold ? (
               <ScaffoldView
                 busy={busy}
@@ -429,9 +471,9 @@ export default function DiagnosePage() {
             )}
           </div>
 
-          {session.subject === "math" ? (
+          {session.domain?.name === "math" ? (
             <StepCheck sessionId={sessionId} />
-          ) : session.subject === "physics" ? (
+          ) : session.domain?.name === "physics" ? (
             <PhysicsStepCheck sessionId={sessionId} />
           ) : null}
 
@@ -446,7 +488,9 @@ export default function DiagnosePage() {
               ? "先照着示例写一行；示例只展示起步，不是本题答案。"
               : hint
                 ? "这一轮的原则：只对照结构，不判断对错；想说“哪里没懂”，回交题页补一句过程。"
-                : "一次只问一个；问过的不会再问；前三轮不给答案。"}
+                : intake
+                  ? "这一轮的原则：先理清目标与约束，不猜卡点、不给唯一答案。"
+                  : "一次只问一个；问过的不会再问；前三轮不给答案。"}
           </p>
         </section>
       </div>

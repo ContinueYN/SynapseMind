@@ -1,37 +1,41 @@
 """Resolve a submitted stem to a servable problem.
 
-Two ways a problem can exist (M2.5 S5 ②):
+A submitted stem always becomes *something* servable:
 
-1. it is in the annotated catalog — identification is a strict "the submission
-   contains the annotated stem" check (S3), so the wrong graph is never used;
-2. it is not, and a subject plugin can generate a graph for it — if the caller
-   did not declare ``subject``, a conservative detector picks the plugin; the
-   graph then goes through the same structure rules, schema and claim
-   verification as the S4 evaluation run, and is stored *unannotated* so later
-   turns of the same session can look it up.
+1. it may be in the annotated catalog — identification is a strict "the
+   submission contains the annotated stem" check, so the wrong graph is never
+   used; the annotation owns its domain, and an incoming label is only a hint;
+2. it may resolve to a domain whose plugin can generate a graph (math /
+   physics / chinese) — the graph then goes through the same structure rules,
+   schema and claim verification as before;
+3. it may resolve to an open domain with no plugin (programming, research,
+   decision, work, an unknown label) — Phase 0 serves it as a *reference-free*
+   problem: no graph, no card, and the generic intake view. This is the product
+   floor, not an error: an unknown domain never becomes a 422.
 
-Refusing is a first-class outcome: no generator (``SYNAPSE_LLM_MODE=off``, no
-API key, a subject that cannot build graphs) means the entry keeps returning
-422 rather than diagnosing a problem with a made-up graph.
+``SYNAPSE_LLM_MODE=off`` still means "cannot build a graph", so an unseen math
+problem is still refused with an explanation. The difference is that the
+refusal is now scoped to a *known* domain whose plugin cannot serve it, not to
+"we could not classify you".
 """
 
 from __future__ import annotations
 
 import hashlib
 
+from synapse.application.domains import DomainResolver, ResolvedDomain
 from synapse.application.errors import ProblemNotSupported
 from synapse.application.graph import GraphBuildFailed
 from synapse.application.ports import MutableProblemRepository, ProblemRepository
-from synapse.application.subject import SubjectRegistry
-from synapse.application.subject_detection import (
-    MIN_CONFIDENCE,
-    HeuristicSubjectDetector,
-    SubjectDetector,
-)
+from synapse.application.subject import SubjectPlugin, SubjectRegistry
 from synapse.domain.problem.alignment import normalize
-from synapse.domain.problem.models import Problem, ProblemDraft
+from synapse.domain.problem.models import Problem, ProblemDraft, SolutionGraph
 
 _TITLE_LIMIT = 32
+# A reference-free problem carries an explicitly empty graph. The version is
+# distinct from generated annotated graphs ("g1") so nothing downstream can
+# mistake it for a reviewed or generated structure.
+REFERENCE_FREE_GRAPH_VERSION = "g0"
 
 
 def generated_id(text: str) -> str:
@@ -52,41 +56,39 @@ class ProblemResolver:
         subjects: SubjectRegistry | None,
         *,
         store: MutableProblemRepository | None = None,
-        detector: SubjectDetector | None = None,
+        domains: DomainResolver | None = None,
     ) -> None:
         self._problems = problems
         self._subjects = subjects
         self._store = store
-        self._detector = detector or HeuristicSubjectDetector()
+        self._domains = domains or DomainResolver()
 
     def resolve(self, text: str, declared_subject: str | None = None) -> Problem:
         annotated = self._problems.find_for(text)
         if annotated is not None:
-            if declared_subject is not None and declared_subject != annotated.subject:
-                # A declared subject we cannot serve is an explicit boundary,
-                # not a silently ignored field (M2.5 S1).
-                raise ProblemNotSupported(
-                    f"subject {declared_subject!r} has no annotated problem yet"
-                )
+            # The annotated graph is reviewed material: it owns its domain. A
+            # client-side label is a hint and cannot make the seed a physics
+            # problem, but it also must not block the entry.
             return annotated
-        return self._generate(text, declared_subject)
-
-    def _generate(self, text: str, declared_subject: str | None) -> Problem:
         if not text.strip():
-            raise ProblemNotSupported("题目文本为空，无法识别或建图")
+            raise ProblemNotSupported(_EMPTY)
+
+        resolved = self._domains.resolve(text, declared_subject)
+        plugin = self._subjects.for_subject(resolved.name) if self._subjects is not None else None
+        if plugin is None:
+            return self._reference_free(text, resolved)
+        return self._generate(text, resolved, plugin)
+
+    def _generate(
+        self,
+        text: str,
+        resolved: ResolvedDomain,
+        plugin: SubjectPlugin,
+    ) -> Problem:
         if self._subjects is None or self._store is None:
             raise ProblemNotSupported(_NO_GENERATOR)
-        if declared_subject is not None:
-            subject = declared_subject
-        else:
-            detected = self._detector.detect(text)
-            if detected.subject is None or detected.confidence < MIN_CONFIDENCE:
-                raise ProblemNotSupported(_LOW_CONFIDENCE)
-            subject = detected.subject
-        plugin = self._subjects.for_subject(subject)
-        if plugin is None:
-            raise ProblemNotSupported(f"subject {subject!r} has no annotated problem yet")
 
+        subject = resolved.name
         problem_id = generated_id(text)
         existing = self._problems.get(problem_id)
         if existing is not None:
@@ -110,13 +112,52 @@ class ProblemResolver:
             graph=graph,
             subject=subject,
             annotated=False,
+            domain_confidence=resolved.confidence,
+            domain_method=resolved.method,
+        )
+        self._store.add(problem)
+        return problem
+
+    def _reference_free(self, text: str, resolved: ResolvedDomain) -> Problem:
+        """Open domain with no plugin yet: keep the label, drop the false graph.
+
+        The empty graph is a deliberate "no reference structure", not a
+        degenerate solution. ``application/service.py`` turns it into the
+        generic intake instead of a probe or a card.
+        """
+
+        if self._store is None:
+            # A reference-free problem still has to be registered: the service
+            # reloads it by id on every turn and on exit.
+            raise ProblemNotSupported(_NO_STORE)
+        problem_id = generated_id(text)
+        existing = self._problems.get(problem_id)
+        if existing is not None:
+            return existing
+
+        problem = Problem(
+            id=problem_id,
+            title=_title(text),
+            text=text.strip(),
+            graph=SolutionGraph(
+                problem_id=problem_id,
+                version=REFERENCE_FREE_GRAPH_VERSION,
+                stem=text.strip(),
+                nodes=(),
+                edges=(),
+            ),
+            subject=resolved.name,
+            annotated=False,
+            domain_confidence=resolved.confidence,
+            domain_method=resolved.method,
         )
         self._store.add(problem)
         return problem
 
 
+_EMPTY = "题目文本为空，无法识别或建图"
 _NO_GENERATOR = "这道题没有标注解法图，当前环境也不能建图（SYNAPSE_LLM_MODE=off 或缺少 API key）"
-_LOW_CONFIDENCE = "无法可靠识别这道题的学科；请在题面里补一句学科线索（如“函数/受力/阅读”）"
+_NO_STORE = "当前环境没有题目存储，无法登记这道题；这是部署配置问题，不是题目本身。"
 _GENERATION_FAILURES = {
     "timeout": "建图超时：模型没在预算内返回；这道题暂时不能拆成可验证步骤。",
     "transport": "建图服务暂时不可达：这是环境问题，不是题目本身；稍后再试。",

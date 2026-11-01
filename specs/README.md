@@ -27,6 +27,8 @@
 
 解法图生成物是例外：`infrastructure/llm/graph.py` 在运行时用 `jsonschema` 直接加载本目录的 `solution-graph.schema.json` 做严格校验（M2.5 S4）。契约只有这一份，代码不另抄一套字段。
 
+`problem-input.schema.json` 是交题入口（v0.2，Phase 0）。`problem.subject` 从三值枚举改为**开放标签**（1–32 字符）：省略时由系统识别，识别不出或置信不足进入 `GenericProfile` 通用模式，不再返回 422；显式写一个系统不认识的标签也照样接受，并保留原文作为标签。领域只是标签，真正决定“能说多硬的话”的是验证方式（FORMAL / EXECUTABLE / EMPIRICAL / ARGUMENTATIVE）。`SessionOut` 相应新增 `domain`（`name`/`label`/`verification`/`generic`/`confidence`）与可选 `intake`；`intake` 是入口整理，不是卡点卡：不含层级、把握、诊断结论或答案。
+
 `solution-graph.schema.json` 的 `probe.evidence` 是可选字段：生成图必须为每个选项给出 log-odds 权重（结构规则强制），手写种子图可省略并从 `EVIDENCE` 取权重；字段形状在 schema 里约束，跨字段一致性（选项覆盖、targets 对应、每个 target 至少被使用一次）在 `domain/problem/graph_structure.py` 里校验（M2.5 S5）。**键是选项字母**（`A`/`B`/`C`…，与 `SubmitAnswerCommand.option_id` 同一套编码），不是选项文本——`HypothesisSet.observe()` 按字母查表，写错键名不报错，只是那次作答不更新后验。
 
 `structure-hint.schema.json` 是 NONE 档学科（语文/英语/历史）的唯一输出契约（M2.5 S7，v0.2 起为 S8）。它不是卡点卡的简化版，而是**另一种承诺**：`steps[].status`（`covered`/`partial`/`missing`）只描述“解法图里的这一步有没有被写到、是否只写到一部分”，由存在性对齐（线索词 + 分句重合）得出，不代表写得对错；`focus_node_id` 是“下一步先看哪里”（第一个没有完全写到的节点），不是卡点；`disclaimer` 必须写明该学科没有可自动验证的真值。NONE 档不进入 `PROBE`，也不生成卡点卡——`application/commitment.py` 是这条承诺的唯一开关。v0.2 只新增 `partial` 与 `version` 变化；`partial` 不是“写错”，也不改变卡点卡路径。

@@ -766,6 +766,10 @@ def encode_problem(problem: Problem) -> dict[str, object]:
             "subject": problem.subject,
             "grade": problem.grade,
             "annotated": problem.annotated,
+            # Additive in snapshot v0.2: rows written before Phase 0 omit
+            # these and decode with the defaults below.
+            "domain_confidence": problem.domain_confidence,
+            "domain_method": problem.domain_method,
             "graph": _graph_to_json(problem.graph),
         },
     }
@@ -780,5 +784,15 @@ def decode_problem(snapshot: object) -> Problem:
         subject=_text(data.get("subject"), "problem.subject"),
         grade=_text(data.get("grade"), "problem.grade"),
         annotated=_flag(data.get("annotated"), "problem.annotated"),
+        domain_confidence=(
+            _number(data["domain_confidence"], "problem.domain_confidence")
+            if "domain_confidence" in data
+            else 1.0
+        ),
+        domain_method=(
+            _text(data["domain_method"], "problem.domain_method")
+            if "domain_method" in data
+            else "declared"
+        ),
         graph=_graph_from_json(data.get("graph"), "problem.graph"),
     )

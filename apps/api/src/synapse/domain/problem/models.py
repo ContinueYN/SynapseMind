@@ -105,12 +105,19 @@ class Problem:
     title: str
     text: str
     graph: SolutionGraph
+    # An open domain label, not a whitelisted subject (Phase 0): "math",
+    # "programming", "decision", a user-supplied label, or "generic".
     subject: str = "math"
     grade: str = "high_school"
     # ``False`` for a graph the model generated for a submitted stem (M2.5 S5
     # ②): it has no reviewed reference solution, no hand-tuned aligner and no
     # curated card text, so everything downstream must stay hedged.
     annotated: bool = True
+    # Provenance of ``subject``. The intake view reports the confidence and at
+    # most one clarifying question; the strategy that produced the label
+    # ("declared" / "heuristic" / "model" / "annotated") explains it on reload.
+    domain_confidence: float = 1.0
+    domain_method: str = "declared"
 
 
 @dataclass(frozen=True, slots=True)

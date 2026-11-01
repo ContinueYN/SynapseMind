@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class StrictModel(BaseModel):
@@ -18,11 +18,22 @@ class StrictModel(BaseModel):
 class ProblemIn(StrictModel):
     text: str | None = Field(default=None, min_length=1, max_length=4000)
     image_url: str | None = Field(default=None, max_length=2000)
-    subject: Literal["math", "physics", "chinese"] | None = Field(
+    # Phase 0: an open domain label, not a whitelist. Omit it and the system
+    # detects; a label the system does not know still starts a generic session.
+    subject: str | None = Field(
         default=None,
-        description="可选；省略时由系统识别学科，置信不足返回 422。",
+        max_length=32,
+        description="可选领域标签（开放取值）。省略时自动识别；识别不出进入通用模式，不返回 422。",
     )
     grade: Literal["primary_school", "middle_school", "high_school"] = "high_school"
+
+    @field_validator("subject")
+    @classmethod
+    def normalize_subject(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = " ".join(value.split())
+        return cleaned or None
 
     @model_validator(mode="after")
     def require_text_or_image(self) -> ProblemIn:
@@ -164,6 +175,32 @@ class ScaffoldOut(StrictModel):
     disclaimer: str = Field(min_length=1, max_length=300)
 
 
+class DomainOut(StrictModel):
+    """The resolved open domain label (Phase 0).
+
+    ``subject`` remains for compatibility and is the plugin key; this object is
+    what a client displays and what decides the verification promise.
+    """
+
+    name: str = Field(min_length=1, max_length=40)
+    label: str = Field(min_length=1, max_length=40)
+    verification: Literal["formal", "executable", "empirical", "argumentative"]
+    generic: bool
+    confidence: float = Field(ge=0, le=1)
+
+
+class DomainIntakeOut(StrictModel):
+    """The reference-free generic entry: guidance, never a diagnosis."""
+
+    version: Literal["0.1"]
+    domain: DomainOut
+    one_line: str = Field(min_length=1, max_length=200)
+    checklist: list[str] = Field(min_length=1, max_length=6)
+    clarifier: str | None = Field(default=None, max_length=200)
+    next_step: str = Field(min_length=1, max_length=300)
+    disclaimer: str = Field(min_length=1, max_length=300)
+
+
 class SessionOut(StrictModel):
     session_id: str = Field(pattern=r"^S_[A-Z0-9]+$")
     state: str
@@ -171,6 +208,7 @@ class SessionOut(StrictModel):
     problem_title: str
     problem_text: str
     subject: str = Field(min_length=1, max_length=32)
+    domain: DomainOut
     mode: str
     turn: int = Field(ge=0)
     max_turns: int = Field(ge=1)
@@ -178,6 +216,7 @@ class SessionOut(StrictModel):
     diagnosis: DiagnosisOut | None = None
     hint: HintOut | None = None
     scaffold: ScaffoldOut | None = None
+    intake: DomainIntakeOut | None = None
     notice: str | None = None
     # Only populated by an explicit exit-with-reveal request. Learning-mode
     # responses omit the keys entirely (``exclude_if``), so a regression test can

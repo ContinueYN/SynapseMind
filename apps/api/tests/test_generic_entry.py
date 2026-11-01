@@ -1,0 +1,155 @@
+"""Phase 0 exit condition: four different kinds of problem can start.
+
+The point is not that every problem gets a card. It is that the same entry
+accepts a math problem, a code bug, a life decision and an unknown domain, and
+that a reference-free session is honest about what it did not check. With
+``SYNAPSE_LLM_MODE=off`` there is no graph generator, so the code/decision/
+unknown cases must start as intake views instead of returning 422.
+"""
+
+from __future__ import annotations
+
+from fastapi.testclient import TestClient
+
+MATH_SEED = "已知函数 f(x)=ln x - a x，a∈R。若 f(x)≤0 对任意 x>0 恒成立，求 a 的取值范围。"
+CODE = "我的 Python 脚本报错了：IndexError: list index out of range，列表里明明有元素，应该怎么修？"
+DECISION = "我应该接受北京的工作机会，还是留在上海陪家人？"
+UNKNOWN = "我最近很烦，不知道该怎么办。"
+
+
+def _start(client: TestClient, text: str, *, answer: str = "不知道") -> dict[str, object]:
+    response = client.post(
+        "/api/v1/sessions",
+        json={
+            "problem": {"text": text},
+            "attempt": {"answer": answer, "work": "", "self_report": "unsure"},
+            "mode": "learning",
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def test_a_math_problem_still_reaches_the_annotated_graph(client: TestClient) -> None:
+    body = _start(client, MATH_SEED, answer="a≥1/e")
+
+    assert body["state"] == "PROBE"
+    assert body["prompt"] is not None
+    assert body["intake"] is None
+    assert body["domain"] == {
+        "name": "math",
+        "label": "数学",
+        "verification": "formal",
+        "generic": False,
+        "confidence": 1.0,
+    }
+
+
+def test_a_code_problem_starts_as_executable_intake(client: TestClient) -> None:
+    body = _start(client, CODE)
+
+    assert body["state"] == "CLOSED"
+    assert body["prompt"] is None
+    assert body["diagnosis"] is None
+    assert body["domain"]["name"] == "programming"
+    assert body["domain"]["verification"] == "executable"
+    assert body["domain"]["generic"] is False
+    intake = body["intake"]
+    assert intake is not None
+    assert intake["domain"]["name"] == "programming"
+    assert any("复现" in item for item in intake["checklist"])
+    assert "未执行" in intake["disclaimer"]
+    # A confident label does not ask a clarifying question.
+    assert intake["clarifier"] is None
+    # No answer / solution key on a learning-mode response.
+    assert "answer" not in body
+    assert "solution" not in body
+
+
+def test_a_life_decision_starts_without_a_right_answer(client: TestClient) -> None:
+    body = _start(client, DECISION, answer="不知道选哪个")
+
+    assert body["state"] == "CLOSED"
+    assert body["domain"]["name"] == "decision"
+    intake = body["intake"]
+    assert intake is not None
+    assert "唯一正确答案" in intake["disclaimer"]
+    assert any("可逆实验" in item for item in intake["checklist"])
+    assert "卡点卡" not in body.get("notice", "")
+
+
+def test_an_unknown_domain_starts_in_generic_mode(client: TestClient) -> None:
+    body = _start(client, UNKNOWN)
+
+    assert body["state"] == "CLOSED"
+    assert body["domain"]["name"] == "generic"
+    assert body["domain"]["label"] == "通用问题"
+    assert body["domain"]["generic"] is True
+    assert body["domain"]["confidence"] == 0.0
+    intake = body["intake"]
+    assert intake is not None
+    # Low confidence may ask exactly one clarifying question, and never blocks.
+    assert intake["clarifier"] is not None
+    assert intake["clarifier"].count("？") == 1
+    assert intake["checklist"]
+
+
+def test_an_open_label_is_accepted_and_kept(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/sessions",
+        json={
+            "problem": {"text": "我的乐高结构总是一推就散，该怎么加固？", "subject": "乐高结构"},
+            "attempt": {"answer": "不知道"},
+            "mode": "learning",
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["domain"]["name"] == "乐高结构"
+    assert body["domain"]["generic"] is True
+    assert body["intake"]["domain"]["label"] == "乐高结构"
+
+
+def test_a_generic_session_can_be_reloaded(client: TestClient) -> None:
+    created = _start(client, UNKNOWN)
+
+    response = client.get(f"/api/v1/sessions/{created['session_id']}")
+
+    assert response.status_code == 200, response.text
+    reloaded = response.json()
+    assert reloaded["domain"] == created["domain"]
+    assert reloaded["intake"]["checklist"] == created["intake"]["checklist"]
+    assert reloaded["intake"]["clarifier"] == created["intake"]["clarifier"]
+
+
+def test_a_generic_session_has_no_answer_to_reveal(client: TestClient) -> None:
+    created = _start(client, CODE)
+
+    response = client.post(
+        f"/api/v1/sessions/{created['session_id']}/exit",
+        json={"reveal": True},
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert "answer" not in body
+    assert "solution" not in body
+    assert "没有存储解法" in body["notice"]
+    # The intake is still derived on the way out, so a reload does not lose it.
+    assert body["intake"] is not None
+
+
+def test_a_generic_session_does_not_accept_probe_answers(client: TestClient) -> None:
+    created = _start(client, DECISION)
+
+    response = client.post(
+        f"/api/v1/sessions/{created['session_id']}/turns",
+        json={"answer": "选北京", "option_id": "A"},
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["diagnosis"] is None
+    assert "已结束" in body["notice"]
+    assert body["intake"] is not None

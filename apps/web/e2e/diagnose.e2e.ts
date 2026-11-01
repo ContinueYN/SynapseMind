@@ -132,6 +132,28 @@ test("physics step check sends declared result/tolerance and survives 390px", as
   expect(desktopOverflow).toBe(0);
 });
 
+test("a reference-free problem shows the intake instead of a probe", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/diagnose/S_INTAKE_E2E");
+
+  await expect(page.getByText("入口整理 · 不定位卡点")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "按「编程」处理" }),
+  ).toBeVisible();
+  await expect(page.getByText(/复现：/)).toBeVisible();
+  // No probe to answer and no step check: there is no verified structure.
+  await expect(page.getByRole("button", { name: /有一步拿不准/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "看完整解法" })).toHaveCount(0);
+
+  const layout = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }));
+  expect(layout.scrollWidth).toBe(layout.clientWidth);
+});
+
 test("knowledge panel shows a sourced card beside the diagnosis at 390px", async ({
   page,
 }) => {

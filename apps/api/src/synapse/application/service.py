@@ -19,8 +19,14 @@ from synapse.application.commands import (
 )
 from synapse.application.commitment import Capabilities, capabilities_for
 from synapse.application.composer import ProbeComposer, ProbePrompt
+from synapse.application.domains import (
+    DomainDescriptor,
+    DomainRegistry,
+    verifiability_level,
+)
 from synapse.application.factory import SessionFactory
 from synapse.application.hint_builder import build_structure_hint
+from synapse.application.intake import INTAKE_NOTICE, DomainIntake, build_domain_intake
 from synapse.application.limits import StepRateLimited, StepRateLimiter
 from synapse.application.planner import ProbePlanner
 from synapse.application.ports import (
@@ -30,7 +36,12 @@ from synapse.application.ports import (
 )
 from synapse.application.review import ReviewItem, ReviewQueue
 from synapse.application.scaffold import Scaffold, build_scaffold
-from synapse.application.subject import StudentStep, SubjectRegistry, Verdict
+from synapse.application.subject import (
+    StudentStep,
+    SubjectRegistry,
+    Verdict,
+    VerifiabilityLevel,
+)
 from synapse.application.trace import tracing
 from synapse.application.work_check import EqualityChecker
 from synapse.domain.diagnosis.hint import StructureHint
@@ -78,6 +89,10 @@ class SessionView:
     # A blank attempt gets an example before any probe. Mutually exclusive with
     # ``prompt`` and ``hint``: it is the only output of the SCAFFOLD state.
     scaffold: Scaffold | None = None
+    # A reference-free problem (open domain with no graph yet) returns the
+    # generic intake instead of a probe or a card. It is derived from the
+    # problem's domain label, never stored, and contains no diagnosis.
+    intake: DomainIntake | None = None
     # Explicit exit-with-reveal. Learning-mode views never set this.
     reveal: Reveal | None = None
 
@@ -94,6 +109,7 @@ class SessionService:
         opening_composer: ProbeComposer | None = None,
         equality_checker: EqualityChecker | None = None,
         subjects: SubjectRegistry | None = None,
+        domains: DomainRegistry | None = None,
         auditor: CallAuditor | None = None,
         step_limiter: StepRateLimiter | None = None,
         review_queue: ReviewQueue | None = None,
@@ -115,8 +131,12 @@ class SessionService:
         # composition root (``api/deps.py``), not here.
         self._equality_checker = equality_checker
         # Step verification asks the subject plugin after the session exists, so
-        # the service needs the registry (the factory only exposes level_for).
+        # the service needs the registry.
         self._subjects = subjects
+        # The promise tier comes from the domain's verification mode, not from
+        # the plugin's own declaration: a label is open, a verification mode is
+        # not. The default registry is enough for direct callers and tests.
+        self._domains = domains or DomainRegistry()
         # Optional operational trail for single-step checks. It is not session
         # state: the endpoint stays read-only, and the student's text is not
         # copied into the audit (see ``_audit_step_verification``).
@@ -138,6 +158,15 @@ class SessionService:
         session = self._factory.create(command)
         session.work_findings = findings
         problem = self._problem(session.problem_id)
+
+        if self._is_reference_free(problem):
+            # Phase 0 generic entry: an open domain (or an unknown label) has no
+            # reference graph yet, so the session starts and immediately closes
+            # with the domain intake. It never probes, never cards, and never
+            # pretends the model saw a structure it did not build.
+            self._sessions.add(session)
+            view = self._close(session, INTAKE_NOTICE)
+            return replace(view, intake=self._intake_for(session))
 
         capabilities = self._capabilities(problem)
         if capabilities.structure_hint:
@@ -195,6 +224,7 @@ class SessionService:
             session=session,
             diagnosis=session.diagnosis,
             hint=self._hint(session),
+            intake=self._intake_for(session),
         )
 
     def mark_card_disagree(self, session_id: str) -> DiagnosisCard:
@@ -240,6 +270,7 @@ class SessionService:
                 session=session,
                 notice="会话已结束，不再接受新的回答。",
                 hint=self._hint(session),
+                intake=self._intake_for(session),
             )
 
         problem = self._problem(session.problem_id)
@@ -314,8 +345,12 @@ class SessionService:
                 else "已退出学习模式；本次不生成卡点卡，也不展示最终答案。",
             )
         if not reveal:
-            return view
-        return replace(view, reveal=self._reveal(session.problem_id))
+            return replace(view, intake=self._intake_for(session))
+        return replace(
+            view,
+            intake=self._intake_for(session),
+            reveal=self._reveal(session.problem_id),
+        )
 
     def _reveal(self, problem_id: str) -> Reveal:
         """Read the answer store only for an explicit post-exit request.
@@ -628,10 +663,21 @@ class SessionService:
             "完全不会",
         }
 
-    def _capabilities(self, problem: Problem) -> Capabilities:
-        """What this subject's tier lets the dialogue promise (S7)."""
+    def _profile_level(self, problem: Problem) -> VerifiabilityLevel:
+        """The tier the domain's verification mode allows (Phase 0).
 
-        return capabilities_for(self._factory.level_for(problem.subject))
+        The domain profile is authoritative, not the plugin: ``programming``
+        has no plugin yet and is still ``NONE``, because nothing has executed
+        the student's code.
+        """
+
+        profile = self._domains.profile_for(problem.subject)
+        return verifiability_level(profile.verification)
+
+    def _capabilities(self, problem: Problem) -> Capabilities:
+        """What this domain's verification mode lets the dialogue promise (S7)."""
+
+        return capabilities_for(self._profile_level(problem))
 
     def _check_work(self, work: str) -> tuple[WorkFinding, ...]:
         """Run the optional equality checker; no checker means the old path."""
@@ -640,15 +686,33 @@ class SessionService:
             return ()
         return self._equality_checker.findings(work)
 
+    @staticmethod
+    def _is_reference_free(problem: Problem) -> bool:
+        """No reviewed graph and no generated one: the generic intake floor."""
+
+        return not problem.annotated and not problem.graph.nodes
+
+    def _intake_for(self, session: DialogueSession) -> DomainIntake | None:
+        """Derive the generic intake; ``None`` for anything with a graph."""
+
+        problem = self._problem(session.problem_id)
+        if not self._is_reference_free(problem):
+            return None
+        profile = self._domains.profile_for(problem.subject)
+        return build_domain_intake(problem, profile)
+
     def _hint(self, session: DialogueSession) -> StructureHint | None:
         """Rebuild the structure hint for a NONE-tier session.
 
         Derived from the alignment and the graph, so a reloaded session shows
-        the same text without the aggregate having to store it.
+        the same text without the aggregate having to store it. A reference-free
+        problem has no graph to point at, so it gets the intake instead.
         """
 
         problem = self._problem(session.problem_id)
-        level = self._factory.level_for(problem.subject)
+        if not problem.graph.nodes:
+            return None
+        level = self._profile_level(problem)
         if not capabilities_for(level).structure_hint:
             return None
         return build_structure_hint(session, problem, level=level.value)
@@ -664,7 +728,7 @@ class SessionService:
         hint = build_structure_hint(
             session,
             problem,
-            level=self._factory.level_for(problem.subject).value,
+            level=self._profile_level(problem).value,
         )
         view = self._close(session, capabilities.note)
         return SessionView(session=view.session, notice=view.notice, hint=hint)
@@ -689,8 +753,25 @@ class SessionService:
         return self._problem(problem_id).text
 
     def problem_subject(self, problem_id: str) -> str:
-        """Whose plugin owns this problem; the UI uses it to gate step checks."""
+        """The plugin key for this problem (internal routing, not display).
+
+        The UI displays ``problem_domain`` instead: the subject says which
+        plugin built the graph, the domain says what the product may promise.
+        """
+
         return self._problem(problem_id).subject
+
+    def problem_domain(self, problem_id: str) -> DomainDescriptor:
+        """The open domain label plus how it was resolved (Phase 0).
+
+        Kept separate from ``problem_subject``: the subject is still the plugin
+        key, while the domain descriptor is what the client displays and what
+        decides the verification promise.
+        """
+
+        problem = self._problem(problem_id)
+        profile = self._domains.profile_for(problem.subject)
+        return profile.describe(problem.domain_confidence)
 
     def _stop_without_card(self, session: DialogueSession, notice: str) -> SessionView:
         if session.state is not DialogueState.STOP:

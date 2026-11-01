@@ -29,6 +29,12 @@ from synapse.application.composer import (
     ProbeComposer,
     ShadowProbeComposer,
 )
+from synapse.application.domain_detection import (
+    CascadeDomainDetector,
+    DomainDetector,
+    HeuristicDomainDetector,
+)
+from synapse.application.domains import DomainRegistry, DomainResolver
 from synapse.application.factory import SessionFactory
 from synapse.application.graph import GraphGenerator
 from synapse.application.knowledge import KnowledgeService
@@ -40,11 +46,6 @@ from synapse.application.problem_resolver import ProblemResolver
 from synapse.application.review import ReviewService
 from synapse.application.service import SessionService
 from synapse.application.subject import SubjectRegistry
-from synapse.application.subject_detection import (
-    CompositeSubjectDetector,
-    HeuristicSubjectDetector,
-    SubjectDetector,
-)
 from synapse.application.work_check import EqualityChecker
 from synapse.domain.problem.alignment import RuleBasedAligner
 from synapse.infrastructure.features import FeatureFlags
@@ -58,9 +59,9 @@ from synapse.infrastructure.knowledge import build_knowledge_service
 from synapse.infrastructure.llm.audit import JsonlCallAuditor
 from synapse.infrastructure.llm.client import OpenAICompatibleClient
 from synapse.infrastructure.llm.composer import LLMProbeComposer
+from synapse.infrastructure.llm.domain_detector import LLMDomainDetector
 from synapse.infrastructure.llm.graph import LLMGraphGenerator
 from synapse.infrastructure.llm.settings import LLMSettings
-from synapse.infrastructure.llm.subject_detector import LLMSubjectDetector
 from synapse.infrastructure.rate_limit import TokenBucketStepLimiter
 from synapse.infrastructure.review import SqliteReviewQueue
 from synapse.infrastructure.sqlite_state import (
@@ -146,13 +147,16 @@ def build_container(
     aligner = RuleBasedAligner()
     # Deterministic first; the model only sees stems the term scorer cannot
     # decide. ``shadow`` must not change what the student sees, so it stays on
-    # the heuristic path along with ``off``.
-    detector: SubjectDetector = HeuristicSubjectDetector()
+    # the heuristic path along with ``off``. A non-decisive result is no longer
+    # an error: the resolver keeps the generic profile.
+    domains = DomainRegistry()
+    detector: DomainDetector = HeuristicDomainDetector()
     if resolved.llm_enabled and resolved.mode != "shadow":
-        detector = CompositeSubjectDetector(
+        detector = CascadeDomainDetector(
             detector,
-            LLMSubjectDetector(llm_client or OpenAICompatibleClient(resolved)),
+            LLMDomainDetector(llm_client or OpenAICompatibleClient(resolved)),
         )
+    domain_resolver = DomainResolver(domains, detector)
     factory = SessionFactory(
         problems=problems,
         aligner=aligner,
@@ -163,7 +167,7 @@ def build_container(
             problems,
             problems.plugins,
             store=problems,
-            detector=detector,
+            domains=domain_resolver,
         ),
     )
     planner = HypothesisTargetedPlanner()
@@ -188,6 +192,7 @@ def build_container(
         opening_composer=opening,
         equality_checker=equality_checker,
         subjects=problems.plugins,
+        domains=domains,
         auditor=sink,
         step_limiter=limiter,
         review_queue=review_queue,

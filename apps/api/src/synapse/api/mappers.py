@@ -11,6 +11,8 @@ from synapse.api.schemas import (
     AttributionOut,
     CardOut,
     DiagnosisOut,
+    DomainIntakeOut,
+    DomainOut,
     HintOut,
     HintStepOut,
     HistoryItemOut,
@@ -30,6 +32,8 @@ from synapse.api.schemas import (
     VerifyOut,
 )
 from synapse.application.composer import ProbePrompt
+from synapse.application.domains import DomainDescriptor
+from synapse.application.intake import DomainIntake
 from synapse.application.knowledge import KnowledgeSearch
 from synapse.application.review import ReviewItem
 from synapse.application.scaffold import Scaffold
@@ -225,11 +229,38 @@ def review_items_out(items: list[ReviewItem]) -> ReviewItemsOut:
     )
 
 
+def domain_out(descriptor: DomainDescriptor) -> DomainOut:
+    return DomainOut(
+        name=_clip(descriptor.name, 40),
+        label=_clip(descriptor.label, 40),
+        verification=descriptor.verification.value,
+        generic=descriptor.generic,
+        confidence=round(descriptor.confidence, 3),
+    )
+
+
+def intake_out(intake: DomainIntake) -> DomainIntakeOut:
+    """Map the generic entry; it carries no answer and no diagnosis."""
+
+    return DomainIntakeOut(
+        version=intake.version,
+        domain=domain_out(
+            intake.profile.describe(intake.confidence),
+        ),
+        one_line=_clip(intake.one_line, 200),
+        checklist=[_clip(item, 80) for item in intake.checklist[:6]],
+        clarifier=_clip(intake.clarifier, 200) if intake.clarifier else None,
+        next_step=_clip(intake.next_step, 300),
+        disclaimer=_clip(intake.disclaimer, 300),
+    )
+
+
 def session_out(
     view: SessionView,
     problem_title: str,
     problem_text: str,
     subject: str,
+    domain: DomainDescriptor,
 ) -> SessionOut:
     session = view.session
     return SessionOut(
@@ -239,6 +270,7 @@ def session_out(
         problem_title=problem_title,
         problem_text=problem_text,
         subject=subject,
+        domain=domain_out(domain),
         mode=session.mode,
         turn=session.turn,
         max_turns=session.max_turns,
@@ -246,6 +278,7 @@ def session_out(
         diagnosis=diagnosis_out(view.diagnosis) if view.diagnosis else None,
         hint=hint_out(view.hint) if view.hint else None,
         scaffold=scaffold_out(view.scaffold) if view.scaffold else None,
+        intake=intake_out(view.intake) if view.intake else None,
         notice=(
             view.reveal.notice if view.reveal is not None and view.reveal.notice else view.notice
         ),

@@ -26,6 +26,9 @@ export type ReviewItem = Schemas["ReviewItemOut"];
 export type ReviewListing = Schemas["ReviewItemsOut"];
 export type KnowledgeHit = Schemas["KnowledgeHitOut"];
 export type KnowledgeSearch = Schemas["KnowledgeSearchOut"];
+export type Domain = Schemas["DomainOut"];
+export type DomainIntake = Schemas["DomainIntakeOut"];
+export type VerificationMode = Domain["verification"];
 
 export type SessionState =
   | "INGEST"
@@ -43,7 +46,8 @@ export type SessionState =
 export interface CreateSessionInput {
   problem: {
     text: string;
-    subject?: "math" | "physics" | "chinese";
+    /** 开放领域标签：省略即自动判断，不限于已知学科。 */
+    subject?: string;
     grade?: "high_school";
   };
   attempt: {

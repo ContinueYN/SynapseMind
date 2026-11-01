@@ -23,6 +23,7 @@ from synapse.infrastructure.llm.settings import LLMSettings
 from synapse.infrastructure.seed import SAMPLE_PROBLEM
 
 UNSEEN = "已知函数 g(x)=x^2-a x+1，对任意 x∈R 有 g(x)>0，求 a 的取值范围。"
+CODE = "我的 Python 脚本报错了：IndexError: list index out of range，应该怎么修？"
 
 
 class _FakeGenerator:
@@ -130,11 +131,59 @@ def test_the_annotated_seed_is_still_served_as_is() -> None:
     assert problem.annotated is True
 
 
-def test_a_declared_subject_that_does_not_match_is_refused() -> None:
+def test_the_annotated_problem_owns_its_domain() -> None:
+    """A client label is a hint; it cannot re-label reviewed material."""
+
     resolver, _ = _resolver(_FakeGenerator())
 
-    with pytest.raises(ProblemNotSupported, match="no annotated problem"):
-        resolver.resolve(SAMPLE_PROBLEM.text, "physics")
+    problem = resolver.resolve(SAMPLE_PROBLEM.text, "physics")
+
+    assert problem is SAMPLE_PROBLEM
+    assert problem.subject == "math"
+
+
+def test_an_open_domain_without_a_plugin_becomes_reference_free() -> None:
+    resolver, problems = _resolver(_FakeGenerator())
+
+    problem = resolver.resolve(CODE, None)
+
+    assert problem.annotated is False
+    assert problem.subject == "programming"
+    assert problem.graph.nodes == ()
+    assert problem.graph.version == "g0"
+    assert problem.domain_method == "heuristic"
+    assert problems.get(problem.id) is problem
+
+
+def test_an_unknown_label_keeps_its_name_and_generic_mode() -> None:
+    resolver, _ = _resolver(_FakeGenerator())
+
+    problem = resolver.resolve("我的乐高结构一推就散。", "乐高结构")
+
+    assert problem.subject == "乐高结构"
+    assert problem.graph.nodes == ()
+    assert problem.domain_confidence == 1.0
+    assert problem.domain_method == "declared"
+
+
+def test_a_low_confidence_stem_is_not_refused() -> None:
+    resolver, _ = _resolver(None)
+
+    problem = resolver.resolve("我最近很烦，不知道该怎么办。", None)
+
+    assert problem.subject == "generic"
+    assert problem.graph.nodes == ()
+    assert problem.domain_confidence == 0.0
+
+
+def test_a_generated_math_problem_records_its_domain_provenance() -> None:
+    resolver, _ = _resolver(_FakeGenerator())
+
+    problem = resolver.resolve(UNSEEN, None)
+
+    assert problem.subject == "math"
+    assert problem.domain_method == "heuristic"
+    assert problem.domain_confidence >= 0.6
 
 
 @pytest.mark.parametrize("generator", [None, _BrokenGenerator()])
