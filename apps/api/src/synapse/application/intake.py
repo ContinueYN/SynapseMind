@@ -327,7 +327,7 @@ def _gap_probe(
     for gap in gaps:
         if gap.kind is None:
             continue
-        question = _GAP_QUESTIONS.get(gap.kind)
+        question = gap.question or _GAP_QUESTIONS.get(gap.kind)
         if question is not None:
             return IntakeProbe(
                 kind=gap.kind,

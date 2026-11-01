@@ -237,6 +237,48 @@ class TestAnswerAwareIntake:
 
         assert not any("错" in gap for gap in intake.gaps)
 
+    def test_the_probe_question_tracks_the_specific_gap(self) -> None:
+        """A missing EXECUTABLE reproduction must not ask a generic "what did you try"."""
+
+        code = build_domain_intake(
+            _problem("programming"),
+            REGISTRY.profile_for("programming"),
+            "我想让它跑起来。",
+        )
+        assert code.probe is not None
+        assert code.probe.kind is NodeKind.ACTION
+        assert "最小复现" in code.probe.question
+        assert "试过哪一步" not in code.probe.question
+
+        writing = build_domain_intake(
+            _problem("writing"),
+            REGISTRY.profile_for("writing"),
+            "我想论证远程办公更好。因为省通勤。因此公司应该继续。",
+        )
+        assert writing.probe is not None
+        assert writing.probe.kind is NodeKind.RISK
+        assert "反对意见" in writing.probe.question
+
+        physics = build_domain_intake(
+            _problem("physics"),
+            REGISTRY.profile_for("physics"),
+            "我想算小球落地时间。",
+        )
+        assert physics.probe is not None
+        assert physics.probe.kind is NodeKind.GIVEN
+        assert "单位" in physics.probe.question
+
+    def test_a_generic_probe_falls_back_to_its_shared_question(self) -> None:
+        intake = build_domain_intake(
+            _problem("generic"),
+            REGISTRY.profile_for("generic"),
+            "我卡住了。",
+        )
+
+        assert intake.probe is not None
+        assert intake.probe.kind is NodeKind.GOAL
+        assert "最想解决" in intake.probe.question
+
 
 class TestVerificationView:
     FORMAL_CLAIM = VerificationClaim(
