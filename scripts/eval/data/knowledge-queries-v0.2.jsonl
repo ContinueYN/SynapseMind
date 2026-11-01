@@ -100,3 +100,8 @@
 {"id":"Q100","kind":"relevant","text":"主题句 怎么写","expect":["K_WRITING_TOPIC_SENTENCE"]}
 {"id":"Q101","kind":"relevant","text":"混淆变量 替代解释","expect":["K_RESEARCH_CONFOUNDING"]}
 {"id":"Q102","kind":"relevant","text":"操作化 变量 怎么测","expect":["K_RESEARCH_OPERATIONAL"]}
+{"id":"Q103","kind":"relevant","text":"边界 off-by-one 索引 切片","expect":["K_CODE_OFF_BY_ONE"]}
+{"id":"Q104","kind":"relevant","text":"二分 bisect 缩小 故障范围","expect":["K_CODE_BISECT"]}
+{"id":"Q105","kind":"relevant","text":"复杂度 增长 输入规模","expect":["K_CODE_COMPLEXITY"]}
+{"id":"Q106","kind":"relevant","text":"类型 长度 不匹配","expect":["K_CODE_TYPES"]}
+{"id":"Q107","kind":"relevant","text":"回归 测试 失败输入","expect":["K_CODE_REGRESSION"]}
