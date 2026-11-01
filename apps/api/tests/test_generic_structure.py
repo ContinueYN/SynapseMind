@@ -114,6 +114,67 @@ class TestExtraction:
             )
 
 
+class TestCueSynonyms:
+    @pytest.mark.parametrize(
+        ("text", "kind"),
+        [
+            ("我没法加班。", NodeKind.CONSTRAINT),
+            ("时间来不及。", NodeKind.CONSTRAINT),
+            ("我不希望降薪。", NodeKind.CONSTRAINT),
+            ("我要两周内上线。", NodeKind.GOAL),
+            ("希望能先跑通。", NodeKind.GOAL),
+            ("已有两份报价。", NodeKind.GIVEN),
+            ("输入是一个列表。", NodeKind.GIVEN),
+            ("假定样本有代表性。", NodeKind.ASSUMPTION),
+            ("方法是先改缓存。", NodeKind.PLAN),
+            ("我试了一下改缓存。", NodeKind.ACTION),
+            ("改过两处。", NodeKind.ACTION),
+            ("运行了测试。", NodeKind.ACTION),
+            ("返回了 -1。", NodeKind.EVIDENCE),
+            ("结果是 -1。", NodeKind.EVIDENCE),
+            ("错误信息是 KeyError。", NodeKind.EVIDENCE),
+            ("异常是 KeyError。", NodeKind.EVIDENCE),
+            ("我核对过金额。", NodeKind.CHECK),
+            ("复查一下。", NodeKind.CHECK),
+            ("本地跑通了。", NodeKind.CHECK),
+            ("怎么知道修好了？", NodeKind.CHECK),
+            ("测试通过。", NodeKind.CHECK),
+            ("这里有个隐患。", NodeKind.RISK),
+            ("最坏会怎样？", NodeKind.RISK),
+            ("先做一个小实验。", NodeKind.NEXT),
+            ("先跑一遍。", NodeKind.NEXT),
+            ("先改一处。", NodeKind.NEXT),
+            ("我有点犹豫。", NodeKind.DECISION),
+        ],
+    )
+    def test_common_synonyms_fill_their_slot(self, text: str, kind: NodeKind) -> None:
+        assert EXTRACTOR.extract("P", text).has(kind)
+
+    @pytest.mark.parametrize(
+        ("text", "kind"),
+        [
+            ("我考试了。", NodeKind.ACTION),
+            ("异常处理要小心。", NodeKind.EVIDENCE),
+            ("损失函数要调。", NodeKind.RISK),
+            ("返回首页。", NodeKind.EVIDENCE),
+            ("哪怕失败也要试。", NodeKind.RISK),
+        ],
+    )
+    def test_a_near_miss_does_not_fill_a_slot(self, text: str, kind: NodeKind) -> None:
+        assert not EXTRACTOR.extract("P", text).has(kind)
+
+    def test_the_intake_uses_the_synonym(self) -> None:
+        intake = build_domain_intake(
+            _problem("programming"),
+            REGISTRY.profile_for("programming"),
+            "我要两周内上线；我没法加班。",
+        )
+
+        assert "目标" in intake.observed
+        assert "约束" in intake.observed
+        assert not any("没看到约束" in gap for gap in intake.gaps)
+
+
 class TestDecisionCheck:
     def test_a_decision_without_options_is_blocking(self) -> None:
         gaps = structure_gaps(IntakeFramework.DECISION, _graph((NodeKind.GOAL, "我想转后端")))
