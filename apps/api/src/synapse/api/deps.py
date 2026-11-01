@@ -35,6 +35,7 @@ from synapse.application.domain_detection import (
     HeuristicDomainDetector,
 )
 from synapse.application.domains import DomainRegistry, DomainResolver
+from synapse.application.execution import CodeExecutor
 from synapse.application.factory import SessionFactory
 from synapse.application.generic_graph import GenericGraphGenerator
 from synapse.application.graph import GraphGenerator
@@ -49,6 +50,7 @@ from synapse.application.service import SessionService
 from synapse.application.subject import SubjectRegistry
 from synapse.application.work_check import EqualityChecker
 from synapse.domain.problem.alignment import RuleBasedAligner
+from synapse.infrastructure.execution import ExecutionLimits, LocalPythonExecutor
 from synapse.infrastructure.features import FeatureFlags
 from synapse.infrastructure.guards import AnswerStoreLeakGuardFactory
 from synapse.infrastructure.in_memory import (
@@ -88,6 +90,7 @@ class Container:
     subjects: SubjectRegistry
     features: FeatureFlags
     knowledge: KnowledgeService
+    executor: CodeExecutor | None
 
 
 def build_container(
@@ -100,6 +103,7 @@ def build_container(
     generic_generator: GenericGraphGenerator | None = None,
     step_limiter: StepRateLimiter | None = None,
     knowledge: KnowledgeService | None = None,
+    executor: CodeExecutor | None = None,
 ) -> Container:
     resolved = settings or LLMSettings.from_env()
     flags = features or FeatureFlags.from_env()
@@ -217,6 +221,9 @@ def build_container(
     knowledge_service = (
         knowledge if knowledge is not None else build_knowledge_service(enabled=flags.rag)
     )
+    # The feature flag is the outer switch: an injected adapter cannot turn the
+    # endpoint on when ``SYNAPSE_EXEC`` is off.
+    code_executor = executor if executor is not None and flags.execution else build_executor(flags)
     return Container(
         sessions=sessions,
         problems=problems,
@@ -227,6 +234,7 @@ def build_container(
         subjects=problems.plugins,
         features=flags,
         knowledge=knowledge_service,
+        executor=code_executor,
     )
 
 
@@ -272,6 +280,17 @@ def build_generic_graph_generator(
     )
 
 
+def build_executor(
+    flags: FeatureFlags,
+    limits: ExecutionLimits | None = None,
+) -> CodeExecutor | None:
+    """Off means no executor object at all; the route returns 403."""
+
+    if not flags.execution:
+        return None
+    return LocalPythonExecutor(limits)
+
+
 def build_composer(
     settings: LLMSettings,
     *,
@@ -314,3 +333,8 @@ def get_review_service(request: Request) -> ReviewService:
 def get_knowledge_service(request: Request) -> KnowledgeService:
     container = cast(Container, request.app.state.container)
     return container.knowledge
+
+
+def get_executor(request: Request) -> CodeExecutor | None:
+    container = cast(Container, request.app.state.container)
+    return container.executor

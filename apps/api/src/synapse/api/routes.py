@@ -7,9 +7,15 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from synapse.api.deps import get_knowledge_service, get_review_service, get_service
+from synapse.api.deps import (
+    get_executor,
+    get_knowledge_service,
+    get_review_service,
+    get_service,
+)
 from synapse.api.mappers import (
     diagnosis_out,
+    execution_out,
     knowledge_search_out,
     review_items_out,
     session_out,
@@ -18,6 +24,8 @@ from synapse.api.mappers import (
 from synapse.api.schemas import (
     CreateSessionRequest,
     DiagnosisOut,
+    ExecutionOut,
+    ExecutionRequestIn,
     ExitRequest,
     HealthOut,
     KnowledgeSearchOut,
@@ -33,6 +41,11 @@ from synapse.application.commands import (
     VerifyStepCommand,
 )
 from synapse.application.errors import SessionConflict
+from synapse.application.execution import (
+    CodeExecutor,
+    ExecutionBusy,
+    RunCodeCommand,
+)
 from synapse.application.factory import ProblemNotSupported, UnsupportedMode
 from synapse.application.knowledge import KnowledgeService, KnowledgeUnavailable
 from synapse.application.limits import StepRateLimited
@@ -65,6 +78,42 @@ def _session_out(view: SessionView, service: SessionService) -> SessionOut:
 @router.get("/health", response_model=HealthOut)
 def health() -> HealthOut:
     return HealthOut(version="0.1.0")
+
+
+@router.post("/executions", response_model=ExecutionOut)
+def run_code(
+    request: ExecutionRequestIn,
+    executor: CodeExecutor | None = Depends(get_executor),
+) -> ExecutionOut:
+    """Run one explicitly submitted Python file, or its submitted tests.
+
+    This endpoint is not a diagnostic step: it does not read a session, write a
+    session, select code, or call the model. It is off unless
+    ``SYNAPSE_EXEC=on``; when off it returns 403 instead of pretending a run
+    happened. ``pass`` means the process exited 0 or the submitted tests passed,
+    never that the answer is correct.
+    """
+
+    if executor is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="代码执行默认关闭；设置 SYNAPSE_EXEC=on 后才可用。",
+        )
+    try:
+        result = executor.run(
+            RunCodeCommand(
+                language=request.language,
+                code=request.code,
+                tests=request.tests,
+            )
+        )
+    except ExecutionBusy as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(exc),
+            headers={"Retry-After": "1"},
+        ) from exc
+    return execution_out(result)
 
 
 @router.get("/review/items", response_model=ReviewItemsOut)

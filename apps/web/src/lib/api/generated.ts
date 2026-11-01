@@ -21,6 +21,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/executions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Code
+         * @description Run one explicitly submitted Python file, or its submitted tests.
+         *
+         *     This endpoint is not a diagnostic step: it does not read a session, write a
+         *     session, select code, or call the model. It is off unless
+         *     ``SYNAPSE_EXEC=on``; when off it returns 403 instead of pretending a run
+         *     happened. ``pass`` means the process exited 0 or the submitted tests passed,
+         *     never that the answer is correct.
+         */
+        post: operations["run_code_api_v1_executions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/review/items": {
         parameters: {
             query?: never;
@@ -338,6 +364,61 @@ export interface components {
             generic: boolean;
             /** Confidence */
             confidence: number;
+        };
+        /** ExecutionFindingOut */
+        ExecutionFindingOut: {
+            /**
+             * Code
+             * @enum {string}
+             */
+            code: "forbidden_import" | "forbidden_call" | "forbidden_attribute" | "syntax_error" | "too_large" | "sandbox_unavailable";
+            /** Message */
+            message: string;
+        };
+        /** ExecutionOut */
+        ExecutionOut: {
+            /**
+             * Version
+             * @constant
+             */
+            version: "0.1";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pass" | "fail" | "timeout" | "rejected";
+            /** Detail */
+            detail: string;
+            /** Exit Code */
+            exit_code: number | null;
+            /** Duration Ms */
+            duration_ms: number;
+            /** Stdout */
+            stdout: string;
+            /** Stderr */
+            stderr: string;
+            /** Truncated */
+            truncated: boolean;
+            /** Findings */
+            findings: components["schemas"]["ExecutionFindingOut"][];
+        };
+        /**
+         * ExecutionRequestIn
+         * @description Only explicit code; the executor never extracts code from a problem.
+         */
+        ExecutionRequestIn: {
+            /**
+             * Language
+             * @constant
+             */
+            language: "python";
+            /** Code */
+            code: string;
+            /**
+             * Tests
+             * @default
+             */
+            tests: string;
         };
         /**
          * ExitRequest
@@ -795,6 +876,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthOut"];
+                };
+            };
+        };
+    };
+    run_code_api_v1_executions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExecutionRequestIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecutionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -309,6 +309,38 @@ class StepVerdictOut(StrictModel):
     findings: list[StepFindingOut] = Field(max_length=3)
 
 
+class ExecutionRequestIn(StrictModel):
+    """Only explicit code; the executor never extracts code from a problem."""
+
+    language: Literal["python"]
+    code: str = Field(min_length=1, max_length=20000)
+    tests: str = Field(default="", max_length=20000)
+
+
+class ExecutionFindingOut(StrictModel):
+    code: Literal[
+        "forbidden_import",
+        "forbidden_call",
+        "forbidden_attribute",
+        "syntax_error",
+        "too_large",
+        "sandbox_unavailable",
+    ]
+    message: str = Field(min_length=1, max_length=300)
+
+
+class ExecutionOut(StrictModel):
+    version: Literal["0.1"]
+    status: Literal["pass", "fail", "timeout", "rejected"]
+    detail: str = Field(max_length=1000)
+    exit_code: int | None
+    duration_ms: int = Field(ge=0, le=60000)
+    stdout: str = Field(max_length=32000)
+    stderr: str = Field(max_length=32000)
+    truncated: bool
+    findings: list[ExecutionFindingOut] = Field(max_length=5)
+
+
 class ReviewItemOut(StrictModel):
     """One disagreed card, as the teacher review page sees it.
 

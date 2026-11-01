@@ -30,6 +30,9 @@ class FeatureFlags:
     # Put the focus node's top-2 CHC demand tags on the card. Off by default:
     # it changes the public card shape (v0.2) and must not touch golden bytes.
     chc_attribution: bool = False
+    # Phase 2: run explicitly submitted Python in a bounded local process. Off
+    # by default because it is a new capability with a new attack surface.
+    execution: bool = False
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> FeatureFlags:
@@ -44,6 +47,7 @@ class FeatureFlags:
                 "SYNAPSE_CHC_ATTRIBUTION",
                 source.get("SYNAPSE_CHC_ATTRIBUTION", "off"),
             ),
+            execution=_parse_flag("SYNAPSE_EXEC", source.get("SYNAPSE_EXEC", "off")),
         )
 
 

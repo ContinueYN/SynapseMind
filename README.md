@@ -142,6 +142,7 @@ Nginx（SSE 关闭缓冲、限流、超时）
 | 解法图来源 | 学科插件提供；可手写也可生成，生成物必须过同一份 `solution-graph.schema.json`，否则显式失败、不生成卡点卡 |
 | 对外承诺 | 按**验证方式**分档（FORMAL / EXECUTABLE / EMPIRICAL / ARGUMENTATIVE），由 `application/commitment.py` 一处决定：能形式化或经验验证的追问并出卡点卡；只能讲论证结构的（或当前环境无法执行验证的）只出结构提示或入口整理，不追问、不定位卡点。领域是开放标签，不是白名单 |
 | 诊断证据 | 种子题用人工标定的 log-odds 表；生成图由模型为每个选项给出权重，结构规则强制覆盖与正负对比，未知图不借用别题的权重 |
+| 代码执行 | 默认关；只跑显式提交的 Python 与提交的测试，有超时/内存/输出上限和静态闸门。它是受限本地进程，不是容器级安全沙箱；`pass` 只表示退出码 0 或提交的测试通过 |
 | 异步任务 | 只跑离线活；**LLM 主链路绝不进队列**——进队列就破首问预算 |
 | 迁移 | Alembic 向前兼容，不做自动 down migration |
 | 可观测 | OpenTelemetry 全链路 trace + Prometheus/Grafana；首问 P95 与 JSON 合法率进大盘 |

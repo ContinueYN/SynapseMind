@@ -13,6 +13,8 @@ from synapse.api.schemas import (
     DiagnosisOut,
     DomainIntakeOut,
     DomainOut,
+    ExecutionFindingOut,
+    ExecutionOut,
     HintOut,
     HintStepOut,
     HistoryItemOut,
@@ -35,6 +37,7 @@ from synapse.api.schemas import (
 )
 from synapse.application.composer import ProbePrompt
 from synapse.application.domains import DomainDescriptor
+from synapse.application.execution import ExecutionResult
 from synapse.application.intake import DomainIntake
 from synapse.application.knowledge import KnowledgeSearch
 from synapse.application.review import ReviewItem
@@ -308,4 +311,21 @@ def session_out(
         solution=view.reveal.solution if view.reveal else None,
         progress=progress_out(session),
         history=[history_out(record) for record in session.history],
+    )
+
+
+def execution_out(result: ExecutionResult) -> ExecutionOut:
+    return ExecutionOut(
+        version="0.1",
+        status=result.status,
+        detail=result.detail,
+        exit_code=result.exit_code,
+        duration_ms=result.duration_ms,
+        stdout=result.stdout,
+        stderr=result.stderr,
+        truncated=result.truncated,
+        findings=[
+            ExecutionFindingOut(code=finding.code, message=finding.message)
+            for finding in result.findings
+        ],
     )
