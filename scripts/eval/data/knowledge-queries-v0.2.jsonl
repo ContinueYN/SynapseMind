@@ -92,3 +92,11 @@
 {"id":"Q80","kind":"relevant","text":"分散练习 间隔 交错 保持","subject":"learning","expect":["K_LEARN_SPACING"]}
 {"id":"Q81","kind":"relevant","text":"写作指南 论证 证据 结构","subject":"writing","expect":["K_SOURCE_WRITING_GUIDE"]}
 {"id":"Q82","kind":"relevant","text":"Python 异常 调用栈 官方文档","subject":"programming","expect":["K_SOURCE_PROGRAMMING_ERRORS"]}
+{"id":"Q95","kind":"relevant","text":"主题句 段落 中心","expect":["K_WRITING_TOPIC_SENTENCE"]}
+{"id":"Q96","kind":"relevant","text":"混淆变量 相关 因果","expect":["K_RESEARCH_CONFOUNDING"]}
+{"id":"Q97","kind":"relevant","text":"操作定义 测量 指标","expect":["K_RESEARCH_OPERATIONAL"]}
+{"id":"Q98","kind":"relevant","text":"边际 增量 成本","expect":["K_DECISION_MARGINAL"]}
+{"id":"Q99","kind":"relevant","text":"交错练习 混合题型","expect":["K_LEARN_INTERLEAVING"]}
+{"id":"Q100","kind":"relevant","text":"主题句 怎么写","expect":["K_WRITING_TOPIC_SENTENCE"]}
+{"id":"Q101","kind":"relevant","text":"混淆变量 替代解释","expect":["K_RESEARCH_CONFOUNDING"]}
+{"id":"Q102","kind":"relevant","text":"操作化 变量 怎么测","expect":["K_RESEARCH_OPERATIONAL"]}
