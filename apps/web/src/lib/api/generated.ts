@@ -340,7 +340,7 @@ export interface components {
              * Tool
              * @enum {string}
              */
-            tool: "check_structure" | "search_patterns" | "compare_options" | "ask_clarifying" | "run_code" | "run_tests";
+            tool: "check_structure" | "search_patterns" | "search_sources" | "compare_options" | "ask_clarifying" | "run_code" | "run_tests";
             /**
              * Status
              * @enum {string}

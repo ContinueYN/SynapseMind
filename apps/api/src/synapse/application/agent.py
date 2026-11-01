@@ -36,6 +36,7 @@ from synapse.domain.problem.models import Problem
 AgentTool = Literal[
     "check_structure",
     "search_patterns",
+    "search_sources",
     "compare_options",
     "ask_clarifying",
     "run_code",
@@ -131,6 +132,8 @@ def run_agent_trace(
         _add_execution(steps, suggestions, executor, code, tests or "")
     elif intake.profile.framework is IntakeFramework.DECISION:
         _add_compare_options(steps, suggestions, intake)
+    elif intake.profile.name in {"writing", "research"}:
+        _add_search_sources(steps, suggestions, problem, intake, knowledge)
     else:
         _add_search_patterns(steps, suggestions, problem, intake, knowledge)
 
@@ -188,8 +191,64 @@ def _add_search_patterns(
     intake: DomainIntake,
     knowledge: KnowledgeService,
 ) -> None:
+    _add_knowledge_search(
+        steps,
+        suggestions,
+        problem,
+        intake,
+        knowledge,
+        tool="search_patterns",
+        source_only=False,
+        query_suffix="方法 模式 检查",
+        limit=2,
+        no_rag="RAG 未开启；本轮没有外部知识卡，也不伪造引用。",
+        empty="没有命中的知识卡；本轮不伪造引用。",
+        found="检索到 {count} 张卡；只作参考，不替代你的判断。",
+        suggestion="可参考：{title}（{source}）",
+    )
+
+
+def _add_search_sources(
+    steps: list[AgentStep],
+    suggestions: list[AgentSuggestion],
+    problem: Problem,
+    intake: DomainIntake,
+    knowledge: KnowledgeService,
+) -> None:
+    _add_knowledge_search(
+        steps,
+        suggestions,
+        problem,
+        intake,
+        knowledge,
+        tool="search_sources",
+        source_only=True,
+        query_suffix="来源 文献 教材",
+        limit=5,
+        no_rag="RAG 未开启；本轮没有外部来源，也不伪造引用。",
+        empty="没有命中来源卡；本轮不伪造引用。",
+        found="检索到 {count} 个来源；只作参考，不替代你的判断。",
+        suggestion="可参考来源：{source}（{title}）",
+    )
+
+
+def _add_knowledge_search(
+    steps: list[AgentStep],
+    suggestions: list[AgentSuggestion],
+    problem: Problem,
+    intake: DomainIntake,
+    knowledge: KnowledgeService,
+    *,
+    tool: Literal["search_patterns", "search_sources"],
+    source_only: bool,
+    query_suffix: str,
+    limit: int,
+    no_rag: str,
+    empty: str,
+    found: str,
+    suggestion: str,
+) -> None:
     started = perf_counter()
-    tool: AgentTool = "search_patterns"
     if not knowledge.enabled:
         steps.append(
             AgentStep(
@@ -197,20 +256,20 @@ def _add_search_patterns(
                 tool=tool,
                 status="skipped",
                 input_summary=f"domain={intake.profile.name}; rag=off",
-                output_summary="RAG 未开启；本轮没有外部知识卡，也不伪造引用。",
+                output_summary=no_rag,
                 duration_ms=_elapsed_ms(started),
             )
         )
         return
 
     subject = None if problem.subject == "generic" else problem.subject
-    query = f"{intake.profile.label} 方法 模式 检查"
+    query = f"{intake.profile.label} {query_suffix}"
     try:
         result = knowledge.search(
             query,
             subject=subject,
             verification=intake.profile.verification.value,
-            limit=2,
+            limit=limit,
         )
     except KnowledgeUnavailable:
         steps.append(
@@ -232,7 +291,12 @@ def _add_search_patterns(
         )
         return
 
-    citations = tuple(_citation(hit) for hit in result.hits)
+    hits = (
+        tuple(hit for hit in result.hits if hit.card.kind == "source")
+        if source_only
+        else result.hits
+    )
+    citations = tuple(_citation(hit) for hit in hits)
     if not citations:
         steps.append(
             AgentStep(
@@ -240,20 +304,20 @@ def _add_search_patterns(
                 tool=tool,
                 status="skipped",
                 input_summary=f"domain={intake.profile.name}; query=concept-label",
-                output_summary="没有命中的知识卡；本轮不伪造引用。",
+                output_summary=empty,
                 duration_ms=_elapsed_ms(started),
             )
         )
         return
 
-    first = result.hits[0].card
+    first = hits[0].card
     steps.append(
         AgentStep(
             index=len(steps) + 1,
             tool=tool,
             status="ok",
             input_summary=f"domain={intake.profile.name}; query=concept-label",
-            output_summary=f"检索到 {len(citations)} 张卡；只作参考，不替代你的判断。",
+            output_summary=found.format(count=len(citations)),
             duration_ms=_elapsed_ms(started),
             citations=citations,
         )
@@ -261,7 +325,7 @@ def _add_search_patterns(
     suggestions.append(
         AgentSuggestion(
             "source",
-            _clip(f"可参考：{first.title}（{first.source.title}）"),
+            _clip(suggestion.format(title=first.title, source=first.source.title)),
             "knowledge",
         )
     )

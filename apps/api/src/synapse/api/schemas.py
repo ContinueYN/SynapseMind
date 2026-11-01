@@ -437,6 +437,7 @@ class KnowledgeSearchOut(StrictModel):
 AgentToolOut = Literal[
     "check_structure",
     "search_patterns",
+    "search_sources",
     "compare_options",
     "ask_clarifying",
     "run_code",

@@ -17,6 +17,7 @@ import type { AgentStep, AgentTrace, VerificationMode } from "@/src/lib/api/type
 const TOOL_LABEL: Record<AgentStep["tool"], string> = {
   check_structure: "看结构",
   search_patterns: "查知识卡",
+  search_sources: "查来源卡",
   compare_options: "列选项与代价",
   ask_clarifying: "提一个澄清问题",
   run_code: "运行复现",

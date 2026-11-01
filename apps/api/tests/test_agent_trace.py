@@ -34,11 +34,20 @@ DECISION = "我应该接受北京的工作机会，还是留在上海陪家人�
 MATH = "已知函数 f(x)=ln x - a x，a∈R。若 f(x)≤0 对任意 x>0 恒成立，求 a 的取值范围。"
 
 
-def _start(client: TestClient, text: str, answer: str) -> dict[str, object]:
+def _start(
+    client: TestClient,
+    text: str,
+    answer: str,
+    *,
+    subject: str | None = None,
+) -> dict[str, object]:
+    problem: dict[str, object] = {"text": text}
+    if subject is not None:
+        problem["subject"] = subject
     response = client.post(
         "/api/v1/sessions",
         json={
-            "problem": {"text": text},
+            "problem": problem,
             "attempt": {"answer": answer, "work": "", "self_report": "unsure"},
             "mode": "learning",
         },
@@ -120,6 +129,26 @@ def _card() -> KnowledgeHit:
             ),
         ),
         score=0.91,
+    )
+
+
+def _source_card() -> KnowledgeHit:
+    return KnowledgeHit(
+        card=KnowledgeCard(
+            id="K_SOURCE_TEST",
+            kind="source",
+            subject="research",
+            verifications=("argumentative",),
+            title="原始论文与综述要分开读",
+            body="先读原始论文，再用综述校准位置。",
+            tags=("来源", "文献"),
+            source=KnowledgeSource(
+                title="Nature：如何阅读一篇论文",
+                url="https://www.nature.com/articles/d41586-018-06600-0",
+                license="Nature terms",
+            ),
+        ),
+        score=0.88,
     )
 
 
@@ -208,6 +237,43 @@ def test_rag_hits_are_cited_and_query_is_a_label() -> None:
     ]
     assert retriever.queries and "SECRET" not in retriever.queries[0]
     assert any(item["source"] == "knowledge" for item in body["suggestions"])
+
+
+def test_research_uses_the_source_tool_and_cites_a_source_card() -> None:
+    retriever = _Retriever((_source_card(),))
+    client = _client(knowledge=KnowledgeService(retriever))
+    created = _start(
+        client,
+        "帮我看看这篇论文的文献综述怎么组织，先读哪些来源？",
+        "我想先理清综述结构。",
+        subject="research",
+    )
+
+    body = client.get(f"/api/v1/sessions/{created['session_id']}/agent").json()
+
+    source = next(step for step in body["steps"] if step["tool"] == "search_sources")
+    assert source["status"] == "ok"
+    assert source["citations"][0]["card_id"] == "K_SOURCE_TEST"
+    assert "来源" in source["output_summary"]
+    assert any(item["source"] == "knowledge" for item in body["suggestions"])
+    assert "来源" in retriever.queries[0]
+
+
+def test_source_tool_skips_when_no_source_card_was_found() -> None:
+    client = _client(knowledge=KnowledgeService(_Retriever((_card(),))))
+    created = _start(
+        client,
+        "帮我看看这篇论文的文献综述怎么组织，先读哪些来源？",
+        "我想先理清综述结构。",
+        subject="research",
+    )
+
+    body = client.get(f"/api/v1/sessions/{created['session_id']}/agent").json()
+
+    source = next(step for step in body["steps"] if step["tool"] == "search_sources")
+    assert source["status"] == "skipped"
+    assert "没有命中来源卡" in source["output_summary"]
+    assert source["citations"] == []
 
 
 def test_rag_failure_degrades_to_a_failed_step() -> None:
