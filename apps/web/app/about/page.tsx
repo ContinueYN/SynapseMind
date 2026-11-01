@@ -10,6 +10,16 @@ export const metadata: Metadata = {
     "突触是类比，CHC 是标签空间。这里写清楚我们验证了什么、还没有验证什么。",
 };
 
+const CHC_DIMENSIONS = [
+  { code: "V", label: "言语理解", scope: "术语、量词与条件的语义解码" },
+  { code: "Gf", label: "流体推理", scope: "新结构下的规则归纳与迁移" },
+  { code: "Gv", label: "视觉空间", scope: "图形与结构关系的心理表征" },
+  { code: "WM", label: "工作记忆", scope: "多约束并行保持与更新" },
+  { code: "Gs", label: "加工速度", scope: "限时条件下的检索与执行效率" },
+  { code: "LTS", label: "长时存取", scope: "概念、公式与模式的提取" },
+  { code: "M", label: "元认知", scope: "置信度校准与策略监控" },
+] as const;
+
 const CHECKS = [
   {
     question: "步骤有没有被写到",
@@ -148,22 +158,29 @@ export default function AboutPage() {
             CHC 放在哪
           </h2>
 
-          <p className="sm-statement">七维是标签，不是分数。</p>
+          <p className="sm-statement">七维是需求坐标，不生成分数。</p>
 
           <p className="sm-p">
             CHC（Cattell–Horn–Carroll）是一套能力分类学。我们借它的词汇，把「这一步需要什么」
             写清楚：读懂条件、转译条件、同时抓住几个限制、检查是否用到了前提。
           </p>
 
-          <div className="sm-about-terms">
-            <span className="sm-chip sm-about-term">读懂条件</span>
-            <span className="sm-chip sm-about-term">转译条件</span>
-            <span className="sm-chip sm-about-term">同时抓住几个限制</span>
-            <span className="sm-chip sm-about-term">检查前提</span>
+          <div className="sm-about-terms" aria-label="CHC 七维需求坐标">
+            {CHC_DIMENSIONS.map((dimension) => (
+              <span
+                className="sm-chip sm-about-term"
+                data-chc={dimension.code}
+                key={dimension.code}
+                title={dimension.scope}
+              >
+                <b>{dimension.code}</b> {dimension.label}
+              </span>
+            ))}
           </div>
 
           <p className="sm-fine">
-            当前版本里，这套标注默认关闭；打开 `SYNAPSE_CHC_ATTRIBUTION` 后，卡面只显示本题 focus 节点需求最高的两维，措辞是「题目需求标签，不是能力测评」。它仍不更新后验，也没有用来选探针。
+            这张页面列出七维坐标；卡面默认关闭，打开 `SYNAPSE_CHC_ATTRIBUTION` 后只显示本题 focus
+            节点需求最高的两维，措辞是「题目需求标签，不是能力测评」。后验与探针独立计算，对外只呈现节点需求。
             我们不输出 IQ、百分位或「能力分」；单题也不足以断言任何一项能力。
           </p>
         </Plane>

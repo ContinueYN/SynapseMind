@@ -35,8 +35,22 @@ describe("AboutPage", () => {
   });
 
   it("does not turn the metaphor into a score claim", () => {
-    render(<AboutPage />);
+    const { container } = render(<AboutPage />);
 
+    expect(container.querySelectorAll("[data-chc]")).toHaveLength(7);
+    for (const [code, label] of [
+      ["V", "言语理解"],
+      ["Gf", "流体推理"],
+      ["Gv", "视觉空间"],
+      ["WM", "工作记忆"],
+      ["Gs", "加工速度"],
+      ["LTS", "长时存取"],
+      ["M", "元认知"],
+    ] as const) {
+      const chip = container.querySelector(`[data-chc="${code}"]`);
+      expect(chip).not.toBeNull();
+      expect(chip).toHaveTextContent(label);
+    }
     expect(screen.queryByText(/提升\s*\d+\s*分/)).toBeNull();
     expect(screen.getAllByText(/不承诺提分/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/不输出 IQ/).length).toBeGreaterThan(0);
