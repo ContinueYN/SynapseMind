@@ -9,9 +9,10 @@ import type { AgentStep, AgentTrace, VerificationMode } from "@/src/lib/api/type
 /**
  * 工具轨迹面板：让「系统做了什么」可见，但不把轨迹包装成诊断。
  *
- * v0.1 固定最多 3 步，只调用白名单里的只读工具；面板不展示思维链、不展示
+ * v0.2 固定最多 3 步，只调用白名单里的只读工具；面板不展示思维链、不展示
  * 学生原文，也不把任何一步读成「答对了」。代码框只接收用户自己粘贴的最小
  * 复现；执行开关关闭时，后端会如实返回 skipped，面板不会把它说成通过。
+ * reflection 只复述结构缺口与工具状态，不是卡点结论，也不排序选项。
  */
 
 const TOOL_LABEL: Record<AgentStep["tool"], string> = {
@@ -172,6 +173,22 @@ export function AgentTracePanel({
 
             {trace ? (
               <>
+                <div style={{ marginTop: 22 }}>
+                  <p className="sm-lab">我卡哪了（结构线索，不是诊断）</p>
+                  <p className="sm-note sm-note-quiet" style={{ marginTop: 8 }}>
+                    {trace.reflection.focus}
+                  </p>
+                  <p className="sm-lab" style={{ marginTop: 14 }}>
+                    下一步做什么
+                  </p>
+                  <p className="sm-note sm-note-quiet" style={{ marginTop: 8 }}>
+                    {trace.reflection.next}
+                  </p>
+                  <p className="sm-fine" style={{ marginTop: 10 }}>
+                    {trace.reflection.boundary}
+                  </p>
+                </div>
+
                 <p className="sm-lab" style={{ marginTop: 22 }}>
                   这次走过的步骤
                 </p>

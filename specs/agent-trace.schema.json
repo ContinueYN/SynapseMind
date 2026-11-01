@@ -2,17 +2,26 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://synapsemind.dev/schemas/agent-trace.schema.json",
   "title": "AgentTrace",
-  "description": "有界工具轨迹 v0.1：只读、最多 3 步、不推进会话、不读答案；记录工具名、状态、输入/输出摘要与引用，不记录思维链。",
+  "description": "有界工具轨迹 v0.2：只读、最多 3 步、不推进会话、不读答案；记录工具名、状态、输入/输出摘要与引用，不记录思维链。v0.2 增加 reflection（结构复盘），它不是诊断。",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "session_id", "mode", "steps", "suggestions", "limits", "notice"],
+  "required": [
+    "version",
+    "session_id",
+    "mode",
+    "steps",
+    "suggestions",
+    "reflection",
+    "limits",
+    "notice"
+  ],
   "properties": {
-    "version": {"type": "string", "const": "0.1"},
+    "version": {"type": "string", "const": "0.2"},
     "session_id": {"type": "string", "minLength": 1, "maxLength": 64},
     "mode": {
       "type": "string",
       "enum": ["rules"],
-      "description": "v0.1 只有确定性规则轨迹；LLM 规划器未接。"
+      "description": "v0.2 仍只有确定性规则轨迹；LLM 规划器未接。"
     },
     "steps": {
       "type": "array",
@@ -88,6 +97,17 @@
             "enum": ["rule", "knowledge", "execution", "system"]
           }
         }
+      }
+    },
+    "reflection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["focus", "next", "boundary"],
+      "description": "只复述结构缺口与工具状态；不判断对错、不排序选项、不替用户选择。",
+      "properties": {
+        "focus": {"type": "string", "minLength": 1, "maxLength": 300},
+        "next": {"type": "string", "minLength": 1, "maxLength": 300},
+        "boundary": {"type": "string", "minLength": 1, "maxLength": 200}
       }
     },
     "limits": {

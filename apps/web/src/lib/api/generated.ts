@@ -320,6 +320,18 @@ export interface components {
             steps_used: number;
         };
         /**
+         * AgentReflectionOut
+         * @description Two lines of coverage review; neither line is a diagnosis.
+         */
+        AgentReflectionOut: {
+            /** Focus */
+            focus: string;
+            /** Next */
+            next: string;
+            /** Boundary */
+            boundary: string;
+        };
+        /**
          * AgentRunRequest
          * @description Explicit code submission for one bounded trace.
          *
@@ -379,7 +391,7 @@ export interface components {
              * Version
              * @constant
              */
-            version: "0.1";
+            version: "0.2";
             /** Session Id */
             session_id: string;
             /**
@@ -391,6 +403,7 @@ export interface components {
             steps?: components["schemas"]["AgentStepOut"][];
             /** Suggestions */
             suggestions?: components["schemas"]["AgentSuggestionOut"][];
+            reflection: components["schemas"]["AgentReflectionOut"];
             limits: components["schemas"]["AgentLimitsOut"];
             /** Notice */
             notice: string;

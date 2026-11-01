@@ -92,12 +92,26 @@ class AgentLimits:
 
 
 @dataclass(frozen=True, slots=True)
+class AgentReflection:
+    """A two-line review; it reports coverage, not a diagnosis.
+
+    ``focus`` may quote the first system-generated gap. It never quotes the
+    student's attempt, ranks an option, or says the work is wrong.
+    """
+
+    focus: str
+    next: str
+    boundary: str
+
+
+@dataclass(frozen=True, slots=True)
 class AgentTrace:
-    version: Literal["0.1"]
+    version: Literal["0.2"]
     session_id: str
     mode: Literal["rules"]
     steps: tuple[AgentStep, ...]
     suggestions: tuple[AgentSuggestion, ...]
+    reflection: AgentReflection
     limits: AgentLimits
     notice: str
 
@@ -140,16 +154,37 @@ def run_agent_trace(
     _add_clarifying(steps, suggestions, intake)
 
     return AgentTrace(
-        version="0.1",
+        version="0.2",
         session_id=session_id,
         mode="rules",
         steps=tuple(steps[:MAX_AGENT_STEPS]),
         suggestions=tuple(suggestions[:MAX_AGENT_STEPS]),
+        reflection=_build_reflection(intake, suggestions),
         limits=AgentLimits(
             max_steps=MAX_AGENT_STEPS,
             steps_used=len(steps[:MAX_AGENT_STEPS]),
         ),
         notice=_NOTICE,
+    )
+
+
+def _build_reflection(
+    intake: DomainIntake,
+    suggestions: list[AgentSuggestion],
+) -> AgentReflection:
+    if intake.clarifier:
+        focus = "领域标签还不够确定；先回答一个澄清问题，再谈结构。"
+    elif intake.gaps:
+        focus = f"目前最明显的结构缺口：{intake.gaps[0]}"
+    else:
+        focus = "这一轮没有看到结构缺口；这只说明表达覆盖，不是诊断结论。"
+
+    action = next((item.text for item in suggestions if item.kind != "structure"), "")
+    next_step = action or intake.next_step
+    return AgentReflection(
+        focus=_clip(focus),
+        next=_clip(next_step),
+        boundary="复盘只引用结构缺口与工具状态；不判断对错，不替你做选择。",
     )
 
 

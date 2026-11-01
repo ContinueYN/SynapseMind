@@ -162,11 +162,14 @@ def test_trace_is_read_only_bounded_and_schema_valid(client: TestClient) -> None
     assert response.status_code == 200, response.text
     body = response.json()
     Draft202012Validator(json.loads(SPEC_PATH.read_text(encoding="utf-8"))).validate(body)
-    assert body["version"] == "0.1"
+    assert body["version"] == "0.2"
     assert body["mode"] == "rules"
     assert body["steps"][0]["tool"] == "check_structure"
     assert len(body["steps"]) <= 3
     assert body["limits"] == {"max_steps": 3, "steps_used": len(body["steps"])}
+    assert body["reflection"]["focus"]
+    assert body["reflection"]["next"]
+    assert "不判断对错" in body["reflection"]["boundary"]
     assert "答案" in body["notice"]
 
     after = client.get(f"/api/v1/sessions/{session_id}").json()
@@ -174,6 +177,18 @@ def test_trace_is_read_only_bounded_and_schema_valid(client: TestClient) -> None
     assert after["turn"] == before["turn"]
     assert after["intake"]["observed"] == before["intake"]["observed"]
     assert after["intake"]["gaps"] == before["intake"]["gaps"]
+
+
+def test_reflection_names_a_structural_gap_without_grading(client: TestClient) -> None:
+    created = _start(client, CODE, "我想让它跑起来。", subject="programming")
+
+    body = client.get(f"/api/v1/sessions/{created['session_id']}/agent").json()
+
+    reflection = body["reflection"]
+    assert "结构缺口" in reflection["focus"]
+    assert reflection["next"] != reflection["focus"]
+    assert "不判断对错" in reflection["boundary"]
+    assert "写错" not in reflection["focus"]
 
 
 def test_trace_never_repeats_the_attempt(client: TestClient) -> None:
@@ -203,6 +218,7 @@ def test_decision_trace_lists_tradeoffs_without_ranking(client: TestClient) -> N
     compare = next(step for step in body["steps"] if step["tool"] == "compare_options")
     assert "不排序" in compare["output_summary"]
     assert any("不替你排序" in item["text"] for item in body["suggestions"])
+    assert "不判断对错" in body["reflection"]["boundary"]
     assert "你应该选" not in response.text
     assert "唯一正确答案" not in response.text
 

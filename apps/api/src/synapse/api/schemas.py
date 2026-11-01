@@ -496,14 +496,23 @@ class AgentLimitsOut(StrictModel):
     steps_used: int = Field(ge=0, le=3)
 
 
+class AgentReflectionOut(StrictModel):
+    """Two lines of coverage review; neither line is a diagnosis."""
+
+    focus: str = Field(min_length=1, max_length=300)
+    next: str = Field(min_length=1, max_length=300)
+    boundary: str = Field(min_length=1, max_length=200)
+
+
 class AgentTraceOut(StrictModel):
     """A bounded tool trace, not a diagnosis and not a chain of thought."""
 
-    version: Literal["0.1"]
+    version: Literal["0.2"]
     session_id: str = Field(min_length=1, max_length=64)
     mode: Literal["rules"]
     steps: list[AgentStepOut] = Field(default_factory=list, max_length=3)
     suggestions: list[AgentSuggestionOut] = Field(default_factory=list, max_length=3)
+    reflection: AgentReflectionOut
     limits: AgentLimitsOut
     notice: str = Field(min_length=1, max_length=300)
 

@@ -12,7 +12,7 @@ vi.mock("@/src/lib/api/client", () => ({
 }));
 
 const TRACE: AgentTrace = {
-  version: "0.1",
+  version: "0.2",
   session_id: "S_CODE",
   mode: "rules",
   steps: [
@@ -59,6 +59,11 @@ const TRACE: AgentTrace = {
       source: "system",
     },
   ],
+  reflection: {
+    focus: "目前最明显的结构缺口：先写一个最小复现。",
+    next: "先回答：最小复现是什么？",
+    boundary: "复盘只引用结构缺口与工具状态；不判断对错，不替你做选择。",
+  },
   limits: { max_steps: 3, steps_used: 3 },
   notice:
     "只读工具轨迹：不推进会话、不判断对错、不替你做选择，也没有读取答案。",
@@ -89,6 +94,8 @@ describe("AgentTracePanel", () => {
       "https://docs.python.org/3/library/unittest.html",
     );
     expect(screen.getByText(/上限 3 步，本轮用 3 步/)).toBeInTheDocument();
+    expect(screen.getByText(/目前最明显的结构缺口/)).toBeInTheDocument();
+    expect(screen.getByText(/复盘只引用结构缺口/)).toBeInTheDocument();
     expect(screen.getByText(/没有读取答案/)).toBeInTheDocument();
     expect(getAgentTrace).toHaveBeenCalledWith("S_CODE");
   });

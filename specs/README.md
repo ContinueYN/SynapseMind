@@ -11,7 +11,7 @@
 | [`structure-hint.schema.json`](structure-hint.schema.json) | 结构提示输出（NONE 档学科） | API、Web、评测 |
 | [`step-verification.schema.json`](step-verification.schema.json) | 单步验证输出（`POST /sessions/{id}/steps`） | API、Web |
 | [`code-execution.schema.json`](code-execution.schema.json) | 显式代码执行输出（`POST /executions`，v0.1） | API、评测 |
-| [`agent-trace.schema.json`](agent-trace.schema.json) | 有界只读工具轨迹（`GET /sessions/{id}/agent`，v0.1） | API、Web、评测 |
+| [`agent-trace.schema.json`](agent-trace.schema.json) | 有界只读工具轨迹 + 结构复盘（`GET /sessions/{id}/agent`，v0.2） | API、Web、评测 |
 | [`agent-run.schema.json`](agent-run.schema.json) | 显式代码复现请求（`POST /sessions/{id}/agent/run`，v0.1） | API、Web |
 | [`review-queue.schema.json`](review-queue.schema.json) | 异议复核只读列表（`GET /review/items`） | API、Web |
 | [`knowledge-search.schema.json`](knowledge-search.schema.json) | 只读知识卡检索（`GET /knowledge/search`） | API、Web |
@@ -49,7 +49,7 @@
 
 `knowledge-search.schema.json` 是本地知识卡检索的只读契约（v0.2）。`GET /api/v1/knowledge/search` 只接受概念标签（`q`）、**开放领域标签**过滤（`subject`，1–40 字符，不是白名单）和可选的验证方式过滤（`verification`：`formal` / `executable` / `empirical` / `argumentative`），**不接受学生作答原文**；返回 `card_id`、五类 `kind`（concept/pattern/method/error/source）、`subject`、`verifications`、标题、摘录、出处（title/url/license）与余弦分数。`enabled=false` 表示 `SYNAPSE_RAG` 未开启，此时 `hits` 为空，客户端隐藏面板。检索不推进会话、不修改卡点卡、不写库；没有模型时 API 返回 503 并带安装提示，而不是静默返回空结果。
 
-`agent-trace.schema.json` 是通用入口的有界工具轨迹契约（Phase 4，v0.1）。`GET /api/v1/sessions/{id}/agent` 只对**没有参考结构的入口会话**可用；已有解法图/卡点卡的会话返回 **409**，不会为了展示轨迹去跑第二套诊断。轨迹最多 **3 步**，v0.1 只有确定性规则选择，不调模型；`steps[].tool` 限定为 `check_structure` / `search_patterns` / `search_sources` / `compare_options` / `ask_clarifying` / `run_code` / `run_tests`，没有 `get_answer`、`set_state` 或推进会话的工具。写作/研究会优先查 `source` 类卡；没有来源卡就写 `skipped`，不会把概念卡包装成来源。`status` 只表示**工具调用**的状态（`ok`/`skipped`/`failed`），不是学生答案或代码的对错结论；复查失败、RAG 未开启、执行开关关闭都必须如实写 `failed`/`skipped`，不能补一个通过。轨迹只记录输入/输出摘要和知识卡引用，不记录学生原文或思维链；`suggestions` 只给结构、来源、可逆实验或澄清问题，不排序选项，也不给唯一答案。
+`agent-trace.schema.json` 是通用入口的有界工具轨迹契约（Phase 4，v0.2）。`GET /api/v1/sessions/{id}/agent` 只对**没有参考结构的入口会话**可用；已有解法图/卡点卡的会话返回 **409**，不会为了展示轨迹去跑第二套诊断。轨迹最多 **3 步**，v0.2 仍只有确定性规则选择，不调模型；`steps[].tool` 限定为 `check_structure` / `search_patterns` / `search_sources` / `compare_options` / `ask_clarifying` / `run_code` / `run_tests`，没有 `get_answer`、`set_state` 或推进会话的工具。写作/研究会优先查 `source` 类卡；没有来源卡就写 `skipped`，不会把概念卡包装成来源。`status` 只表示**工具调用**的状态（`ok`/`skipped`/`failed`），不是学生答案或代码的对错结论；复查失败、RAG 未开启、执行开关关闭都必须如实写 `failed`/`skipped`，不能补一个通过。轨迹只记录输入/输出摘要和知识卡引用，不记录学生原文或思维链；`suggestions` 只给结构、来源、可逆实验或澄清问题，不排序选项，也不给唯一答案。v0.2 增加 `reflection`（`focus`/`next`/`boundary`）：只复述结构缺口与工具状态，不是卡点结论，也不替用户做选择。
 
 `agent-run.schema.json` 是显式代码复现请求（v0.1）。`POST /api/v1/sessions/{id}/agent/run` 只接受调用方粘贴的 Python `code` 与可选 `tests`，**不从题面或会话自动抽代码**；只有 `EXECUTABLE` 框架接受代码，`tests` 必须与 `code` 一起提交。它与 `/executions` 共用同一个受限本地执行器和 `SYNAPSE_EXEC` 开关：关闭时轨迹里是 `skipped`（“没有运行”），不是 `pass`；执行结果只进入轨迹摘要和可逆实验建议，不写会话、不读答案库、不生成卡点卡。`pass` 仍只表示退出码 0 或提交的测试通过，不表示代码正确。
 
