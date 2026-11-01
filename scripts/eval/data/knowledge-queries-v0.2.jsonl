@@ -78,3 +78,15 @@
 {"id":"I04","kind":"irrelevant","text":"如何提高英语听力"}
 {"id":"I05","kind":"irrelevant","text":"股票 基金 定投 收益"}
 {"id":"I06","kind":"irrelevant","text":"photosynthesis light reaction"}
+{"id":"Q69","kind":"relevant","text":"异常 捕获 traceback 兜底","subject":"programming","expect":["K_CODE_EXCEPTION_SCOPE"]}
+{"id":"Q70","kind":"relevant","text":"默认参数 可变对象 共享","subject":"programming","expect":["K_CODE_MUTABLE_DEFAULT"]}
+{"id":"Q71","kind":"relevant","text":"性能 timeit 剖析 热点","subject":"programming","expect":["K_CODE_MEASURE_FIRST"]}
+{"id":"Q72","kind":"relevant","text":"反方 反对意见 论证","subject":"writing","expect":["K_WRITING_COUNTERARGUMENT"]}
+{"id":"Q73","kind":"relevant","text":"引用 转述 来源","subject":"writing","expect":["K_WRITING_SOURCE_INTEGRATION"]}
+{"id":"Q74","kind":"relevant","text":"读者 场景 背景","subject":"writing","expect":["K_WRITING_AUDIENCE"]}
+{"id":"Q75","kind":"relevant","text":"检索 关键词 数据库 纳入标准","subject":"research","expect":["K_RESEARCH_SEARCH"]}
+{"id":"Q76","kind":"relevant","text":"p值 效应量 置信区间","subject":"research","expect":["K_RESEARCH_EFFECT_SIZE"]}
+{"id":"Q77","kind":"relevant","text":"重复 复现 证据强度","subject":"research","expect":["K_RESEARCH_REPLICATION"]}
+{"id":"Q78","kind":"relevant","text":"机会成本 最佳替代 选择","subject":"decision","expect":["K_DECISION_OPPORTUNITY_COST"]}
+{"id":"Q79","kind":"relevant","text":"基准率 贝叶斯 先验","subject":"decision","expect":["K_DECISION_BASE_RATE"]}
+{"id":"Q80","kind":"relevant","text":"分散练习 间隔 交错 保持","subject":"learning","expect":["K_LEARN_SPACING"]}
