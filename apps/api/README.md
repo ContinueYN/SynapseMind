@@ -166,9 +166,9 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 
 - 默认**关闭**。开启需要本地 ONNX 模型，不依赖 DeepSeek（DeepSeek 只提供 chat）。
 - 模型：`BAAI/bge-small-zh-v1.5`，512 维，约 90 MB；`fastembed` 在 CPU 上跑，首次运行下载到 `SYNAPSE_EMBED_CACHE`（默认 `~/.cache/synapsemind/fastembed`）。
-- 语料：`src/synapse/infrastructure/knowledge/corpus.jsonl`，当前 82 张跨领域卡（36 数学 / 20 物理 / 7 编程 / 7 写作 / 6 研究 / 4 决策 / 2 学习），每张都带 `source.title/url/license`，可选 `kind`/`verifications`（旧卡按 subject 保守推断）；另有 3 张 `source` 类卡供 `search_sources` 使用。改语料后重启 API 重建索引；向量不落库。
-- 检索：按 `q` + 可选 `subject` + 可选 `verification` 过滤，余弦相似度线性扫描，默认取前 3 条、分数低于 `0.55` 的不返回。阈值由评测标定：82 张语料下无关查询最高 0.490，最弱的相关查询 0.608，`0.35` 会让六条无关查询全部通过。语料只有几十张，暂不引入 pgvector；`KnowledgeRetriever` 端口保留替换点。
-- 评测：`python scripts/eval/knowledge_retrieval.py` 用固定 94 条概念查询跑 top-1 / top-3、subject/verification 过滤、无关查询拒答与阈值扫描（top-1 80/82、top-3 82/82、过滤 6/6、拒答 6/6）；`--check` 不加载模型，只校验语料和查询集。报告写到 `eval/reports/`（不入公开树），含语料/查询集哈希和复现命令。
+- 语料：`src/synapse/infrastructure/knowledge/corpus.jsonl`，当前 92 张跨领域卡（36 数学 / 20 物理 / 12 编程 / 8 写作 / 8 研究 / 5 决策 / 3 学习），每张都带 `source.title/url/license`，可选 `kind`/`verifications`（旧卡按 subject 保守推断）；另有 3 张 `source` 类卡供 `search_sources` 使用。改语料后重启 API 重建索引；向量不落库。
+- 检索：按 `q` + 可选 `subject` + 可选 `verification` 过滤，余弦相似度线性扫描，默认取前 3 条、分数低于 `0.55` 的不返回。阈值由评测标定：92 张语料、107 条查询下无关最高 0.490，最弱相关 0.608，`0.35` 会让六条无关查询全部通过。语料只有几十张，暂不引入 pgvector；`KnowledgeRetriever` 端口保留替换点。内部端口另有 `kind` 过滤，`search_sources` 用它只取 `source` 卡；公开 `/knowledge/search` 不暴露 `kind`。
+- 评测：`python scripts/eval/knowledge_retrieval.py` 用固定 107 条查询（95 条相关查询计分、6 条无关拒答、6 条过滤）跑 top-1 / top-3、subject/verification 过滤与阈值扫描（top-1 93/95、top-3 95/95、过滤 6/6、拒答 6/6）；`--check` 不加载模型，只校验语料和查询集。报告写到 `eval/reports/`（不入公开树），含语料/查询集哈希和复现命令。
 - 前端在诊断页、入口页和卡点卡页渲染 `KnowledgePanel`，标题前标出卡片类型；`enabled=false`、无命中或请求失败时整块隐藏，不遮挡诊断。通用入口只用 `intake.domain` 的系统标签检索领域级框架；澄清把它改成决策/代码后，检索过滤也跟随该标签。
 - 来源维护检查（**不是运行时校验**）：`python scripts/checks/check_knowledge_sources.py` 只检查 URL 主机、凭据和 license 前缀；加 `--fetch` 才会对语料里的每个唯一 URL 发 HEAD（被拒时用 Range GET 重试），报告可达性/重定向/超时。命令从仓库根运行，可访问性只说明这次网络请求到了哪里，不证明卡片内容正确；Wikipedia 在部分网络下会超时，不能据此判定来源失效。
 

@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from synapse.domain.knowledge.models import (
     KnowledgeCard,
     KnowledgeHit,
+    KnowledgeKind,
     KnowledgeVerification,
 )
 from synapse.infrastructure.knowledge.embedding import Embedder
@@ -43,6 +44,7 @@ class InMemoryKnowledgeIndex:
         *,
         subject: str | None = None,
         verification: KnowledgeVerification | None = None,
+        kind: KnowledgeKind | None = None,
         limit: int = 3,
     ) -> tuple[KnowledgeHit, ...]:
         if limit <= 0 or not self._cards:
@@ -53,6 +55,8 @@ class InMemoryKnowledgeIndex:
             if subject is not None and card.subject != subject:
                 continue
             if verification is not None and verification not in card.verifications:
+                continue
+            if kind is not None and card.kind != kind:
                 continue
             score = sum(left * right for left, right in zip(query_vector, vector, strict=True))
             if score >= self._min_score:

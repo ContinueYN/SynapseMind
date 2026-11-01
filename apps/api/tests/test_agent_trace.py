@@ -88,6 +88,7 @@ class _Retriever:
     def __init__(self, hits: tuple[KnowledgeHit, ...]) -> None:
         self._hits = hits
         self.queries: list[str] = []
+        self.kinds: list[str | None] = []
 
     def search(
         self,
@@ -95,9 +96,11 @@ class _Retriever:
         *,
         subject: str | None = None,
         verification: str | None = None,
+        kind: str | None = None,
         limit: int = 3,
     ) -> tuple[KnowledgeHit, ...]:
         self.queries.append(query)
+        self.kinds.append(kind)
         return self._hits
 
 
@@ -108,6 +111,7 @@ class _BrokenRetriever:
         *,
         subject: str | None = None,
         verification: str | None = None,
+        kind: str | None = None,
         limit: int = 3,
     ) -> tuple[KnowledgeHit, ...]:
         raise KnowledgeUnavailable("model missing")
@@ -264,6 +268,7 @@ def test_rag_hits_are_cited_and_query_is_a_label() -> None:
         }
     ]
     assert retriever.queries and "SECRET" not in retriever.queries[0]
+    assert retriever.kinds == [None]
     assert any(item["source"] == "knowledge" for item in body["suggestions"])
 
 
@@ -283,6 +288,7 @@ def test_research_uses_the_source_tool_and_cites_a_source_card() -> None:
     assert source["status"] == "ok"
     assert source["citations"][0]["card_id"] == "K_SOURCE_TEST"
     assert "来源" in source["output_summary"]
+    assert retriever.kinds == ["source"]
     assert any(item["source"] == "knowledge" for item in body["suggestions"])
     assert "来源" in retriever.queries[0]
 

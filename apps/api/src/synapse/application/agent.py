@@ -43,7 +43,7 @@ from synapse.application.execution import (
 )
 from synapse.application.intake import DomainIntake
 from synapse.application.knowledge import KnowledgeService, KnowledgeUnavailable
-from synapse.domain.knowledge.models import KnowledgeHit
+from synapse.domain.knowledge.models import KnowledgeHit, KnowledgeKind
 from synapse.domain.problem.generic import NodeKind
 from synapse.domain.problem.models import Problem
 
@@ -359,6 +359,7 @@ def _add_search_patterns(
         intake,
         knowledge,
         tool="search_patterns",
+        kind=None,
         source_only=False,
         query_suffix="方法 模式 检查",
         limit=2,
@@ -383,6 +384,7 @@ def _add_search_sources(
         intake,
         knowledge,
         tool="search_sources",
+        kind="source",
         source_only=True,
         query_suffix="原始来源 论文 文献",
         limit=8,
@@ -401,6 +403,7 @@ def _add_knowledge_search(
     knowledge: KnowledgeService,
     *,
     tool: Literal["search_patterns", "search_sources"],
+    kind: KnowledgeKind | None,
     source_only: bool,
     query_suffix: str,
     limit: int,
@@ -430,6 +433,7 @@ def _add_knowledge_search(
             query,
             subject=subject,
             verification=intake.profile.verification.value,
+            kind=kind,
             limit=limit,
         )
     except KnowledgeUnavailable:

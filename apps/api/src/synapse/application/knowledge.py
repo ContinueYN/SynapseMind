@@ -10,7 +10,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from synapse.domain.knowledge.models import KnowledgeHit, KnowledgeVerification
+from synapse.domain.knowledge.models import (
+    KnowledgeHit,
+    KnowledgeKind,
+    KnowledgeVerification,
+)
 
 
 class KnowledgeUnavailable(RuntimeError):
@@ -24,6 +28,7 @@ class KnowledgeRetriever(Protocol):
         *,
         subject: str | None = None,
         verification: KnowledgeVerification | None = None,
+        kind: KnowledgeKind | None = None,
         limit: int = 3,
     ) -> tuple[KnowledgeHit, ...]: ...
 
@@ -51,6 +56,7 @@ class KnowledgeService:
         *,
         subject: str | None = None,
         verification: KnowledgeVerification | None = None,
+        kind: KnowledgeKind | None = None,
         limit: int = 3,
     ) -> KnowledgeSearch:
         cleaned = query.strip()
@@ -63,6 +69,7 @@ class KnowledgeService:
                 cleaned,
                 subject=subject,
                 verification=verification,
+                kind=kind,
                 limit=limit,
             ),
         )

@@ -223,6 +223,13 @@ def test_index_filters_by_verification() -> None:
     assert all("empirical" in hit.card.verifications for hit in empirical)
 
 
+def test_index_filters_by_kind() -> None:
+    hits = _index().search("来源 文献 文档", kind="source", limit=10)
+
+    assert hits
+    assert all(hit.card.kind == "source" for hit in hits)
+
+
 def test_disabled_service_is_explicitly_empty() -> None:
     result = KnowledgeService(None).search("恒成立")
 
@@ -350,6 +357,7 @@ def test_api_maps_an_unavailable_model_to_503() -> None:
             *,
             subject: str | None = None,
             verification: str | None = None,
+            kind: str | None = None,
             limit: int = 3,
         ):
             raise KnowledgeUnavailable("RAG 已开启，但没有安装 fastembed")
