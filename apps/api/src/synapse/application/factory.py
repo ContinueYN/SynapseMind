@@ -173,7 +173,12 @@ class SessionFactory:
         if command.mode != "learning":
             raise UnsupportedMode(command.mode)
 
-        problem = self._resolver.resolve(command.problem_text, command.subject)
+        problem = self._resolver.resolve(
+            command.problem_text,
+            command.subject,
+            answer=command.answer,
+            work=command.work,
+        )
 
         attempt = StudentAttempt(
             answer=command.answer,

@@ -136,7 +136,7 @@ const SESSIONS = {
       confidence: 1,
     },
     intake: {
-      version: "0.2",
+      version: "0.3",
       domain: {
         name: "programming",
         label: "编程",
@@ -151,6 +151,22 @@ const SESSIONS = {
       ],
       observed: ["目标", "尝试"],
       gaps: ["没看到复现：最小片段、输入或完整报错。"],
+      origin: "student",
+      graph: [
+        {
+          kind: "goal",
+          label: "目标",
+          text: "定位 Python 脚本的 IndexError",
+          source: "student",
+        },
+        {
+          kind: "action",
+          label: "动作",
+          text: "先稳定复现同一个报错",
+          source: "student",
+        },
+      ],
+      verifications: [],
       clarifier: null,
       next_step: "把最小可复现的那几行贴出来，比整份脚本更有用。",
       disclaimer: "没有运行你的代码，所以这一轮不声称找到 bug，也不给唯一修法。",

@@ -73,6 +73,11 @@ class LLMSettings:
     # its per-call budget are versioned and configured separately.
     graph_prompt_version: str = "graph-v9"
     graph_timeout_s: float = 60.0
+    # Phase 1b: the generic structure graph has its own prompt and budget. It
+    # is a different contract from the solution graph, so revising one must not
+    # silently relabel the other in the audit trail.
+    generic_graph_prompt_version: str = "generic-graph-v1"
+    generic_graph_timeout_s: float = 60.0
     # The whole build is one request inside the 8s first-question budget
     # (chapter 12 §12.8). A counterexample retry is optional — the graph is
     # usable without its claim — so it only runs when it still fits here.
@@ -100,6 +105,10 @@ class LLMSettings:
             graph_prompt_version=source.get("SYNAPSE_GRAPH_PROMPT_VERSION", "graph-v9").strip(),
             graph_timeout_s=float(source.get("SYNAPSE_GRAPH_TIMEOUT_S", 60.0)),
             graph_retry_budget_s=float(source.get("SYNAPSE_GRAPH_RETRY_BUDGET_S", 7.5)),
+            generic_graph_prompt_version=source.get(
+                "SYNAPSE_GENERIC_GRAPH_PROMPT_VERSION", "generic-graph-v1"
+            ).strip(),
+            generic_graph_timeout_s=float(source.get("SYNAPSE_GENERIC_GRAPH_TIMEOUT_S", 60.0)),
             canary_percent=canary,
             audit_path=source.get("SYNAPSE_LLM_AUDIT_PATH", "var/audit/llm.jsonl").strip(),
         )

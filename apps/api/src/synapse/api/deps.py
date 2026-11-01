@@ -36,6 +36,7 @@ from synapse.application.domain_detection import (
 )
 from synapse.application.domains import DomainRegistry, DomainResolver
 from synapse.application.factory import SessionFactory
+from synapse.application.generic_graph import GenericGraphGenerator
 from synapse.application.graph import GraphGenerator
 from synapse.application.knowledge import KnowledgeService
 from synapse.application.limits import StepRateLimiter
@@ -60,6 +61,7 @@ from synapse.infrastructure.llm.audit import JsonlCallAuditor
 from synapse.infrastructure.llm.client import OpenAICompatibleClient
 from synapse.infrastructure.llm.composer import LLMProbeComposer
 from synapse.infrastructure.llm.domain_detector import LLMDomainDetector
+from synapse.infrastructure.llm.generic_graph import LLMGenericGraphGenerator
 from synapse.infrastructure.llm.graph import LLMGraphGenerator
 from synapse.infrastructure.llm.settings import LLMSettings
 from synapse.infrastructure.rate_limit import TokenBucketStepLimiter
@@ -95,6 +97,7 @@ def build_container(
     llm_client: LLMClient | None = None,
     auditor: CallAuditor | None = None,
     generator: GraphGenerator | None = None,
+    generic_generator: GenericGraphGenerator | None = None,
     step_limiter: StepRateLimiter | None = None,
     knowledge: KnowledgeService | None = None,
 ) -> Container:
@@ -122,6 +125,17 @@ def build_container(
     warm = getattr(graph_generator, "warm", None)
     if callable(warm):
         warm()
+    # Phase 1b: a reference-free problem gets its own structure graph. This is
+    # deliberately separate from the solution generator: a failure here must
+    # still leave the generic intake available, never a 422.
+    generic_graph_generator = generic_generator or build_generic_graph_generator(
+        resolved,
+        client=llm_client,
+        auditor=sink,
+    )
+    generic_warm = getattr(generic_graph_generator, "warm", None)
+    if callable(generic_warm):
+        generic_warm()
     # Opt-in (default off): verifying the student's own equals signs changes
     # annotated baseline cards, so the golden path must not see it.
     equality_checker: EqualityChecker | None = (
@@ -168,6 +182,7 @@ def build_container(
             problems.plugins,
             store=problems,
             domains=domain_resolver,
+            generic_generator=generic_graph_generator,
         ),
     )
     planner = HypothesisTargetedPlanner()
@@ -230,6 +245,27 @@ def build_graph_generator(
     if not settings.llm_enabled or settings.mode == "shadow":
         return None
     return LLMGraphGenerator(
+        client or OpenAICompatibleClient(settings),
+        settings=settings,
+        auditor=auditor,
+    )
+
+
+def build_generic_graph_generator(
+    settings: LLMSettings,
+    *,
+    client: LLMClient | None = None,
+    auditor: CallAuditor | None = None,
+) -> GenericGraphGenerator | None:
+    """Generic structure generation follows the same switch as graph building.
+
+    ``off`` has no key path and ``shadow`` must not change what the learner
+    sees; both leave the Phase 0 intake unchanged.
+    """
+
+    if not settings.llm_enabled or settings.mode == "shadow":
+        return None
+    return LLMGenericGraphGenerator(
         client or OpenAICompatibleClient(settings),
         settings=settings,
         auditor=auditor,

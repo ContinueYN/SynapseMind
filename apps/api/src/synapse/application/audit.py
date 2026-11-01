@@ -11,7 +11,14 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Literal, Protocol
 
-AuditKind = Literal["llm_call", "fallback", "shadow", "graph_build", "step_verify"]
+AuditKind = Literal[
+    "llm_call",
+    "fallback",
+    "shadow",
+    "graph_build",
+    "generic_graph_build",
+    "step_verify",
+]
 
 
 @dataclass(frozen=True, slots=True)

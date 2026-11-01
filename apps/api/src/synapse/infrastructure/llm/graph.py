@@ -398,6 +398,29 @@ class _Rejected(Exception):
         self.issues = tuple(issues)
 
 
+class ClaimPayloadError(ValueError):
+    """A claim block the shared parser could not read (public, issue-bearing)."""
+
+    def __init__(self, issues: Sequence[str]) -> None:
+        super().__init__("; ".join(issues))
+        self.issues = tuple(issues)
+
+
+def read_claim(raw: object) -> VerificationClaim | None:
+    """Parse an optional claim block for another graph shape (Phase 1b).
+
+    The generic graph reuses the solution graph's claim shape and parser rather
+    than growing a second, subtly different one. The public wrapper turns the
+    builder's private rejection into an issue list the generic builder can feed
+    back to its own retry.
+    """
+
+    try:
+        return _claim(raw)
+    except _Rejected as exc:
+        raise ClaimPayloadError(exc.issues) from exc
+
+
 @dataclass(frozen=True, slots=True)
 class _ClaimRepair:
     """Outcome of the claim-only repair call.

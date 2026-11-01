@@ -25,10 +25,16 @@ import hashlib
 
 from synapse.application.domains import DomainResolver, ResolvedDomain
 from synapse.application.errors import ProblemNotSupported
+from synapse.application.generic_graph import (
+    GenericGraphBuildFailed,
+    GenericGraphDraft,
+    GenericGraphGenerator,
+)
 from synapse.application.graph import GraphBuildFailed
 from synapse.application.ports import MutableProblemRepository, ProblemRepository
 from synapse.application.subject import SubjectPlugin, SubjectRegistry
 from synapse.domain.problem.alignment import normalize
+from synapse.domain.problem.generic import ClaimCheck
 from synapse.domain.problem.models import Problem, ProblemDraft, SolutionGraph
 
 _TITLE_LIMIT = 32
@@ -57,13 +63,22 @@ class ProblemResolver:
         *,
         store: MutableProblemRepository | None = None,
         domains: DomainResolver | None = None,
+        generic_generator: GenericGraphGenerator | None = None,
     ) -> None:
         self._problems = problems
         self._subjects = subjects
         self._store = store
         self._domains = domains or DomainResolver()
+        self._generic_generator = generic_generator
 
-    def resolve(self, text: str, declared_subject: str | None = None) -> Problem:
+    def resolve(
+        self,
+        text: str,
+        declared_subject: str | None = None,
+        *,
+        answer: str = "",
+        work: str = "",
+    ) -> Problem:
         annotated = self._problems.find_for(text)
         if annotated is not None:
             # The annotated graph is reviewed material: it owns its domain. A
@@ -76,7 +91,7 @@ class ProblemResolver:
         resolved = self._domains.resolve(text, declared_subject)
         plugin = self._subjects.for_subject(resolved.name) if self._subjects is not None else None
         if plugin is None:
-            return self._reference_free(text, resolved)
+            return self._reference_free(text, resolved, answer=answer, work=work)
         return self._generate(text, resolved, plugin)
 
     def _generate(
@@ -118,12 +133,20 @@ class ProblemResolver:
         self._store.add(problem)
         return problem
 
-    def _reference_free(self, text: str, resolved: ResolvedDomain) -> Problem:
+    def _reference_free(
+        self,
+        text: str,
+        resolved: ResolvedDomain,
+        *,
+        answer: str = "",
+        work: str = "",
+    ) -> Problem:
         """Open domain with no plugin yet: keep the label, drop the false graph.
 
-        The empty graph is a deliberate "no reference structure", not a
-        degenerate solution. ``application/service.py`` turns it into the
-        generic intake instead of a probe or a card.
+        The empty **solution** graph is a deliberate "no reference structure",
+        not a degenerate solution. Phase 1b may attach a *generic* graph beside
+        it; that graph has its own contract and never becomes a solution chain.
+        A failed generation degrades to the Phase 0 floor instead of a 422.
         """
 
         if self._store is None:
@@ -134,6 +157,28 @@ class ProblemResolver:
         existing = self._problems.get(problem_id)
         if existing is not None:
             return existing
+
+        generic = None
+        checks: tuple[ClaimCheck, ...] = ()
+        if self._generic_generator is not None:
+            draft = GenericGraphDraft(
+                id=problem_id,
+                text=text.strip(),
+                label=resolved.profile.label,
+                verification=resolved.profile.verification,
+                framework=resolved.profile.framework,
+                answer=answer,
+                work=work,
+            )
+            try:
+                built = self._generic_generator.generate(draft)
+            except GenericGraphBuildFailed:
+                # The product floor: an open domain still starts, with the
+                # intake view. Losing the structure is better than inventing one.
+                pass
+            else:
+                generic = built.graph
+                checks = built.checks
 
         problem = Problem(
             id=problem_id,
@@ -150,6 +195,8 @@ class ProblemResolver:
             annotated=False,
             domain_confidence=resolved.confidence,
             domain_method=resolved.method,
+            generic=generic,
+            generic_checks=checks,
         )
         self._store.add(problem)
         return problem

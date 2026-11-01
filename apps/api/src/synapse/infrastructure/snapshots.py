@@ -31,6 +31,13 @@ from synapse.domain.diagnosis.work import FindingKind, WorkFinding
 from synapse.domain.dialogue.session import DialogueSession, TurnRecord
 from synapse.domain.dialogue.states import DialogueState
 from synapse.domain.evidence.models import Evidence, EvidenceChain, EvidenceSource
+from synapse.domain.problem.generic import (
+    ClaimCheck,
+    EmpiricalClaim,
+    GenericGraph,
+    GenericNode,
+    NodeKind,
+)
 from synapse.domain.problem.models import (
     AlignmentResult,
     Interval,
@@ -760,6 +767,112 @@ def _graph_from_json(value: object, where: str) -> SolutionGraph:
     )
 
 
+def _generic_node_to_json(node: GenericNode) -> dict[str, object]:
+    return {
+        "id": node.id,
+        "kind": node.kind.value,
+        "text": node.text,
+        "source": node.source,
+    }
+
+
+def _generic_node_from_json(value: object, where: str) -> GenericNode:
+    data = _object(value, where)
+    kind_text = _text(data.get("kind"), f"{where}.kind")
+    try:
+        kind = NodeKind(kind_text)
+    except ValueError as exc:
+        raise SnapshotError(f"{where}.kind: unknown generic node kind {kind_text!r}") from exc
+    source = data.get("source", "student")
+    if source not in {"student", "system"}:
+        raise SnapshotError(f"{where}.source: expected student or system")
+    return GenericNode(
+        id=_text(data.get("id"), f"{where}.id"),
+        kind=kind,
+        text=_text(data.get("text"), f"{where}.text"),
+        source=cast(Literal["student", "system"], source),
+    )
+
+
+def _empirical_to_json(claim: EmpiricalClaim) -> dict[str, object]:
+    return {
+        "equation": claim.equation,
+        "expression": claim.expression,
+        "unit": claim.unit,
+        "units": dict(claim.units),
+        "values": {key: float(value) for key, value in claim.values.items()},
+    }
+
+
+def _empirical_from_json(value: object, where: str) -> EmpiricalClaim:
+    data = _object(value, where)
+    units = {
+        key: _text(item, f"{where}.units.{key}")
+        for key, item in _object(data.get("units", {}), f"{where}.units").items()
+    }
+    values = {
+        key: _number(item, f"{where}.values.{key}")
+        for key, item in _object(data.get("values", {}), f"{where}.values").items()
+    }
+    return EmpiricalClaim(
+        equation=_optional_text(data.get("equation"), f"{where}.equation"),
+        expression=_optional_text(data.get("expression"), f"{where}.expression"),
+        unit=_optional_text(data.get("unit"), f"{where}.unit"),
+        units=units,
+        values=values,
+    )
+
+
+def _generic_graph_to_json(graph: GenericGraph) -> dict[str, object]:
+    return {
+        "problem_id": graph.problem_id,
+        "version": graph.version,
+        "nodes": [_generic_node_to_json(node) for node in graph.nodes],
+        "formal": None if graph.formal is None else _claim_to_json(graph.formal),
+        "empirical": None if graph.empirical is None else _empirical_to_json(graph.empirical),
+    }
+
+
+def _generic_graph_from_json(value: object, where: str) -> GenericGraph:
+    data = _object(value, where)
+    formal = data.get("formal")
+    empirical = data.get("empirical")
+    version = _text(data.get("version"), f"{where}.version")
+    if version not in {"g1", "g2"}:
+        raise SnapshotError(f"{where}.version: expected g1 or g2")
+    return GenericGraph(
+        problem_id=_text(data.get("problem_id"), f"{where}.problem_id"),
+        version=cast(Literal["g1", "g2"], version),
+        nodes=tuple(
+            _generic_node_from_json(item, f"{where}.nodes[{index}]")
+            for index, item in enumerate(_array(data.get("nodes"), f"{where}.nodes"))
+        ),
+        formal=None if formal is None else _claim_from_json(formal, f"{where}.formal"),
+        empirical=(
+            None if empirical is None else _empirical_from_json(empirical, f"{where}.empirical")
+        ),
+    )
+
+
+def _claim_check_to_json(check: ClaimCheck) -> dict[str, object]:
+    return {"kind": check.kind, "status": check.status, "detail": check.detail}
+
+
+def _claim_check_from_json(value: object, where: str) -> ClaimCheck:
+    data = _object(value, where)
+    kind = _text(data.get("kind"), f"{where}.kind")
+    status = _text(data.get("status"), f"{where}.status")
+    if kind not in {"formal", "empirical"}:
+        raise SnapshotError(f"{where}.kind: expected formal or empirical")
+    if status not in {"pass", "fail", "unknown"}:
+        raise SnapshotError(f"{where}.status: expected pass, fail or unknown")
+    return ClaimCheck(
+        kind=cast(Literal["formal", "empirical"], kind),
+        status=cast(Literal["pass", "fail", "unknown"], status),
+        detail=_optional_text(data.get("detail"), f"{where}.detail") or "",
+    )
+
+
 def encode_problem(problem: Problem) -> dict[str, object]:
     return {
         "version": SNAPSHOT_VERSION,
@@ -775,6 +888,9 @@ def encode_problem(problem: Problem) -> dict[str, object]:
             # these and decode with the defaults below.
             "domain_confidence": problem.domain_confidence,
             "domain_method": problem.domain_method,
+            # Phase 1b additive fields: old rows decode as "no generic graph".
+            "generic": None if problem.generic is None else _generic_graph_to_json(problem.generic),
+            "generic_checks": [_claim_check_to_json(check) for check in problem.generic_checks],
             "graph": _graph_to_json(problem.graph),
         },
     }
@@ -798,6 +914,17 @@ def decode_problem(snapshot: object) -> Problem:
             _text(data["domain_method"], "problem.domain_method")
             if "domain_method" in data
             else "declared"
+        ),
+        generic=(
+            _generic_graph_from_json(data["generic"], "problem.generic")
+            if data.get("generic") is not None
+            else None
+        ),
+        generic_checks=tuple(
+            _claim_check_from_json(item, f"problem.generic_checks[{index}]")
+            for index, item in enumerate(
+                _array(data.get("generic_checks", []), "problem.generic_checks")
+            )
         ),
         graph=_graph_from_json(data.get("graph"), "problem.graph"),
     )

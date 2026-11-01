@@ -20,12 +20,16 @@ work), not a bigger graph.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
-from dataclasses import dataclass
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Literal
 
+from synapse.domain.problem.claims import VerificationClaim
+
 NodeSource = Literal["student", "system"]
+ClaimKind = Literal["formal", "empirical"]
+ClaimStatus = Literal["pass", "fail", "unknown"]
 
 
 class NodeKind(StrEnum):
@@ -76,17 +80,67 @@ class GenericNode:
 
 
 @dataclass(frozen=True, slots=True)
+class EmpiricalClaim:
+    """A structured physical/empirical statement, never extracted from prose.
+
+    The physics verifier has always required structured data (``equation`` or
+    ``expression`` plus units); a generic graph may now carry exactly that shape
+    so the same checker can run on it. ``equation`` and ``expression`` are
+    mutually exclusive, and ``expression`` needs ``unit``. An empty claim is not
+    a "pass": the adapter returns ``unknown`` and says what is missing.
+    """
+
+    equation: str | None = None
+    expression: str | None = None
+    unit: str | None = None
+    units: Mapping[str, str] = field(default_factory=dict)
+    values: Mapping[str, float] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.equation is not None and self.expression is not None:
+            raise ValueError("empirical claim cannot carry both equation and expression")
+        if self.equation is None and self.expression is None:
+            raise ValueError("empirical claim needs equation or expression")
+        if self.expression is not None and not (self.unit or "").strip():
+            raise ValueError("empirical expression needs a declared unit")
+
+
+@dataclass(frozen=True, slots=True)
+class ClaimCheck:
+    """One verifier's outcome, persisted with the problem.
+
+    ``unknown`` is a first-class result: no claim, no structured data, no
+    verifier, or a search that could not decide. It is never rendered as a pass.
+    """
+
+    kind: ClaimKind
+    status: ClaimStatus
+    detail: str = ""
+
+    @property
+    def ok(self) -> bool:
+        return self.status != "fail"
+
+
+@dataclass(frozen=True, slots=True)
 class GenericGraph:
     """A flat set of mentioned pieces, not a step chain and not evidence.
 
-    ``version`` is the shape of this record, not a promise tier: ``g1`` says
-    "generic graph, first shape". It never upgrades what the product may claim —
-    the domain's verification mode does that.
+    ``version`` is the shape of this record, not a promise tier: ``g1`` is the
+    Phase 1a cue extraction, ``g2`` is a generated graph that may also carry a
+    formal or empirical claim. Neither upgrades what the product may claim — the
+    domain's verification mode does that.
+
+    ``formal``/``empirical`` are optional on purpose. A graph with no claim is
+    the normal case for a decision, a writing task or a code bug; the verifiers
+    then return ``unknown`` instead of pretending a check ran.
     """
 
     problem_id: str
-    version: Literal["g1"]
+    version: Literal["g1", "g2"]
     nodes: tuple[GenericNode, ...]
+    formal: VerificationClaim | None = None
+    empirical: EmpiricalClaim | None = None
 
     def __post_init__(self) -> None:
         seen: set[str] = set()
@@ -98,6 +152,8 @@ class GenericGraph:
             if not node.text.strip():
                 raise ValueError(f"generic node {node.id} has no text")
             seen.add(node.id)
+        if (self.formal is not None or self.empirical is not None) and self.version != "g2":
+            raise ValueError("formal/empirical claims require generic graph version g2")
 
     def of_kind(self, kind: NodeKind) -> tuple[GenericNode, ...]:
         return tuple(node for node in self.nodes if node.kind is kind)

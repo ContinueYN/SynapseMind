@@ -16,6 +16,8 @@ from synapse.api.schemas import (
     HintOut,
     HintStepOut,
     HistoryItemOut,
+    IntakeNodeOut,
+    IntakeVerificationOut,
     KnowledgeHitOut,
     KnowledgeSearchOut,
     KnowledgeSourceOut,
@@ -251,6 +253,24 @@ def intake_out(intake: DomainIntake) -> DomainIntakeOut:
         checklist=[_clip(item, 80) for item in intake.checklist[:6]],
         observed=[_clip(item, 20) for item in intake.observed[:12]],
         gaps=[_clip(item, 120) for item in intake.gaps[:3]],
+        origin=intake.origin,
+        graph=[
+            IntakeNodeOut(
+                kind=node.kind.value,
+                label=_clip(node.label, 20),
+                text=_clip(node.text, 120),
+                source=node.source,
+            )
+            for node in intake.graph[:12]
+        ],
+        verifications=[
+            IntakeVerificationOut(
+                kind=check.kind,
+                status=check.status,
+                detail=_clip(check.detail, 400),
+            )
+            for check in intake.verifications[:2]
+        ],
         clarifier=_clip(intake.clarifier, 200) if intake.clarifier else None,
         next_step=_clip(intake.next_step, 300),
         disclaimer=_clip(intake.disclaimer, 300),

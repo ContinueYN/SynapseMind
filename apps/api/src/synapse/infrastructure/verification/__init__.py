@@ -22,13 +22,18 @@ from synapse.application.verification import (
     describe_claim,
 )
 from synapse.domain.problem.models import SolutionGraph
+from synapse.infrastructure.verification.generic import EmpiricalVerifier, FormalVerifier
 
 __all__ = [
     "CounterExample",
     "DefaultGraphVerifier",
+    "EmpiricalVerifier",
+    "FormalVerifier",
     "GraphVerifier",
     "VerificationResult",
     "VerificationStatus",
+    "default_empirical_verifier",
+    "default_formal_verifier",
     "default_verifier",
     "describe_claim",
 ]
@@ -73,3 +78,13 @@ class DefaultGraphVerifier:
 
 def default_verifier() -> GraphVerifier:
     return DefaultGraphVerifier()
+
+
+def default_formal_verifier() -> FormalVerifier:
+    """Generic-graph formal adapter; SymPy stays lazy inside the proxy."""
+
+    return FormalVerifier()
+
+
+def default_empirical_verifier() -> EmpiricalVerifier:
+    return EmpiricalVerifier()

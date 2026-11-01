@@ -35,14 +35,22 @@ from synapse.application.domains import (
 )
 from synapse.application.generic_check import structure_gaps
 from synapse.application.generic_slots import CueSlotExtractor
-from synapse.domain.problem.generic import KIND_LABELS
+from synapse.domain.problem.generic import (
+    KIND_LABELS,
+    ClaimCheck,
+    ClaimKind,
+    ClaimStatus,
+    GenericGraph,
+    NodeKind,
+    NodeSource,
+)
 from synapse.domain.problem.models import Problem
 
-VERSION: Literal["0.2"] = "0.2"
+VERSION: Literal["0.3"] = "0.3"
 
 # Shown as the closed session's notice so a client that only reads ``notice``
 # still learns why there is no card.
-INTAKE_NOTICE = "通用模式：这一轮只做入口整理，不给出卡点结论。"
+INTAKE_NOTICE = "通用模式：这一轮只做结构整理和入口说明，不给出卡点结论。"
 
 # At most three missing pieces at a time: a longer list is a checklist again, and
 # the point of ``gaps`` is to name the next thing to write, not to grade.
@@ -146,23 +154,59 @@ _COPY: dict[IntakeFramework, _IntakeCopy] = {
 
 
 @dataclass(frozen=True, slots=True)
+class IntakeNode:
+    """One node of the structure shown on the intake card.
+
+    ``source`` is the honesty label: ``student`` was copied from the submission,
+    ``system`` was organised by the model. Neither says the node is correct.
+    """
+
+    kind: NodeKind
+    label: str
+    text: str
+    source: NodeSource
+
+
+@dataclass(frozen=True, slots=True)
+class IntakeVerification:
+    """One verifier's outcome, or ``unknown`` when it never ran."""
+
+    kind: ClaimKind
+    status: ClaimStatus
+    detail: str
+
+
+@dataclass(frozen=True, slots=True)
 class DomainIntake:
     """The view a reference-free session returns; derived, never stored.
 
     ``observed``/``gaps`` are computed from the submitted attempt on every read,
     so a reloaded session shows the same words without the snapshot storing them.
+    ``graph`` is either the generated structure (system) or the cue extraction
+    (student); ``verifications`` exists only for modes that have a verifier.
     """
 
-    version: Literal["0.2"]
+    version: Literal["0.3"]
     profile: DomainProfile
     confidence: float
     one_line: str
     checklist: tuple[str, ...]
     observed: tuple[str, ...]
     gaps: tuple[str, ...]
+    origin: NodeSource | None
+    graph: tuple[IntakeNode, ...]
+    verifications: tuple[IntakeVerification, ...]
     clarifier: str | None
     next_step: str
     disclaimer: str
+
+
+_GENERATED_SUMMARY = "系统整理了一张结构图（未验证）；它只说明问题由什么组成，不是诊断结论。"
+_GENERATED_DISCLAIMER = "结构图由模型整理、未经人工审核；不判断对错。"
+_NO_FORMAL = "没有可验证的形式化声明（需要“恒成立求参数区间”一类问题），本轮未做符号检查。"
+_NO_FORMAL_CHECK = "有形式化声明，但这次没有运行形式验证器；不把它当作已检查。"
+_NO_EMPIRICAL = "没有结构化方程/单位输入，本轮未做量纲检查。"
+_NO_EMPIRICAL_CHECK = "有结构化声明，但这次没有运行经验验证器；不把它当作已检查。"
 
 
 def build_domain_intake(
@@ -174,18 +218,39 @@ def build_domain_intake(
     it decides the single clarifying question, not whether the session may start.
     ``attempt`` is the student's own text; when it is blank no gap is reported,
     because there is nothing to compare and "你什么都没写" is not a finding.
+
+    A generated graph (``problem.generic``) is displayed separately from
+    ``observed``/``gaps``: those two describe the student's words, while the
+    generated graph organises the problem. Mixing them would let a model's
+    reading masquerade as something the student wrote.
     """
 
     copy = _COPY[profile.framework]
     confidence = max(0.0, min(1.0, problem.domain_confidence))
     observed: tuple[str, ...] = ()
     gaps: tuple[str, ...] = ()
+    student_graph: GenericGraph | None = None
     if attempt.strip():
-        graph = _EXTRACTOR.extract(problem.id, attempt)
-        observed = tuple(KIND_LABELS[kind] for kind in graph.kinds())
-        gaps = tuple(gap.text for gap in structure_gaps(profile.framework, graph))
+        student_graph = _EXTRACTOR.extract(problem.id, attempt)
+        observed = tuple(KIND_LABELS[kind] for kind in student_graph.kinds())
+        gaps = tuple(gap.text for gap in structure_gaps(profile.framework, student_graph))
         gaps = gaps[:_MAX_GAPS]
-    one_line = f"按「{profile.label}」处理（{_MODE_LABELS[profile.verification]}）。{copy.summary}"
+
+    generated = problem.generic
+    structure = generated if generated is not None and generated.nodes else student_graph
+    if generated is not None and generated.nodes:
+        origin: NodeSource | None = "system"
+    elif student_graph is not None and student_graph.nodes:
+        origin = "student"
+    else:
+        origin = None
+
+    one_line = f"按「{profile.label}」处理（{_MODE_LABELS[profile.verification]}）。"
+    one_line += _GENERATED_SUMMARY if origin == "system" else copy.summary
+    disclaimer = copy.disclaimer
+    if origin == "system":
+        disclaimer += _GENERATED_DISCLAIMER
+
     return DomainIntake(
         version=VERSION,
         profile=profile,
@@ -194,7 +259,60 @@ def build_domain_intake(
         checklist=copy.checklist,
         observed=observed,
         gaps=gaps,
+        origin=origin,
+        graph=_intake_nodes(structure),
+        verifications=_verifications(profile, structure, problem.generic_checks),
         clarifier=_CLARIFIER if confidence < MIN_CONFIDENCE else None,
         next_step=copy.next_step,
-        disclaimer=copy.disclaimer,
+        disclaimer=disclaimer,
     )
+
+
+def _intake_nodes(graph: GenericGraph | None) -> tuple[IntakeNode, ...]:
+    if graph is None:
+        return ()
+    return tuple(
+        IntakeNode(
+            kind=node.kind,
+            label=KIND_LABELS[node.kind],
+            text=node.text,
+            source=node.source,
+        )
+        for node in graph.nodes
+    )
+
+
+def _verifications(
+    profile: DomainProfile,
+    graph: GenericGraph | None,
+    checks: tuple[ClaimCheck, ...],
+) -> tuple[IntakeVerification, ...]:
+    """Only the modes with a real verifier get a line; no claim means unknown."""
+
+    stored = {check.kind: check for check in checks}
+    results: list[IntakeVerification] = []
+    if profile.verification is VerificationMode.FORMAL:
+        check = stored.get("formal")
+        if check is None:
+            check = ClaimCheck(
+                kind="formal",
+                status="unknown",
+                detail=_NO_FORMAL_CHECK if graph is not None and graph.formal else _NO_FORMAL,
+            )
+        results.append(
+            IntakeVerification(kind=check.kind, status=check.status, detail=check.detail)
+        )
+    elif profile.verification is VerificationMode.EMPIRICAL:
+        check = stored.get("empirical")
+        if check is None:
+            check = ClaimCheck(
+                kind="empirical",
+                status="unknown",
+                detail=(
+                    _NO_EMPIRICAL_CHECK if graph is not None and graph.empirical else _NO_EMPIRICAL
+                ),
+            )
+        results.append(
+            IntakeVerification(kind=check.kind, status=check.status, detail=check.detail)
+        )
+    return tuple(results)

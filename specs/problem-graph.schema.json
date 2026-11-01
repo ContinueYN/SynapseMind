@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://synapsemind.dev/schemas/problem-graph.schema.json",
+  "title": "ProblemGraph",
+  "description": "通用问题图（v0.1）：把问题拆成目标/已知/约束/假设/计划/尝试/证据/检查/选项/风险/下一步。节点只记录“提到了什么”，不记录对错；formal/empirical 是可选的形式化声明，只有存在声明且验证器实际运行时才会得到 pass/fail，否则一律 unknown。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["problem_id", "version", "nodes"],
+  "properties": {
+    "problem_id": {
+      "type": "string",
+      "pattern": "^P_[A-Z0-9_]+$"
+    },
+    "version": {
+      "description": "g1 = 学生原话抽取（source=student）；g2 = 生成的结构图（source=system，可带 formal/empirical）。",
+      "type": "string",
+      "enum": ["g1", "g2"]
+    },
+    "nodes": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 12,
+      "items": {"$ref": "#/$defs/node"}
+    },
+    "formal": {
+      "description": "形式验证声明：只用于“对所有 x 恒成立、求参数区间”这一类可证伪的题；它形式化学生已经写出的答案，不替学生解题。没有声明时验证结果是 unknown。",
+      "anyOf": [
+        {"$ref": "solution-graph.schema.json#/$defs/claim"},
+        {"type": "null"}
+      ]
+    },
+    "empirical": {
+      "description": "经验验证声明：只接受结构化输入（方程/表达式 + 单位 + 可选数值）。没有结构化输入时不得从自然语言里猜单位，验证结果是 unknown。",
+      "anyOf": [
+        {"$ref": "#/$defs/empirical"},
+        {"type": "null"}
+      ]
+    }
+  },
+  "$defs": {
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "text"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$",
+          "maxLength": 32
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "goal",
+            "given",
+            "constraint",
+            "assumption",
+            "plan",
+            "action",
+            "evidence",
+            "check",
+            "decision",
+            "risk",
+            "next"
+          ]
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "source": {
+          "description": "student = 从学生原话原样复制；system = 模型整理。来源决定界面怎么标注，不决定内容对不对。",
+          "type": "string",
+          "enum": ["student", "system"],
+          "default": "system"
+        }
+      }
+    },
+    "empirical": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "equation": {
+          "description": "恰好含一个 '=' 的等式，两侧都要有表达式。",
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 300
+        },
+        "expression": {
+          "description": "没有等式时给单个表达式，必须同时给 unit。",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "unit": {
+          "description": "expression 的声明单位；equation 模式下可省略。",
+          "type": "string",
+          "maxLength": 80
+        },
+        "units": {
+          "description": "符号 -> 单位表达式，例如 {\"v\": \"m/s\"}。",
+          "type": "object",
+          "maxProperties": 32,
+          "additionalProperties": {"type": "string", "maxLength": 80}
+        },
+        "values": {
+          "description": "符号 -> 数值（按 units 里的单位解释）。",
+          "type": "object",
+          "maxProperties": 32,
+          "additionalProperties": {"type": "number"}
+        }
+      }
+    }
+  }
+}

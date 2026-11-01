@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 
@@ -14,6 +14,11 @@ import type { DomainIntake } from "@/src/lib/api/types";
  *
  * v0.2 起会读学生自己交上来的那段话：先列出「看到了」哪几项，再列出「还缺」
  * 哪几项。两者都只说明有没有提到，不判断对错；没有作答时两段都不出现。
+ *
+ * v0.3 起还会显示一张通用结构图。它要么是模型整理的（来源标记为系统，未经
+ * 人工审核），要么仍是从学生原话里抽的；两种都只说明「问题由什么组成」。
+ * formal/empirical 检查只在真的跑了之后出现，`unknown` 一律写成「未检查」，
+ * 不能读成通过。
  */
 
 const MODE_LABEL: Record<DomainIntake["domain"]["verification"], string> = {
@@ -21,6 +26,34 @@ const MODE_LABEL: Record<DomainIntake["domain"]["verification"], string> = {
   executable: "可执行验证",
   empirical: "经验验证",
   argumentative: "论证结构",
+};
+
+type IntakeNode = NonNullable<DomainIntake["graph"]>[number];
+type IntakeCheck = NonNullable<DomainIntake["verifications"]>[number];
+
+const NODE_LABEL: Record<IntakeNode["kind"], string> = {
+  goal: "目标",
+  given: "已知",
+  constraint: "约束",
+  assumption: "假设",
+  plan: "计划",
+  action: "动作",
+  evidence: "证据",
+  check: "核对",
+  decision: "选项",
+  risk: "风险",
+  next: "下一步",
+};
+
+const CHECK_LABEL: Record<IntakeCheck["kind"], string> = {
+  formal: "形式检查",
+  empirical: "经验检查",
+};
+
+const CHECK_STATUS: Record<IntakeCheck["status"], string> = {
+  pass: "未发现反例",
+  fail: "发现不一致",
+  unknown: "未检查",
 };
 
 interface IntakeViewProps {
@@ -36,6 +69,9 @@ export function IntakeView({ intake, sessionId }: IntakeViewProps) {
   // neither, and the card then looks exactly like it did before.
   const observed = intake.observed ?? [];
   const gaps = intake.gaps ?? [];
+  const graph = intake.graph ?? [];
+  const verifications = intake.verifications ?? [];
+  const origin = intake.origin ?? null;
 
   return (
     <Surface>
@@ -98,6 +134,54 @@ export function IntakeView({ intake, sessionId }: IntakeViewProps) {
                 style={{ marginTop: 8 }}
               >
                 {gap}
+              </p>
+            ))}
+          </>
+        ) : null}
+
+        {graph.length > 0 ? (
+          <>
+            <p className="sm-lab" style={{ marginTop: 22 }}>
+              {origin === "system"
+                ? "系统整理的结构"
+                : "从你的话里整理的结构"}
+            </p>
+            <ul className="sm-steps">
+              {graph.map((node, index) => (
+                <li key={`${node.kind}-${index}-${node.text}`}>
+                  <b>{NODE_LABEL[node.kind]}</b>
+                  <span>{node.text}</span>
+                  {origin === "system" ? <i>模型整理</i> : null}
+                </li>
+              ))}
+            </ul>
+            {origin === "system" ? (
+              <p className="sm-fine" style={{ marginTop: 14 }}>
+                它只说明问题由什么组成，不是诊断结论，也没有判断对错。
+              </p>
+            ) : null}
+          </>
+        ) : null}
+
+        {verifications.length > 0 ? (
+          <>
+            <p className="sm-lab" style={{ marginTop: 22 }}>
+              自动检查
+            </p>
+            {verifications.map((check) => (
+              <p
+                className={
+                  check.status === "unknown"
+                    ? "sm-fine"
+                    : "sm-note sm-note-quiet"
+                }
+                key={check.kind}
+                style={{ marginTop: 8 }}
+              >
+                <b>
+                  {CHECK_LABEL[check.kind]} · {CHECK_STATUS[check.status]}
+                </b>
+                <span> {check.detail}</span>
               </p>
             ))}
           </>

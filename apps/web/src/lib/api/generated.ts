@@ -281,18 +281,20 @@ export interface components {
         };
         /**
          * DomainIntakeOut
-         * @description The reference-free generic entry: guidance, never a diagnosis.
+         * @description The reference-free generic entry: structure, never a diagnosis.
          *
-         *     v0.2 adds the answer-aware part: ``observed`` is what the student's own text
+         *     v0.2 added the answer-aware part: ``observed`` is what the student's own text
          *     mentions, ``gaps`` is what the mode requires and the text does not mention
-         *     (at most three). Both are coverage statements, not verdicts.
+         *     (at most three). v0.3 adds ``origin``/``graph`` (the generated or extracted
+         *     structure, with its source) and ``verifications`` (formal/empirical only).
+         *     None of these is a verdict on the student's work.
          */
         DomainIntakeOut: {
             /**
              * Version
              * @constant
              */
-            version: "0.2";
+            version: "0.3";
             domain: components["schemas"]["DomainOut"];
             /** One Line */
             one_line: string;
@@ -302,6 +304,12 @@ export interface components {
             observed?: string[];
             /** Gaps */
             gaps?: string[];
+            /** Origin */
+            origin?: ("student" | "system") | null;
+            /** Graph */
+            graph?: components["schemas"]["IntakeNodeOut"][];
+            /** Verifications */
+            verifications?: components["schemas"]["IntakeVerificationOut"][];
             /** Clarifier */
             clarifier?: string | null;
             /** Next Step */
@@ -431,6 +439,44 @@ export interface components {
              * @default false
              */
             is_unknown: boolean;
+        };
+        /**
+         * IntakeNodeOut
+         * @description One structure node shown on the intake card (v0.3).
+         */
+        IntakeNodeOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "goal" | "given" | "constraint" | "assumption" | "plan" | "action" | "evidence" | "check" | "decision" | "risk" | "next";
+            /** Label */
+            label: string;
+            /** Text */
+            text: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "student" | "system";
+        };
+        /**
+         * IntakeVerificationOut
+         * @description A formal/empirical verdict; ``unknown`` means it was not checked.
+         */
+        IntakeVerificationOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "formal" | "empirical";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pass" | "fail" | "unknown";
+            /** Detail */
+            detail: string;
         };
         /** KnowledgeHitOut */
         KnowledgeHitOut: {

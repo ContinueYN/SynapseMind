@@ -5,7 +5,7 @@ import { IntakeView } from "./IntakeView";
 import type { DomainIntake } from "@/src/lib/api/types";
 
 const GENERIC: DomainIntake = {
-  version: "0.2",
+  version: "0.3",
   domain: {
     name: "generic",
     label: "通用问题",
@@ -39,6 +39,34 @@ const WITH_ATTEMPT: DomainIntake = {
   ...GENERIC,
   observed: ["目标", "选项", "风险"],
   gaps: ["没看到约束：时间、钱、关系、不可逆性。", "没看到可逆实验：1–2 周内能先试哪一步。"],
+};
+
+const GENERATED: DomainIntake = {
+  ...GENERIC,
+  origin: "system",
+  graph: [
+    { kind: "goal", label: "目标", text: "决定下一份工作在哪里", source: "system" },
+    { kind: "constraint", label: "约束", text: "不想长期两地分居", source: "system" },
+    { kind: "decision", label: "选项", text: "接受北京的工作", source: "system" },
+    { kind: "decision", label: "选项", text: "留在上海陪家人", source: "system" },
+    { kind: "risk", label: "风险", text: "换城市后收入可能下降", source: "system" },
+  ],
+  verifications: [
+    {
+      kind: "formal",
+      status: "unknown",
+      detail: "学生没有写出可形式化的答案，本轮未检查。",
+    },
+  ],
+};
+
+const EXTRACTED: DomainIntake = {
+  ...WITH_ATTEMPT,
+  origin: "student",
+  graph: [
+    { kind: "goal", label: "目标", text: "决定在哪里工作", source: "student" },
+    { kind: "decision", label: "选项", text: "去北京", source: "student" },
+  ],
 };
 
 describe("IntakeView", () => {
@@ -83,5 +111,31 @@ describe("IntakeView", () => {
 
     expect(screen.queryByText(/你写的里面看到了/)).not.toBeInTheDocument();
     expect(screen.queryByText("你写的里面还缺")).not.toBeInTheDocument();
+  });
+
+  it("shows a generated graph as system structure, not a diagnosis", () => {
+    render(<IntakeView intake={GENERATED} sessionId="S_DECISION" />);
+
+    expect(screen.getByText("系统整理的结构")).toBeInTheDocument();
+    expect(screen.getByText("决定下一份工作在哪里")).toBeInTheDocument();
+    expect(screen.getAllByText("模型整理").length).toBeGreaterThan(0);
+    expect(screen.getByText(/不是诊断结论/)).toBeInTheDocument();
+    expect(screen.queryByText("从你的话里整理的结构")).not.toBeInTheDocument();
+  });
+
+  it("labels an unknown check as not run, never as a pass", () => {
+    render(<IntakeView intake={GENERATED} sessionId="S_DECISION" />);
+
+    expect(screen.getByText(/形式检查 · 未检查/)).toBeInTheDocument();
+    expect(screen.queryByText(/未发现反例/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/通过/)).not.toBeInTheDocument();
+  });
+
+  it("keeps the student-extracted graph separate from the generated one", () => {
+    render(<IntakeView intake={EXTRACTED} sessionId="S_DECISION" />);
+
+    expect(screen.getByText("从你的话里整理的结构")).toBeInTheDocument();
+    expect(screen.getByText("决定在哪里工作")).toBeInTheDocument();
+    expect(screen.queryByText("模型整理")).not.toBeInTheDocument();
   });
 });

@@ -189,20 +189,54 @@ class DomainOut(StrictModel):
     confidence: float = Field(ge=0, le=1)
 
 
-class DomainIntakeOut(StrictModel):
-    """The reference-free generic entry: guidance, never a diagnosis.
+class IntakeNodeOut(StrictModel):
+    """One structure node shown on the intake card (v0.3)."""
 
-    v0.2 adds the answer-aware part: ``observed`` is what the student's own text
+    kind: Literal[
+        "goal",
+        "given",
+        "constraint",
+        "assumption",
+        "plan",
+        "action",
+        "evidence",
+        "check",
+        "decision",
+        "risk",
+        "next",
+    ]
+    label: str = Field(min_length=1, max_length=20)
+    text: str = Field(min_length=1, max_length=120)
+    source: Literal["student", "system"]
+
+
+class IntakeVerificationOut(StrictModel):
+    """A formal/empirical verdict; ``unknown`` means it was not checked."""
+
+    kind: Literal["formal", "empirical"]
+    status: Literal["pass", "fail", "unknown"]
+    detail: str = Field(min_length=1, max_length=400)
+
+
+class DomainIntakeOut(StrictModel):
+    """The reference-free generic entry: structure, never a diagnosis.
+
+    v0.2 added the answer-aware part: ``observed`` is what the student's own text
     mentions, ``gaps`` is what the mode requires and the text does not mention
-    (at most three). Both are coverage statements, not verdicts.
+    (at most three). v0.3 adds ``origin``/``graph`` (the generated or extracted
+    structure, with its source) and ``verifications`` (formal/empirical only).
+    None of these is a verdict on the student's work.
     """
 
-    version: Literal["0.2"]
+    version: Literal["0.3"]
     domain: DomainOut
     one_line: str = Field(min_length=1, max_length=200)
     checklist: list[str] = Field(min_length=1, max_length=6)
     observed: list[str] = Field(default_factory=list, max_length=12)
     gaps: list[str] = Field(default_factory=list, max_length=3)
+    origin: Literal["student", "system"] | None = None
+    graph: list[IntakeNodeOut] = Field(default_factory=list, max_length=12)
+    verifications: list[IntakeVerificationOut] = Field(default_factory=list, max_length=2)
     clarifier: str | None = Field(default=None, max_length=200)
     next_step: str = Field(min_length=1, max_length=300)
     disclaimer: str = Field(min_length=1, max_length=300)

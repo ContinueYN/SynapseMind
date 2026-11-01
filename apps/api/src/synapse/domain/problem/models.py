@@ -5,6 +5,21 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
+from synapse.domain.problem.claims import Interval, VerificationClaim
+from synapse.domain.problem.generic import ClaimCheck, GenericGraph
+
+__all__ = [
+    "AlignmentResult",
+    "Interval",
+    "Probe",
+    "Problem",
+    "ProblemDraft",
+    "SolutionGraph",
+    "SolutionNode",
+    "StudentAttempt",
+    "VerificationClaim",
+]
+
 
 @dataclass(frozen=True, slots=True)
 class Probe:
@@ -32,46 +47,6 @@ class SolutionNode:
     demand: Mapping[str, float] = field(default_factory=dict)
     common_errors: tuple[str, ...] = ()
     probes: tuple[Probe, ...] = ()
-
-
-@dataclass(frozen=True, slots=True)
-class Interval:
-    """One connected piece of a parameter answer range (M2.5 S5).
-
-    Endpoints are SymPy expression strings, not floats: ``1/E`` and ``E`` are
-    the answers a student is expected to write, and rounding them before the
-    verifier sees them would make boundary checks meaningless. ``None`` means
-    unbounded on that side.
-    """
-
-    lower: str | None
-    upper: str | None
-    lower_inclusive: bool = True
-    upper_inclusive: bool = True
-
-
-@dataclass(frozen=True, slots=True)
-class VerificationClaim:
-    """A graph's formalised answer, written so a machine can falsify it.
-
-    Meaning (chapter 13 §13.3, STRONG tier)::
-
-        for all variable in variable_domain:  expression <relation> 0
-        ⇔  parameter ∈ intervals
-
-    v1 only covers this shape — a parameter range under a universally
-    quantified one-variable constraint. Answer sets that are not a parameter
-    range (a value, a solution set in x, a proof) have no claim, and the
-    verifier says ``unknown`` instead of pretending.
-    """
-
-    kind: str
-    parameter: str
-    variable: str
-    variable_domain: str
-    expression: str
-    relation: str
-    intervals: tuple[Interval, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,6 +93,14 @@ class Problem:
     # ("declared" / "heuristic" / "model" / "annotated") explains it on reload.
     domain_confidence: float = 1.0
     domain_method: str = "declared"
+    # Phase 1b: a reference-free problem may still own a *generic* structure
+    # graph. It is not ``graph`` (the solution chain); mixing the two would let
+    # an aligner or card pretend the generic structure is a reference solution.
+    generic: GenericGraph | None = None
+    # Verifier outcomes for the generic graph's formal/empirical claims. Stored
+    # with the problem so a reload shows the same result without re-running
+    # SymPy or re-calling the model. Empty means "no verifier ran".
+    generic_checks: tuple[ClaimCheck, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

@@ -18,7 +18,14 @@ from synapse.application.domains import DomainRegistry, IntakeFramework
 from synapse.application.generic_check import structure_gaps
 from synapse.application.generic_slots import CueSlotExtractor
 from synapse.application.intake import build_domain_intake
-from synapse.domain.problem.generic import GenericGraph, GenericNode, NodeKind
+from synapse.domain.problem.claims import Interval, VerificationClaim
+from synapse.domain.problem.generic import (
+    ClaimCheck,
+    EmpiricalClaim,
+    GenericGraph,
+    GenericNode,
+    NodeKind,
+)
 from synapse.domain.problem.models import Problem, SolutionGraph
 
 EXTRACTOR = CueSlotExtractor()
@@ -38,7 +45,13 @@ def _graph(*nodes: tuple[NodeKind, str]) -> GenericGraph:
     )
 
 
-def _problem(subject: str, confidence: float = 1.0) -> Problem:
+def _problem(
+    subject: str,
+    confidence: float = 1.0,
+    *,
+    generic: GenericGraph | None = None,
+    checks: tuple[ClaimCheck, ...] = (),
+) -> Problem:
     return Problem(
         id="P_GEN_TEST",
         title="测试",
@@ -48,6 +61,8 @@ def _problem(subject: str, confidence: float = 1.0) -> Problem:
         annotated=False,
         domain_confidence=confidence,
         domain_method="declared",
+        generic=generic,
+        generic_checks=checks,
     )
 
 
@@ -195,7 +210,7 @@ class TestAnswerAwareIntake:
             _problem("decision"), REGISTRY.profile_for("decision"), DECISION_ATTEMPT
         )
 
-        assert intake.version == "0.2"
+        assert intake.version == "0.3"
         assert "目标" in intake.observed
         assert "选项" in intake.observed
         assert "风险" in intake.observed
@@ -221,3 +236,70 @@ class TestAnswerAwareIntake:
         )
 
         assert not any("错" in gap for gap in intake.gaps)
+
+
+class TestVerificationView:
+    FORMAL_CLAIM = VerificationClaim(
+        kind="parameter_range",
+        parameter="a",
+        variable="x",
+        variable_domain="(0,+inf)",
+        expression="log(x) - a*x",
+        relation="<=",
+        intervals=(Interval(lower="1/E", upper=None, upper_inclusive=False),),
+    )
+
+    def test_a_formal_domain_without_a_claim_says_unknown(self) -> None:
+        intake = build_domain_intake(_problem("math"), REGISTRY.profile_for("math"), "求 a 的范围")
+
+        assert [(item.kind, item.status) for item in intake.verifications] == [
+            ("formal", "unknown")
+        ]
+        assert "没有可验证" in intake.verifications[0].detail
+
+    def test_a_claim_without_a_running_verifier_is_not_a_pass(self) -> None:
+        graph = GenericGraph(
+            problem_id="P_GEN_TEST",
+            version="g2",
+            nodes=(
+                GenericNode(id="g1", kind=NodeKind.GOAL, text="求 a 的范围"),
+                GenericNode(id="g2", kind=NodeKind.CHECK, text="检查边界"),
+            ),
+            formal=self.FORMAL_CLAIM,
+        )
+        intake = build_domain_intake(
+            _problem("math", generic=graph),
+            REGISTRY.profile_for("math"),
+            "a 的范围",
+        )
+
+        assert [(item.kind, item.status) for item in intake.verifications] == [
+            ("formal", "unknown")
+        ]
+        assert "没有运行" in intake.verifications[0].detail
+
+    def test_a_stored_failure_is_shown_but_still_only_as_a_check(self) -> None:
+        graph = GenericGraph(
+            problem_id="P_GEN_TEST",
+            version="g2",
+            nodes=(
+                GenericNode(id="g1", kind=NodeKind.GOAL, text="量纲检查"),
+                GenericNode(id="g2", kind=NodeKind.CHECK, text="两边单位"),
+            ),
+            empirical=EmpiricalClaim(
+                equation="F = q/E",
+                units={"F": "N", "q": "C", "E": "N/C"},
+                values={"F": 1, "q": 1, "E": 1},
+            ),
+        )
+        check = ClaimCheck(kind="empirical", status="fail", detail="量纲不一致：左侧 N，右侧 N·m/C")
+        intake = build_domain_intake(
+            _problem("physics", generic=graph, checks=(check,)),
+            REGISTRY.profile_for("physics"),
+            "F=q/E",
+        )
+
+        assert [(item.kind, item.status) for item in intake.verifications] == [
+            ("empirical", "fail")
+        ]
+        assert "量纲不一致" in intake.verifications[0].detail
