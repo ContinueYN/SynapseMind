@@ -42,6 +42,10 @@ jobs:
       - name: Test
         run: pytest
 
+      - name: Knowledge source metadata
+        run: python scripts/checks/check_knowledge_sources.py
+        working-directory: .
+
   web:
     runs-on: ubuntu-latest
     defaults:
