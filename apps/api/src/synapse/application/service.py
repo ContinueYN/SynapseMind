@@ -841,7 +841,7 @@ class SessionService:
     def problem_subject(self, problem_id: str) -> str:
         """The plugin key for this problem (internal routing, not display).
 
-        The UI displays ``problem_domain`` instead: the subject says which
+        The UI displays ``domain_for(session)`` instead: the subject says which
         plugin built the graph, the domain says what the product may promise.
         """
 
