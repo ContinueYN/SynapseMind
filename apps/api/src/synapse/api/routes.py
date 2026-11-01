@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from math import ceil
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
@@ -133,6 +134,9 @@ def list_review_items(
 def search_knowledge(
     q: str = Query(min_length=2, max_length=200),
     subject: str | None = Query(default=None, min_length=1, max_length=40),
+    verification: Literal["formal", "executable", "empirical", "argumentative"] | None = Query(
+        default=None
+    ),
     limit: int = Query(default=3, ge=1, le=5),
     knowledge: KnowledgeService = Depends(get_knowledge_service),
 ) -> KnowledgeSearchOut:
@@ -144,7 +148,12 @@ def search_knowledge(
     """
 
     try:
-        result = knowledge.search(q, subject=subject, limit=limit)
+        result = knowledge.search(
+            q,
+            subject=subject,
+            verification=verification,
+            limit=limit,
+        )
     except KnowledgeUnavailable as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

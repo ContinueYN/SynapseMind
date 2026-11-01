@@ -8,6 +8,10 @@ the source is carried through the API so the UI can show it.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
+
+KnowledgeKind = Literal["concept", "pattern", "method", "error", "source"]
+KnowledgeVerification = Literal["formal", "executable", "empirical", "argumentative"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,7 +24,9 @@ class KnowledgeSource:
 @dataclass(frozen=True, slots=True)
 class KnowledgeCard:
     id: str
+    kind: KnowledgeKind
     subject: str
+    verifications: tuple[KnowledgeVerification, ...]
     title: str
     body: str
     tags: tuple[str, ...]

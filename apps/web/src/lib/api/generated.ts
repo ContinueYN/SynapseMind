@@ -563,6 +563,15 @@ export interface components {
         KnowledgeHitOut: {
             /** Card Id */
             card_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "concept" | "pattern" | "method" | "error" | "source";
+            /** Subject */
+            subject: string;
+            /** Verifications */
+            verifications: ("formal" | "executable" | "empirical" | "argumentative")[];
             /** Title */
             title: string;
             /** Excerpt */
@@ -580,7 +589,7 @@ export interface components {
              * Version
              * @constant
              */
-            version: "0.1";
+            version: "0.2";
             /** Enabled */
             enabled: boolean;
             /** Query */
@@ -938,6 +947,7 @@ export interface operations {
             query: {
                 q: string;
                 subject?: string | null;
+                verification?: ("formal" | "executable" | "empirical" | "argumentative") | null;
                 limit?: number;
             };
             header?: never;

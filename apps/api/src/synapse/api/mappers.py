@@ -60,6 +60,9 @@ def _knowledge_hit(hit: KnowledgeHit) -> KnowledgeHitOut:
     card = hit.card
     return KnowledgeHitOut(
         card_id=card.id,
+        kind=card.kind,
+        subject=card.subject,
+        verifications=list(card.verifications),
         title=card.title,
         excerpt=_knowledge_excerpt(card.body),
         source=KnowledgeSourceOut(
@@ -73,7 +76,7 @@ def _knowledge_hit(hit: KnowledgeHit) -> KnowledgeHitOut:
 
 def knowledge_search_out(result: KnowledgeSearch) -> KnowledgeSearchOut:
     return KnowledgeSearchOut(
-        version="0.1",
+        version="0.2",
         enabled=result.enabled,
         query=result.query,
         hits=[_knowledge_hit(hit) for hit in result.hits],

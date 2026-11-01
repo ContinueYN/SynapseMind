@@ -399,6 +399,7 @@ export default function DiagnosePage() {
                 <KnowledgePanel
                   query={session.diagnosis.card.label}
                   subject={session.subject}
+                  verification={session.domain.verification}
                 />
               </>
             ) : hint ? (

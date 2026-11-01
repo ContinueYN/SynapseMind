@@ -54,6 +54,11 @@
 {"id":"Q54","kind":"relevant","text":"安培力 洛伦兹力 左手定则","expect":["K_PHYS_MAGNETIC"]}
 {"id":"Q55","kind":"relevant","text":"功 功率 夹角","expect":["K_PHYS_WORK_POWER"]}
 {"id":"Q56","kind":"relevant","text":"有效数字 误差","expect":["K_PHYS_ERROR"]}
+{"id":"Q57","kind":"relevant","text":"最小复现 测试 边界","expect":["K_CODE_TEST_FIRST"]}
+{"id":"Q58","kind":"relevant","text":"测试通过 程序正确 覆盖","expect":["K_CODE_TESTS_NOT_PROOF"]}
+{"id":"Q59","kind":"relevant","text":"主张 理由 证据 限定","expect":["K_WRITING_CLAIM_EVIDENCE"]}
+{"id":"Q60","kind":"relevant","text":"原始来源 二手 引用 核对","expect":["K_SOURCE_ORIGINAL"]}
+{"id":"Q61","kind":"relevant","text":"选项 代价 可逆实验 决策","expect":["K_DECISION_REVERSIBLE"]}
 {"id":"F01","kind":"filter","text":"单位 量纲 换算","subject":"math","forbid":["K_PHYS_UNITS"]}
 {"id":"F02","kind":"filter","text":"受力分析 牛顿第二定律","subject":"physics","expect":["K_PHYS_FORCES"]}
 {"id":"F03","kind":"filter","text":"恒成立 参数 最值","subject":"physics","forbid":["K_MATH_MAX_MIN"]}

@@ -147,6 +147,7 @@ export default function CardPage() {
       <KnowledgePanel
         query={session.diagnosis.card.label}
         subject={session.subject}
+        verification={session.domain.verification}
       />
 
       {revealed?.answer && revealed.solution ? (

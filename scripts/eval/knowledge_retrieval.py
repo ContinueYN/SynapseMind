@@ -54,7 +54,6 @@ TOP_K = 3
 TOP1_GATE = 0.90
 MAX_SAMPLE = 8
 _KINDS = frozenset({"relevant", "filter", "irrelevant"})
-_SUBJECTS = frozenset({"math", "physics"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,8 +122,12 @@ def _query(raw: object, where: str, seen: set[str]) -> Query:
         raise ValueError(f"{where}.text: must be 2-200 characters (API contract)")
 
     subject = raw.get("subject")
-    if subject is not None and subject not in _SUBJECTS:
-        raise ValueError(f"{where}.subject: expected math, physics or null")
+    if subject is not None:
+        if not isinstance(subject, str):
+            raise ValueError(f"{where}.subject: expected a string or null")
+        subject = subject.strip()
+        if not 1 <= len(subject) <= 40:
+            raise ValueError(f"{where}.subject: must be 1-40 characters")
     expect = _id_list(raw.get("expect"), f"{where}.expect")
     forbid = _id_list(raw.get("forbid"), f"{where}.forbid")
 
@@ -359,14 +362,14 @@ def _render(
     generated = datetime.now().astimezone().isoformat(timespec="seconds")
 
     lines = [
-        "# 知识卡检索评测报告（RAG v0.1）",
+        "# 知识卡检索评测报告（RAG v0.2）",
         "",
         f"- 生成时间：{generated}",
         f"- 嵌入模型：`{model_name}`（{dimension} 维；FastEmbed ONNX，CPU 本地推理）",
         f"- 语料：{len(cards)} 张（"
         + " / ".join(
             f"{subject} {sum(1 for card in cards if card.subject == subject)}"
-            for subject in ("math", "physics")
+            for subject in sorted({card.subject for card in cards})
         )
         + f"）；sha256 `{corpus_hash[:16]}`",
         f"- 查询集：{len(queries)} 条（relevant "
@@ -508,7 +511,8 @@ def _render(
         "",
         "## 边界",
         "",
-        "- 查询集由作者按学科概念标签构造，不是教师标注的真实学生提问；56 张卡也不构成学科覆盖。",
+        "- 查询集由作者按学科概念标签构造，不是教师标注的真实学生提问；"
+        f"{len(cards)} 张卡也不构成学科覆盖。",
         "- top-1/top-3 只说明卡片排序，不说明卡片解释本身正确，也不说明学生看懂了。",
         "- 无关查询只覆盖 6 条，足以做门禁，不足以估计真实拒答率。",
         "- 评测不接触学生原文：查询只有概念标签；检索仍是只读旁路，不改会话与诊断。",

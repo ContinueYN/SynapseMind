@@ -15,9 +15,11 @@ import type { KnowledgeSearch } from "@/src/lib/api/types";
 export function KnowledgePanel({
   query,
   subject,
+  verification,
 }: {
   query: string;
   subject?: string;
+  verification?: string;
 }) {
   const [result, setResult] = useState<KnowledgeSearch | null>(null);
   const [failed, setFailed] = useState(false);
@@ -30,7 +32,11 @@ export function KnowledgePanel({
     if (!cleaned) return;
 
     const filter = subject?.trim();
-    searchKnowledge(cleaned, filter ? filter : undefined)
+    const mode = verification?.trim();
+    searchKnowledge(cleaned, {
+      subject: filter ? filter : undefined,
+      verification: mode ? mode : undefined,
+    })
       .then((data) => {
         if (!cancelled) setResult(data);
       })
@@ -41,7 +47,7 @@ export function KnowledgePanel({
     return () => {
       cancelled = true;
     };
-  }, [query, subject]);
+  }, [query, subject, verification]);
 
   const hits = result?.hits ?? [];
   if (failed || !result?.enabled || hits.length === 0) return null;

@@ -10,12 +10,15 @@ vi.mock("@/src/lib/api/client", () => ({
 }));
 
 const HITS: KnowledgeSearch = {
-  version: "0.1",
+  version: "0.2",
   enabled: true,
   query: "恒成立与最值",
   hits: [
     {
       card_id: "K_MATH_MAX_MIN",
+      kind: "concept",
+      subject: "math",
+      verifications: ["formal"],
       title: "恒成立先转成最值",
       excerpt: "恒成立等价于最值不等式，先确认定义域和端点。",
       source: {
@@ -35,7 +38,7 @@ describe("KnowledgePanel", () => {
 
   it("stays invisible when retrieval is disabled", async () => {
     vi.mocked(searchKnowledge).mockResolvedValue({
-      version: "0.1",
+      version: "0.2",
       enabled: false,
       query: "恒成立与最值",
       hits: [],
@@ -67,7 +70,7 @@ describe("KnowledgePanel", () => {
 
   it("forwards an open domain label instead of dropping it", async () => {
     vi.mocked(searchKnowledge).mockResolvedValue({
-      version: "0.1",
+      version: "0.2",
       enabled: true,
       query: "恒成立与最值",
       hits: [],
@@ -76,7 +79,29 @@ describe("KnowledgePanel", () => {
     render(<KnowledgePanel query="恒成立与最值" subject="decision" />);
 
     await waitFor(() =>
-      expect(searchKnowledge).toHaveBeenCalledWith("恒成立与最值", "decision"),
+      expect(searchKnowledge).toHaveBeenCalledWith("恒成立与最值", {
+        subject: "decision",
+        verification: undefined,
+      }),
+    );
+  });
+
+  it("forwards the session verification mode", async () => {
+    vi.mocked(searchKnowledge).mockResolvedValue(HITS);
+
+    render(
+      <KnowledgePanel
+        query="恒成立与最值"
+        subject="math"
+        verification="formal"
+      />,
+    );
+
+    await waitFor(() =>
+      expect(searchKnowledge).toHaveBeenCalledWith("恒成立与最值", {
+        subject: "math",
+        verification: "formal",
+      }),
     );
   });
 

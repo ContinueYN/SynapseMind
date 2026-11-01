@@ -2,12 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://synapsemind.dev/schemas/knowledge-search.schema.json",
   "title": "KnowledgeSearch",
-  "description": "只读知识卡检索：返回有出处的概念解释，不返回学生原文，不参与诊断。",
+  "description": "只读知识卡检索 v0.2：返回带类别、适用领域与验证方式的有出处解释；不返回学生原文，不参与诊断。",
   "type": "object",
   "additionalProperties": false,
   "required": ["version", "enabled", "query", "hits"],
   "properties": {
-    "version": {"type": "string", "const": "0.1"},
+    "version": {"type": "string", "const": "0.2"},
     "enabled": {
       "type": "boolean",
       "description": "RAG 未开启时为 false，hits 必须为空；客户端据此隐藏知识面板。"
@@ -19,9 +19,40 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["card_id", "title", "excerpt", "source", "score"],
+        "required": [
+          "card_id",
+          "kind",
+          "subject",
+          "verifications",
+          "title",
+          "excerpt",
+          "source",
+          "score"
+        ],
         "properties": {
           "card_id": {"type": "string", "pattern": "^K_[A-Z0-9_]+$"},
+          "kind": {
+            "type": "string",
+            "enum": ["concept", "pattern", "method", "error", "source"],
+            "description": "五类卡：概念、模式、方法、常见错误、来源。"
+          },
+          "subject": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "description": "开放领域标签，不是白名单。"
+          },
+          "verifications": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 4,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": ["formal", "executable", "empirical", "argumentative"]
+            },
+            "description": "这张卡适用于哪些验证方式；检索可按其中一种过滤。"
+          },
           "title": {"type": "string", "minLength": 1, "maxLength": 60},
           "excerpt": {"type": "string", "minLength": 1, "maxLength": 300},
           "source": {

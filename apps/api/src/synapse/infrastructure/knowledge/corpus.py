@@ -6,8 +6,14 @@ import json
 import re
 from importlib import resources
 from pathlib import Path
+from typing import cast
 
-from synapse.domain.knowledge.models import KnowledgeCard, KnowledgeSource
+from synapse.domain.knowledge.models import (
+    KnowledgeCard,
+    KnowledgeKind,
+    KnowledgeSource,
+    KnowledgeVerification,
+)
 
 DEFAULT_CORPUS = "corpus.jsonl"
 _MAX_TITLE = 60
@@ -16,6 +22,17 @@ _MAX_TAG = 24
 _MAX_TAGS = 8
 _MAX_SUBJECT = 40
 _CARD_ID = re.compile(r"^K_[A-Z0-9_]+$")
+_KINDS: frozenset[str] = frozenset({"concept", "pattern", "method", "error", "source"})
+_VERIFICATIONS: frozenset[str] = frozenset({"formal", "executable", "empirical", "argumentative"})
+# Older rows predate the metadata. Default them conservatively: a math card is
+# a formal explanation, a physics card is empirical, and anything else is an
+# argumentative framework. New cards can and should state both fields.
+_DEFAULT_VERIFICATIONS: dict[str, tuple[KnowledgeVerification, ...]] = {
+    "math": ("formal",),
+    "physics": ("empirical",),
+    "chinese": ("argumentative",),
+}
+_FALLBACK_VERIFICATIONS: tuple[KnowledgeVerification, ...] = ("argumentative",)
 
 
 def _text(value: object, where: str, *, limit: int) -> str:
@@ -48,12 +65,42 @@ def _source(value: object, where: str) -> KnowledgeSource:
 def _card(raw: object, where: str) -> KnowledgeCard:
     if not isinstance(raw, dict):
         raise ValueError(f"{where}: expected an object")
-    extra = set(raw) - {"id", "subject", "title", "body", "tags", "source"}
+    extra = set(raw) - {
+        "id",
+        "kind",
+        "subject",
+        "verifications",
+        "title",
+        "body",
+        "tags",
+        "source",
+    }
     if extra:
         raise ValueError(f"{where}: unexpected fields {sorted(extra)}")
     # The domain is an open label, not a whitelist: a card may be about a
     # programming pattern or a decision framework just as well as a math topic.
     subject = _text(raw.get("subject"), f"{where}.subject", limit=_MAX_SUBJECT)
+    kind_raw = raw.get("kind", "concept")
+    if not isinstance(kind_raw, str) or kind_raw not in _KINDS:
+        raise ValueError(f"{where}.kind: expected one of {sorted(_KINDS)}, got {kind_raw!r}")
+    kind = cast(KnowledgeKind, kind_raw)
+    verifications_raw = raw.get("verifications")
+    if verifications_raw is None:
+        verifications = _DEFAULT_VERIFICATIONS.get(subject, _FALLBACK_VERIFICATIONS)
+    else:
+        if not isinstance(verifications_raw, list) or not verifications_raw:
+            raise ValueError(f"{where}.verifications: expected a non-empty array")
+        if len(verifications_raw) > 4:
+            raise ValueError(f"{where}.verifications: at most 4 entries")
+        for index, item in enumerate(verifications_raw):
+            if not isinstance(item, str) or item not in _VERIFICATIONS:
+                raise ValueError(
+                    f"{where}.verifications[{index}]: expected one of "
+                    f"{sorted(_VERIFICATIONS)}, got {item!r}"
+                )
+        if len(set(verifications_raw)) != len(verifications_raw):
+            raise ValueError(f"{where}.verifications: duplicate entries")
+        verifications = cast(tuple[KnowledgeVerification, ...], tuple(verifications_raw))
     tags_raw = raw.get("tags")
     if not isinstance(tags_raw, list) or not tags_raw:
         raise ValueError(f"{where}.tags: expected a non-empty array")
@@ -67,7 +114,9 @@ def _card(raw: object, where: str) -> KnowledgeCard:
         raise ValueError(f"{where}.id: expected K_ followed by A-Z, 0-9 or _")
     return KnowledgeCard(
         id=card_id,
+        kind=kind,
         subject=subject,
+        verifications=verifications,
         title=_text(raw.get("title"), f"{where}.title", limit=_MAX_TITLE),
         body=_text(raw.get("body"), f"{where}.body", limit=_MAX_BODY),
         tags=tags,
