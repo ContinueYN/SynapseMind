@@ -62,6 +62,16 @@
 {"id":"F01","kind":"filter","text":"单位 量纲 换算","subject":"math","forbid":["K_PHYS_UNITS"]}
 {"id":"F02","kind":"filter","text":"受力分析 牛顿第二定律","subject":"physics","expect":["K_PHYS_FORCES"]}
 {"id":"F03","kind":"filter","text":"恒成立 参数 最值","subject":"physics","forbid":["K_MATH_MAX_MIN"]}
+{"id":"F04","kind":"filter","text":"恒成立 参数 最值","subject":"math","verification":"formal","expect":["K_MATH_MAX_MIN"]}
+{"id":"F05","kind":"filter","text":"最小复现 测试","subject":"programming","verification":"executable","expect":["K_CODE_TEST_FIRST"]}
+{"id":"F06","kind":"filter","text":"选项 代价 可逆实验","subject":"decision","verification":"argumentative","expect":["K_DECISION_REVERSIBLE"]}
+{"id":"Q62","kind":"relevant","text":"栈追踪 异常 最小复现","subject":"programming","expect":["K_CODE_TRACEBACK"]}
+{"id":"Q63","kind":"relevant","text":"主张 可反驳 论证","subject":"writing","expect":["K_WRITING_THESIS"]}
+{"id":"Q64","kind":"relevant","text":"修改 结构 段落","subject":"writing","expect":["K_WRITING_REVISION"]}
+{"id":"Q65","kind":"relevant","text":"样本 选择偏差 外推","subject":"research","expect":["K_RESEARCH_SAMPLING"]}
+{"id":"Q66","kind":"relevant","text":"相关 因果 混杂","subject":"research","expect":["K_RESEARCH_CORRELATION"]}
+{"id":"Q67","kind":"relevant","text":"沉没成本 边际","subject":"decision","expect":["K_DECISION_SUNK_COST"]}
+{"id":"Q68","kind":"relevant","text":"回忆 间隔 复习","subject":"learning","expect":["K_LEARN_RETRIEVAL"]}
 {"id":"I01","kind":"irrelevant","text":"第二次世界大战 起因"}
 {"id":"I02","kind":"irrelevant","text":"细胞有丝分裂 过程"}
 {"id":"I03","kind":"irrelevant","text":"唐诗 平仄 格律"}

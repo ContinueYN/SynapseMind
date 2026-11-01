@@ -3,7 +3,15 @@
 import { useEffect, useState } from "react";
 
 import { searchKnowledge } from "@/src/lib/api/client";
-import type { KnowledgeSearch } from "@/src/lib/api/types";
+import type { KnowledgeHit, KnowledgeSearch } from "@/src/lib/api/types";
+
+const KIND_LABEL: Record<KnowledgeHit["kind"], string> = {
+  concept: "概念",
+  pattern: "模式",
+  method: "方法",
+  error: "常见错误",
+  source: "来源",
+};
 
 /**
  * Sourced concept explanations beside a diagnosis card.
@@ -61,7 +69,10 @@ export function KnowledgePanel({
       <ul>
         {hits.map((hit) => (
           <li key={hit.card_id}>
-            <h3>{hit.title}</h3>
+            <h3>
+              <span className="sm-knowledge-kind">{KIND_LABEL[hit.kind]}</span>
+              {hit.title}
+            </h3>
             <p>{hit.excerpt}</p>
             <p className="sm-knowledge-source">
               <a href={hit.source.url} rel="noreferrer" target="_blank">

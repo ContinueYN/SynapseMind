@@ -44,7 +44,7 @@ from synapse.infrastructure.knowledge.corpus import DEFAULT_CORPUS, load_corpus 
 from synapse.infrastructure.knowledge.embedding import FastEmbedEmbedder  # noqa: E402
 from synapse.infrastructure.knowledge.index import InMemoryKnowledgeIndex  # noqa: E402
 
-DEFAULT_QUERIES = ROOT / "scripts" / "eval" / "data" / "knowledge-queries-v0.1.jsonl"
+DEFAULT_QUERIES = ROOT / "scripts" / "eval" / "data" / "knowledge-queries-v0.2.jsonl"
 DEFAULT_OUT = ROOT / "eval" / "reports" / "knowledge-retrieval-v0.1.md"
 SWEEP = (0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65)
 TOP_K = 3
@@ -54,6 +54,7 @@ TOP_K = 3
 TOP1_GATE = 0.90
 MAX_SAMPLE = 8
 _KINDS = frozenset({"relevant", "filter", "irrelevant"})
+_VERIFICATIONS = frozenset({"formal", "executable", "empirical", "argumentative"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +63,7 @@ class Query:
     kind: str
     text: str
     subject: str | None
+    verification: str | None
     expect: tuple[str, ...]
     forbid: tuple[str, ...]
 
@@ -78,7 +80,7 @@ class Scored:
 class Outcome:
     query: Query
     hits: tuple  # tuple[KnowledgeHit, ...]
-    kept: tuple  # hits that survive the threshold (and subject filter)
+    kept: tuple  # hits that survive the threshold (and subject/verification filter)
     rank: int | None
     top1_ok: bool
     top3_ok: bool
@@ -102,7 +104,11 @@ def _id_list(raw: object, where: str) -> tuple[str, ...]:
 def _query(raw: object, where: str, seen: set[str]) -> Query:
     if not isinstance(raw, dict):
         raise ValueError(f"{where}: expected an object")
-    _reject_unknown_fields(raw, {"id", "kind", "text", "subject", "expect", "forbid"}, where)
+    _reject_unknown_fields(
+        raw,
+        {"id", "kind", "text", "subject", "verification", "expect", "forbid"},
+        where,
+    )
     query_id = raw.get("id")
     if not isinstance(query_id, str) or not query_id.strip():
         raise ValueError(f"{where}.id: expected a non-empty string")
@@ -128,6 +134,11 @@ def _query(raw: object, where: str, seen: set[str]) -> Query:
         subject = subject.strip()
         if not 1 <= len(subject) <= 40:
             raise ValueError(f"{where}.subject: must be 1-40 characters")
+    verification = raw.get("verification")
+    if verification is not None and (
+        not isinstance(verification, str) or verification not in _VERIFICATIONS
+    ):
+        raise ValueError(f"{where}.verification: expected one of {sorted(_VERIFICATIONS)} or null")
     expect = _id_list(raw.get("expect"), f"{where}.expect")
     forbid = _id_list(raw.get("forbid"), f"{where}.forbid")
 
@@ -137,18 +148,21 @@ def _query(raw: object, where: str, seen: set[str]) -> Query:
         if forbid:
             raise ValueError(f"{where}: relevant queries do not take forbid")
     elif kind == "filter":
-        if subject is None:
-            raise ValueError(f"{where}: filter queries need a subject")
+        if subject is None and verification is None:
+            raise ValueError(f"{where}: filter queries need a subject or verification")
         if not expect and not forbid:
             raise ValueError(f"{where}: filter queries need expect or forbid")
     else:
-        if expect or forbid or subject is not None:
-            raise ValueError(f"{where}: irrelevant queries take no expect/forbid/subject")
+        if expect or forbid or subject is not None or verification is not None:
+            raise ValueError(
+                f"{where}: irrelevant queries take no expect/forbid/subject/verification"
+            )
     return Query(
         id=query_id,
         kind=kind,
         text=text,
         subject=subject,
+        verification=verification,
         expect=expect,
         forbid=forbid,
     )
@@ -192,6 +206,13 @@ def check_against_corpus(queries: tuple[Query, ...], cards: tuple) -> list[str]:
                 if card_id in known and known[card_id].subject != query.subject:
                     errors.append(
                         f"{query.id}: expected {card_id} does not match subject {query.subject}"
+                    )
+        if query.verification is not None:
+            for card_id in query.expect:
+                if card_id in known and query.verification not in known[card_id].verifications:
+                    errors.append(
+                        f"{query.id}: expected {card_id} does not support "
+                        f"verification {query.verification}"
                     )
     return errors
 
@@ -379,7 +400,8 @@ def _render(
         f"sha256 `{query_hash[:16]}`",
         f"- 默认阈值：`{default_threshold:.2f}`（`SYNAPSE_RAG_MIN_SCORE`）；"
         f"每次最多返回 {TOP_K} 条",
-        f"- 门禁：top-3 = 100%、subject 过滤 = 100%、无关查询拒答 = 100%、top-1 ≥ {TOP1_GATE:.0%}",
+        f"- 门禁：top-3 = 100%、subject/verification 过滤 = 100%、"
+        f"无关查询拒答 = 100%、top-1 ≥ {TOP1_GATE:.0%}",
         f"- **判定：{'PASS' if summary.passed else 'FAIL'}**",
     ]
     if uncovered:
@@ -400,7 +422,7 @@ def _render(
         f"| top-3 命中 | {summary.top3_ok}/{summary.relevant} （{summary.top3_rate:.1%}） | 100% |",
         f"| 阈值内至少 1 条（覆盖率） | {summary.covered}/{summary.relevant} "
         f"（{summary.coverage:.1%}） | 不单独设门槛 |",
-        f"| subject 过滤 | {summary.filter_ok}/{summary.filters} | 100% |",
+        f"| subject/verification 过滤 | {summary.filter_ok}/{summary.filters} | 100% |",
         f"| 无关查询拒答 | {summary.rejected}/{summary.irrelevant} | 100% |",
         "",
         "无关查询在默认阈值下的最高分（越低越安全）：",
@@ -447,12 +469,17 @@ def _render(
         "",
         "## 逐条结果",
         "",
-        "| id | 查询 | 学科过滤 | 期望 | top-1 | 分数 | 期望排名 | 判定 |",
+        "| id | 查询 | 过滤 | 期望 | top-1 | 分数 | 期望排名 | 判定 |",
         "|---|---|---|---|---|---|---|---|",
     ]
     for row in outcomes:
         query = row.query
-        subject = query.subject or "—"
+        filter_parts = []
+        if query.subject:
+            filter_parts.append(query.subject)
+        if query.verification:
+            filter_parts.append(f"verification={query.verification}")
+        filter_label = " / ".join(filter_parts) or "—"
         if query.kind == "relevant":
             expected = "、".join(query.expect)
             top1 = row.kept[0].card.id if row.kept else "—"
@@ -472,7 +499,7 @@ def _render(
             verdict = "拒答" if row.ok else "泄漏"
         rank = str(row.rank) if row.rank is not None else "—"
         lines.append(
-            f"| {query.id} | {query.text} | {subject} | {expected} | {top1} | "
+            f"| {query.id} | {query.text} | {filter_label} | {expected} | {top1} | "
             f"{score} | {rank} | {verdict} |"
         )
 
@@ -610,7 +637,12 @@ def main() -> int:
         scored = tuple(
             Scored(
                 query=query,
-                hits=index.search(query.text, subject=query.subject, limit=5),
+                hits=index.search(
+                    query.text,
+                    subject=query.subject,
+                    verification=query.verification,
+                    limit=5,
+                ),
             )
             for query in queries
         )

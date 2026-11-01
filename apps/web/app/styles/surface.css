@@ -5161,6 +5161,18 @@ body::-webkit-scrollbar {
   font-weight: 600;
 }
 
+.sm-knowledge-kind {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 1px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-3);
+  font-size: 11px;
+  font-weight: 500;
+  vertical-align: 1px;
+}
+
 .sm-knowledge li > p {
   margin: 0;
   color: var(--ink-2);

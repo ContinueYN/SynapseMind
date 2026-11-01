@@ -405,7 +405,14 @@ export default function DiagnosePage() {
             ) : hint ? (
               <StructureHintView hint={hint} sessionId={sessionId} />
             ) : intake ? (
-              <IntakeView intake={intake} sessionId={sessionId} />
+              <>
+                <IntakeView intake={intake} sessionId={sessionId} />
+                <KnowledgePanel
+                  query={intake.domain.label}
+                  subject={session.subject}
+                  verification={session.domain.verification}
+                />
+              </>
             ) : scaffold ? (
               <ScaffoldView
                 busy={busy}

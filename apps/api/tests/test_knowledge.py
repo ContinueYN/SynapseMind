@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from urllib.parse import urlparse
 
 import pytest
 from fastapi.testclient import TestClient
@@ -21,7 +22,7 @@ QUERY_PATH = (
     / "scripts"
     / "eval"
     / "data"
-    / "knowledge-queries-v0.1.jsonl"
+    / "knowledge-queries-v0.2.jsonl"
 )
 
 
@@ -56,9 +57,14 @@ def test_corpus_is_sourced_and_has_no_duplicate_ids() -> None:
         "writing",
         "research",
         "decision",
+        "learning",
     }
     assert sum(card.subject == "math" for card in cards) >= 25
     assert sum(card.subject == "physics" for card in cards) >= 15
+    assert sum(card.subject == "programming" for card in cards) >= 3
+    assert sum(card.subject == "writing" for card in cards) >= 2
+    assert sum(card.subject == "research" for card in cards) >= 3
+    assert sum(card.subject == "decision" for card in cards) >= 2
     assert {card.kind for card in cards} == {
         "concept",
         "pattern",
@@ -75,8 +81,10 @@ def test_corpus_is_sourced_and_has_no_duplicate_ids() -> None:
             assert card.verifications == ("empirical",)
         assert card.verifications
         assert card.source.title
-        assert card.source.url.startswith("https://")
-        assert card.source.license
+        parsed = urlparse(card.source.url)
+        assert parsed.scheme == "https"
+        assert parsed.netloc
+        assert card.source.license.startswith(("CC ", "PSF-"))
         assert card.body
         assert card.tags
         assert len(set(card.tags)) == len(card.tags)
@@ -104,13 +112,29 @@ def test_eval_query_set_targets_existing_cards_and_covers_every_card() -> None:
         if row["kind"] == "relevant":
             assert expect
         elif row["kind"] == "filter":
-            assert row["subject"] in {"math", "physics"}
+            subject = row.get("subject")
+            verification = row.get("verification")
+            assert subject is not None or verification is not None
+            if subject is not None:
+                assert isinstance(subject, str)
+                assert 1 <= len(subject) <= 40
+            if verification is not None:
+                assert verification in {
+                    "formal",
+                    "executable",
+                    "empirical",
+                    "argumentative",
+                }
             assert expect or forbid
             for card_id in expect:
-                assert cards[card_id].subject == row["subject"]
+                if subject is not None:
+                    assert cards[card_id].subject == subject
+                if verification is not None:
+                    assert verification in cards[card_id].verifications
         else:
             assert not expect and not forbid
             assert "subject" not in row
+            assert "verification" not in row
     assert targeted == set(cards)
 
 

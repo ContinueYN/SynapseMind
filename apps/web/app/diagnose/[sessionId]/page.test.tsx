@@ -4,7 +4,13 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import DiagnosePage from "./page";
-import { ApiError, exitSession, getSession, submitTurn } from "@/src/lib/api/client";
+import {
+  ApiError,
+  exitSession,
+  getSession,
+  searchKnowledge,
+  submitTurn,
+} from "@/src/lib/api/client";
 import type { SessionResponse } from "@/src/lib/api/types";
 
 vi.mock("next/navigation", () => ({
@@ -37,7 +43,7 @@ vi.mock("@/src/lib/api/client", () => {
     submitTurn: vi.fn(),
     exitSession: vi.fn(),
     searchKnowledge: vi.fn().mockResolvedValue({
-      version: "0.1",
+      version: "0.2",
       enabled: false,
       query: "",
       hits: [],
@@ -207,6 +213,13 @@ describe("DiagnosePage generic entry", () => {
     vi.mocked(getSession).mockReset();
     vi.mocked(submitTurn).mockReset();
     vi.mocked(exitSession).mockReset();
+    vi.mocked(searchKnowledge).mockReset();
+    vi.mocked(searchKnowledge).mockResolvedValue({
+      version: "0.2",
+      enabled: false,
+      query: "",
+      hits: [],
+    });
     Element.prototype.scrollIntoView = vi.fn();
   });
 
@@ -256,5 +269,56 @@ describe("DiagnosePage generic entry", () => {
     expect(await screen.findByText("按「编程」处理")).toBeInTheDocument();
     expect(screen.getByText(/编程 · 可执行验证/)).toBeInTheDocument();
     expect(screen.queryByText(/只问一个/)).not.toBeInTheDocument();
+  });
+
+  it("shows a sourced decision framework on a decision intake", async () => {
+    const decision = {
+      name: "decision",
+      label: "决策",
+      verification: "argumentative" as const,
+      generic: false,
+      confidence: 1,
+    };
+    vi.mocked(getSession).mockResolvedValueOnce({
+      ...GENERIC,
+      subject: "decision",
+      domain: decision,
+      intake: {
+        ...GENERIC_INTAKE,
+        domain: decision,
+        clarifier: null,
+      },
+    });
+    vi.mocked(searchKnowledge).mockResolvedValueOnce({
+      version: "0.2",
+      enabled: true,
+      query: "决策",
+      hits: [
+        {
+          card_id: "K_DECISION_REVERSIBLE",
+          kind: "method",
+          subject: "decision",
+          verifications: ["argumentative"],
+          title: "可逆决策先做小实验",
+          excerpt: "先找成本最低、能撤回的一步。",
+          source: {
+            title: "OpenStax Principles of Management",
+            url: "https://openstax.org/details/books/principles-management",
+            license: "CC BY 4.0",
+          },
+          score: 0.71,
+        },
+      ],
+    });
+
+    render(<DiagnosePage />);
+
+    expect(
+      await screen.findByText("可逆决策先做小实验"),
+    ).toBeInTheDocument();
+    expect(searchKnowledge).toHaveBeenCalledWith("决策", {
+      subject: "decision",
+      verification: "argumentative",
+    });
   });
 });

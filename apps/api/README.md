@@ -114,7 +114,7 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 - 后验 `≥0.80` 且领先 `≥0.25` 才出卡；到轮次上限仍 `<0.55` 明确不出确定卡点。
 - `/steps` 只验证提交的这一步（`specs/step-verification.schema.json`）：不推进状态、不出卡；`unknown` 表示未启用/读不懂/没有可判的断言，不是“这步正确”。
 - `/review/items` 只读（`specs/review-queue.schema.json`）：只返回卡面结论与位置，不含学生原文；没有鉴权，判断也不写回服务端——教师在浏览器里标记后自行导出 CSV。
-- `/knowledge/search` 只读（`specs/knowledge-search.schema.json` v0.1）：`q` 是概念标签，不是学生作答原文；返回卡片的标题、摘录、出处（title/url/license）和余弦分数。`enabled=false` 表示 `SYNAPSE_RAG` 未开启；开启但模型不可用时返回 **503**，不会静默返回空结果。
+- `/knowledge/search` 只读（`specs/knowledge-search.schema.json` v0.2）：`q` 是概念标签，不是学生作答原文；`subject` 是开放标签（1–40 字符），可选 `verification` 过滤（formal/executable/empirical/argumentative）；返回卡片的五类 `kind`、`subject`、`verifications`、标题、摘录、出处（title/url/license）和余弦分数。`enabled=false` 表示 `SYNAPSE_RAG` 未开启；开启但模型不可用时返回 **503**，不会静默返回空结果。
 - `SessionOut.subject` 是插件键（内部路由用）；`SessionOut.domain` 才是展示用的开放领域标签与验证方式（`formal`/`executable`/`empirical`/`argumentative`）。前端只在 `domain.name` 为数学/物理时显示单步检查入口。
 - 没有参考结构的问题（开放领域、未知领域，或本环境没有生成器）返回 `SessionOut.intake`（`specs/` 未单列 schema，字段见 `DomainIntakeOut`）；它不是卡点卡的简化版：不定位卡点、不估把握、不给唯一答案。
 - `intake` v0.2 会读学生自己那段话（随会话保存的 `initial_answer`）：`observed` 列出被认出的结构项（目标/约束/选项/风险…），`gaps` 列出该验证方式要求但没提到的项（最多 3 条）。两者都只是“有没有写到”，不是对错判断；选项只列出、不排序，决策问题也不会被推荐其中一个。没有作答时两段都为空。识别是确定性线索匹配（`application/generic_slots.py`），不调用模型，因此离线模式同样可用。
@@ -158,10 +158,10 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 
 - 默认**关闭**。开启需要本地 ONNX 模型，不依赖 DeepSeek（DeepSeek 只提供 chat）。
 - 模型：`BAAI/bge-small-zh-v1.5`，512 维，约 90 MB；`fastembed` 在 CPU 上跑，首次运行下载到 `SYNAPSE_EMBED_CACHE`（默认 `~/.cache/synapsemind/fastembed`）。
-- 语料：`src/synapse/infrastructure/knowledge/corpus.jsonl`，当前 56 张数学/物理卡（36 数学 / 20 物理），每张都带 `source.title/url/license`。改语料后重启 API 重建索引；向量不落库。
-- 检索：按 `q` + 可选 `subject` 过滤，余弦相似度线性扫描，默认取前 3 条、分数低于 `0.55` 的不返回。阈值由评测标定：56 张语料下无关查询最高 0.490，最弱的相关查询 0.608，`0.35` 会让六条无关查询全部通过。语料只有几十张，暂不引入 pgvector；`KnowledgeRetriever` 端口保留替换点。
-- 评测：`python scripts/eval/knowledge_retrieval.py` 用固定 65 条概念查询跑 top-1 / top-3、subject 过滤、无关查询拒答与阈值扫描；`--check` 不加载模型，只校验语料和查询集。报告写到 `eval/reports/`（不入公开树），含语料/查询集哈希和复现命令。
-- 前端在诊断页和卡点卡页渲染 `KnowledgePanel`；`enabled=false`、无命中或请求失败时整块隐藏，不遮挡诊断。
+- 语料：`src/synapse/infrastructure/knowledge/corpus.jsonl`，当前 68 张跨领域卡（36 数学 / 20 物理 / 3 编程 / 3 写作 / 3 研究 / 2 决策 / 1 学习），每张都带 `source.title/url/license`，可选 `kind`/`verifications`（旧卡按 subject 保守推断）。改语料后重启 API 重建索引；向量不落库。
+- 检索：按 `q` + 可选 `subject` + 可选 `verification` 过滤，余弦相似度线性扫描，默认取前 3 条、分数低于 `0.55` 的不返回。阈值由评测标定：68 张语料下无关查询最高 0.490，最弱的相关查询 0.608，`0.35` 会让六条无关查询全部通过。语料只有几十张，暂不引入 pgvector；`KnowledgeRetriever` 端口保留替换点。
+- 评测：`python scripts/eval/knowledge_retrieval.py` 用固定 80 条概念查询跑 top-1 / top-3、subject/verification 过滤、无关查询拒答与阈值扫描（top-1 66/68、top-3 68/68、过滤 6/6、拒答 6/6）；`--check` 不加载模型，只校验语料和查询集。报告写到 `eval/reports/`（不入公开树），含语料/查询集哈希和复现命令。
+- 前端在诊断页、入口页和卡点卡页渲染 `KnowledgePanel`，标题前标出卡片类型；`enabled=false`、无命中或请求失败时整块隐藏，不遮挡诊断。通用入口只用 `intake.domain.label` 这类系统标签检索领域级框架。
 
 ```powershell
 cd apps/api

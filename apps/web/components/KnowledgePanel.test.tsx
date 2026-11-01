@@ -58,6 +58,7 @@ describe("KnowledgePanel", () => {
     render(<KnowledgePanel query="恒成立与最值" subject="math" />);
 
     expect(await screen.findByText("恒成立先转成最值")).toBeInTheDocument();
+    expect(screen.getByText("概念")).toBeInTheDocument();
     expect(screen.getByText(/不是对你这次作答的判断/)).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "OpenStax Calculus Volume 1" }),
