@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -245,11 +245,21 @@ describe("DiagnosePage generic entry", () => {
 
   it("submits the single clarification and shows the updated intake", async () => {
     vi.mocked(getSession).mockResolvedValueOnce(GENERIC);
+    const decision = {
+      name: "decision",
+      label: "生活决策",
+      verification: "argumentative" as const,
+      generic: false,
+      confidence: 0.8,
+    };
     vi.mocked(answerClarifier).mockResolvedValueOnce({
       ...GENERIC,
-      notice: "补充已并入入口整理；它仍然只说明你提到了什么，不定位卡点。",
+      domain: decision,
+      notice: "补充已并入入口整理；这轮改按「生活决策」处理，但仍然不定位卡点。",
       intake: {
         ...GENERIC_INTAKE,
+        domain: decision,
+        checklist: [...GENERIC_INTAKE.checklist, "可逆实验：先试哪一步"],
         clarifier: null,
         observed: ["目标"],
       },
@@ -271,7 +281,17 @@ describe("DiagnosePage generic entry", () => {
     );
     expect(await screen.findByText(/补充已并入入口整理/)).toBeInTheDocument();
     expect(screen.queryByText(/只问一个/)).not.toBeInTheDocument();
+    expect(screen.getByText("按「生活决策」处理")).toBeInTheDocument();
     expect(screen.getByText(/你写的里面看到了：目标/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/可逆实验：先试哪一步/),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(searchKnowledge).toHaveBeenLastCalledWith("生活决策", {
+        subject: "decision",
+        verification: "argumentative",
+      }),
+    );
   });
 
   it("labels a confident domain without calling it generic", async () => {
@@ -303,6 +323,32 @@ describe("DiagnosePage generic entry", () => {
     expect(await screen.findByText("按「编程」处理")).toBeInTheDocument();
     expect(screen.getByText(/编程 · 可执行验证/)).toBeInTheDocument();
     expect(screen.queryByText(/只问一个/)).not.toBeInTheDocument();
+  });
+
+  it("does not offer a step checker on a math-labeled intake", async () => {
+    const math = {
+      name: "math",
+      label: "数学",
+      verification: "formal" as const,
+      generic: false,
+      confidence: 0.8,
+    };
+    vi.mocked(getSession).mockResolvedValueOnce({
+      ...GENERIC,
+      domain: math,
+      intake: {
+        ...GENERIC_INTAKE,
+        domain: math,
+        clarifier: null,
+      },
+    });
+
+    render(<DiagnosePage />);
+
+    expect(await screen.findByText("按「数学」处理")).toBeInTheDocument();
+    // There is no reference graph, so an equation checker would have nothing to
+    // verify; the intake is the whole response.
+    expect(screen.queryByText("有一步拿不准？")).not.toBeInTheDocument();
   });
 
   it("shows a sourced decision framework on a decision intake", async () => {

@@ -73,7 +73,7 @@ def _session_out(view: SessionView, service: SessionService) -> SessionOut:
         service.problem_title(problem_id),
         service.problem_text(problem_id),
         service.problem_subject(problem_id),
-        service.problem_domain(problem_id),
+        service.domain_for(view.session),
     )
 
 

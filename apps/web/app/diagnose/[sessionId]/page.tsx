@@ -437,7 +437,7 @@ export default function DiagnosePage() {
                 />
                 <KnowledgePanel
                   query={intake.domain.label}
-                  subject={session.subject}
+                  subject={intake.domain.name}
                   verification={session.domain.verification}
                 />
               </>
@@ -507,9 +507,9 @@ export default function DiagnosePage() {
             )}
           </div>
 
-          {session.domain?.name === "math" ? (
+          {!intake && session.domain?.name === "math" ? (
             <StepCheck sessionId={sessionId} />
-          ) : session.domain?.name === "physics" ? (
+          ) : !intake && session.domain?.name === "physics" ? (
             <PhysicsStepCheck sessionId={sessionId} />
           ) : null}
 

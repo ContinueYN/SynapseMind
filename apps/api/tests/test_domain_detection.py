@@ -15,6 +15,7 @@ from synapse.application.domain_detection import (
     CascadeDomainDetector,
     DetectedDomain,
     HeuristicDomainDetector,
+    declared_domain,
 )
 from synapse.application.graph import GraphBuildResult
 from synapse.application.llm import LLMResponse
@@ -98,6 +99,14 @@ def test_a_mixed_stem_falls_below_the_margin_instead_of_guessing() -> None:
     # stem is not decisive and the resolver keeps the generic label.
     assert result.domain is None
     assert result.confidence < 0.6
+
+
+def test_a_clarification_can_name_a_domain_without_a_model() -> None:
+    assert declared_domain("这更像一个生活决策：我要不要换城市工作。") == "decision"
+    assert declared_domain("这是 Python 代码报错。") == "programming"
+    assert declared_domain("更像一道数学证明题。") == "math"
+    # A structural answer does not get forced into a domain.
+    assert declared_domain("我卡在第二步，不知道先做哪个。") is None
 
 
 def test_model_is_only_asked_when_the_heuristic_is_not_decisive() -> None:

@@ -60,6 +60,11 @@ class DialogueSession:
     # stored so a reload cannot re-open the same question or accept a second
     # answer. False for sessions created before this field existed.
     clarifier_answered: bool = False
+    # A clarification such as "这是决策问题" may name a registered domain. The
+    # override is stored on the session (the submitted problem stays untouched)
+    # so the intake and the displayed domain keep the student's label after a
+    # reload. ``None`` means the detector's original label still applies.
+    domain_override: str | None = None
     # Optimistic-concurrency token owned by the repository adapter. 0 means
     # "not stored yet"; each successful save increments it. It is internal
     # storage metadata and is never exposed by the HTTP API.

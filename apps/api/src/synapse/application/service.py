@@ -19,6 +19,7 @@ from synapse.application.commands import (
 )
 from synapse.application.commitment import Capabilities, capabilities_for
 from synapse.application.composer import ProbeComposer, ProbePrompt
+from synapse.application.domain_detection import declared_domain
 from synapse.application.domains import (
     DomainDescriptor,
     DomainRegistry,
@@ -69,6 +70,11 @@ class InvalidAnswer(ValueError):
 
 class ClarifierUnavailable(RuntimeError):
     """The intake has no open clarifying question (or already used its one)."""
+
+
+# A student-named domain is not a detector score. Keep the displayed confidence
+# below 1.0: the label is clearer than before, but nothing was verified.
+_CLARIFIED_CONFIDENCE = 0.8
 
 
 @dataclass(frozen=True, slots=True)
@@ -239,11 +245,12 @@ class SessionService:
     def answer_clarifier(self, session_id: str, answer: str) -> SessionView:
         """Append the one allowed clarification to a reference-free intake.
 
-        This is not a probe and not a state transition: the session stays closed,
-        no diagnosis is produced, and the text is only used to re-derive
-        ``observed``/``gaps``. At most one clarification is accepted; a second
-        call returns the current view with a notice instead of silently
-        accumulating prose.
+        This is not a probe and not a state transition: the session stays closed
+        and no diagnosis is produced. The text re-derives ``observed``/``gaps``;
+        if it explicitly names a registered domain, that label becomes the
+        session's display profile so the checklist follows the student's words.
+        At most one clarification is accepted; a second call returns the current
+        view with a notice instead of silently accumulating prose.
         """
 
         session = self._get(session_id)
@@ -266,11 +273,21 @@ class SessionService:
         parts = [part for part in (session.initial_answer.strip(), cleaned) if part]
         session.initial_answer = "\n".join(parts)
         session.clarifier_answered = True
+        named = declared_domain(cleaned)
+        if named is not None:
+            session.domain_override = named
         self._sessions.save(session)
+        notice = "补充已并入入口整理；它仍然只说明你提到了什么，不定位卡点。"
+        if session.domain_override is not None:
+            label = self._domains.profile_for(session.domain_override).label
+            notice = (
+                f"补充已并入入口整理；这轮改按「{label}」处理，检查方式随之变化，"
+                "但这一轮仍然不定位卡点。"
+            )
         return SessionView(
             session=session,
             intake=self._intake_for(session),
-            notice="补充已并入入口整理；它仍然只说明你提到了什么，不定位卡点。",
+            notice=notice,
         )
 
     def mark_card_disagree(self, session_id: str) -> DiagnosisCard:
@@ -738,10 +755,28 @@ class SessionService:
 
         return not problem.annotated and not problem.graph.nodes
 
+    def _effective_problem(self, session: DialogueSession) -> Problem:
+        """The stored problem, with a student-named domain layered on top.
+
+        ``Problem`` is immutable and shared by every session that submitted the
+        same text, so the override lives on the session. Only the display/intake
+        profile changes; the submitted label and graph are untouched.
+        """
+
+        problem = self._problem(session.problem_id)
+        if session.domain_override is None:
+            return problem
+        return replace(
+            problem,
+            subject=session.domain_override,
+            domain_confidence=_CLARIFIED_CONFIDENCE,
+            domain_method="clarified",
+        )
+
     def _intake_for(self, session: DialogueSession) -> DomainIntake | None:
         """Derive the generic intake; ``None`` for anything with a graph."""
 
-        problem = self._problem(session.problem_id)
+        problem = self._effective_problem(session)
         if not self._is_reference_free(problem):
             return None
         profile = self._domains.profile_for(problem.subject)
@@ -817,10 +852,23 @@ class SessionService:
 
         Kept separate from ``problem_subject``: the subject is still the plugin
         key, while the domain descriptor is what the client displays and what
-        decides the verification promise.
+        decides the verification promise. This method has no session, so it
+        reports the submitted problem; HTTP responses use ``domain_for``.
         """
 
         problem = self._problem(problem_id)
+        profile = self._domains.profile_for(problem.subject)
+        return profile.describe(problem.domain_confidence)
+
+    def domain_for(self, session: DialogueSession) -> DomainDescriptor:
+        """The displayed domain for this session, including a clarification.
+
+        A student who answers "这是决策问题" gets the decision checklist and
+        label, but the submitted subject is still what the graph/plugin code
+        sees; the override is display and intake only.
+        """
+
+        problem = self._effective_problem(session)
         profile = self._domains.profile_for(problem.subject)
         return profile.describe(problem.domain_confidence)
 

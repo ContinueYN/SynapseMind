@@ -179,9 +179,20 @@ def test_the_single_clarifier_can_be_answered_once(client: TestClient) -> None:
     assert body["diagnosis"] is None
     assert "不定位卡点" in body["notice"]
     assert body["intake"]["observed"]
+    # Naming a kind of problem relabels the display profile, not the plugin key.
+    assert body["subject"] == "generic"
+    assert body["domain"]["name"] == "decision"
+    assert body["domain"]["label"] == "生活决策"
+    assert body["domain"]["confidence"] == 0.8
+    assert body["intake"]["domain"] == body["domain"]
+    assert any("可逆实验" in item for item in body["intake"]["checklist"])
+    assert "改按「生活决策」处理" in body["notice"]
 
     reloaded = client.get(f"/api/v1/sessions/{session_id}").json()
+    assert reloaded["domain"] == body["domain"]
     assert reloaded["intake"]["clarifier"] is None
+    assert reloaded["intake"]["domain"] == body["intake"]["domain"]
+    assert reloaded["intake"]["checklist"] == body["intake"]["checklist"]
     assert reloaded["intake"]["observed"] == body["intake"]["observed"]
     assert reloaded["intake"]["gaps"] == body["intake"]["gaps"]
 
@@ -193,6 +204,26 @@ def test_the_single_clarifier_can_be_answered_once(client: TestClient) -> None:
     assert second.status_code == 200, second.text
     assert "只接受一次补充" in second.json()["notice"]
     assert second.json()["intake"]["gaps"] == body["intake"]["gaps"]
+
+
+def test_a_clarifier_without_a_domain_cue_keeps_the_generic_profile(
+    client: TestClient,
+) -> None:
+    created = _start(client, UNKNOWN)
+    session_id = created["session_id"]
+
+    response = client.post(
+        f"/api/v1/sessions/{session_id}/intake",
+        json={"answer": "我卡在第二步：不知道先做哪个。"},
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    # A structural sentence must not be forced into a domain.
+    assert body["domain"]["name"] == "generic"
+    assert body["intake"]["domain"]["name"] == "generic"
+    assert body["intake"]["clarifier"] is None
+    assert body["diagnosis"] is None
 
 
 def test_a_confident_intake_rejects_a_clarifier(client: TestClient) -> None:

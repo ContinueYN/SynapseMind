@@ -279,6 +279,53 @@ _TERMS: dict[str, tuple[tuple[str, int], ...]] = {
 _MATH_FORMULA = re.compile(r"[A-Za-z]\s*\([A-Za-z]+\)|[=<>≤≥]|[+\-*/^]|√|∫|∑")
 _PHYSICS_UNIT = re.compile(r"(?<![A-Za-z])(?:kg|m/s\^?2|m/s|Ω|Pa|Hz|mol)(?![A-Za-z])")
 
+# The single clarifying question invites the student to name the kind of
+# problem, e.g. "这是决策问题". This is a deterministic cue pass over that short
+# answer, not a model call: it can only *relabel* a session, never diagnose it.
+# Ties keep the earlier entry, so "工作决策" stays a decision.
+_DECLARED_CUES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("decision", ("决策", "取舍", "纠结", "要不要", "该不该", "生活")),
+    (
+        "programming",
+        (
+            "代码",
+            "编程",
+            "程序",
+            "报错",
+            "bug",
+            "调试",
+            "算法",
+            "python",
+            "javascript",
+            "typescript",
+            "java",
+            "sql",
+        ),
+    ),
+    ("math", ("数学", "证明", "公式", "方程", "函数")),
+    ("physics", ("物理", "单位", "量纲")),
+    ("writing", ("写作", "文章", "作文", "论证")),
+    ("research", ("科研", "研究", "论文", "文献")),
+    ("work", ("工作机会", "职场", "职业", "产品", "团队")),
+)
+
+
+def declared_domain(text: str) -> str | None:
+    """Read an explicitly named domain from a clarification sentence.
+
+    Returns a registered domain name, or ``None`` when the answer does not name
+    one. Deliberately conservative: a bare "不确定" or a structural sentence
+    ("我卡在第二步") keeps the detector's original label.
+    """
+
+    lowered = text.lower()
+    best: tuple[int, str] | None = None
+    for name, cues in _DECLARED_CUES:
+        hits = sum(1 for cue in cues if cue in lowered)
+        if hits and (best is None or hits > best[0]):
+            best = (hits, name)
+    return best[1] if best is not None else None
+
 
 @dataclass(frozen=True, slots=True)
 class DetectedDomain:

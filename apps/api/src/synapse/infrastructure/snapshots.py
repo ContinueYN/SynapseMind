@@ -517,6 +517,9 @@ def encode_session(
             # used. Old rows answer "no", which is the safe default: the derived
             # intake may ask once, but it cannot show a second answer was stored.
             "clarifier_answered": session.clarifier_answered,
+            # Additive in v0.2: a clarification can name a registered domain;
+            # the override is display/intake-only and old rows have none.
+            "domain_override": session.domain_override,
         },
     }
 
@@ -561,6 +564,7 @@ def decode_session(snapshot: object) -> DialogueSession:
         clarifier_answered=_flag(
             data.get("clarifier_answered", False), "session.clarifier_answered"
         ),
+        domain_override=_optional_text(data.get("domain_override"), "session.domain_override"),
         revision=_revision(data.get("revision"), "session.revision"),
     )
 
