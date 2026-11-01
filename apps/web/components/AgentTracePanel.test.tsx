@@ -12,9 +12,10 @@ vi.mock("@/src/lib/api/client", () => ({
 }));
 
 const TRACE: AgentTrace = {
-  version: "0.2",
+  version: "0.3",
   session_id: "S_CODE",
   mode: "rules",
+  planner: { status: "off", reason: "planner_off", tool: null },
   steps: [
     {
       index: 1,
@@ -98,6 +99,40 @@ describe("AgentTracePanel", () => {
     expect(screen.getByText(/复盘只引用结构缺口/)).toBeInTheDocument();
     expect(screen.getByText(/没有读取答案/)).toBeInTheDocument();
     expect(getAgentTrace).toHaveBeenCalledWith("S_CODE");
+  });
+
+  it("shows a planner fallback without pretending the model chose", async () => {
+    vi.mocked(getAgentTrace).mockResolvedValue({
+      ...TRACE,
+      planner: { status: "fallback", reason: "timeout", tool: null },
+    });
+    const user = userEvent.setup();
+
+    render(<AgentTracePanel sessionId="S_CODE" verification="executable" />);
+
+    await user.click(screen.getByRole("button", { name: /看工具轨迹/ }));
+
+    expect(
+      await screen.findByText(/中间一步由规则选择（规划器回退：规划超时/),
+    ).toBeInTheDocument();
+  });
+
+  it("shows which whitelisted tool the planner selected", async () => {
+    vi.mocked(getAgentTrace).mockResolvedValue({
+      ...TRACE,
+      mode: "llm",
+      planner: { status: "used", reason: "selected", tool: "search_patterns" },
+    });
+    const user = userEvent.setup();
+
+    render(<AgentTracePanel sessionId="S_CODE" verification="executable" />);
+
+    await user.click(screen.getByRole("button", { name: /看工具轨迹/ }));
+
+    expect(
+      await screen.findByText(/中间一步由规划器从白名单选中「查知识卡」/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/首末两步仍是规则/)).toBeInTheDocument();
   });
 
   it("runs only code the user pasted and sends the optional tests", async () => {

@@ -78,6 +78,13 @@ class LLMSettings:
     # silently relabel the other in the audit trail.
     generic_graph_prompt_version: str = "generic-graph-v1"
     generic_graph_timeout_s: float = 60.0
+    # Phase 4 (second slice): an optional planner may pick the middle tool of
+    # the read-only agent trace. It is a separate switch because it changes what
+    # the trace shows, and it is only built when the model path is live and RAG
+    # is available. Default off keeps the rule trace byte-stable.
+    agent_planner: bool = False
+    agent_planner_prompt_version: str = "agent-plan-v1"
+    agent_planner_timeout_s: float = 2.0
     # The whole build is one request inside the 8s first-question budget
     # (chapter 12 §12.8). A counterexample retry is optional — the graph is
     # usable without its claim — so it only runs when it still fits here.
@@ -109,6 +116,16 @@ class LLMSettings:
                 "SYNAPSE_GENERIC_GRAPH_PROMPT_VERSION", "generic-graph-v1"
             ).strip(),
             generic_graph_timeout_s=float(source.get("SYNAPSE_GENERIC_GRAPH_TIMEOUT_S", 60.0)),
+            agent_planner=_parse_switch(
+                "SYNAPSE_AGENT_PLANNER",
+                source.get("SYNAPSE_AGENT_PLANNER", "off"),
+            ),
+            agent_planner_prompt_version=source.get(
+                "SYNAPSE_AGENT_PLANNER_PROMPT_VERSION", "agent-plan-v1"
+            ).strip(),
+            agent_planner_timeout_s=_parse_planner_timeout(
+                source.get("SYNAPSE_AGENT_PLANNER_TIMEOUT_S", "2.0")
+            ),
             canary_percent=canary,
             audit_path=source.get("SYNAPSE_LLM_AUDIT_PATH", "var/audit/llm.jsonl").strip(),
         )
@@ -147,3 +164,23 @@ def _parse_mode(raw: str) -> tuple[LLMMode, int]:
         if 0 <= percent <= 100:
             return "on", percent
     raise ValueError(f"SYNAPSE_LLM_MODE={raw!r}: expected off | shadow | on | on:<0-100>")
+
+
+def _parse_switch(name: str, raw: str) -> bool:
+    """Local ``on/off`` parser; the LLM layer owns its own switches."""
+
+    value = raw.strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name}={raw!r}: expected on | off")
+
+
+def _parse_planner_timeout(raw: str) -> float:
+    """Keep the planner a short side call, not a second graph build."""
+
+    value = float(raw)
+    if not 0.2 <= value <= 8.0:
+        raise ValueError(f"SYNAPSE_AGENT_PLANNER_TIMEOUT_S={raw!r}: expected 0.2-8.0")
+    return value

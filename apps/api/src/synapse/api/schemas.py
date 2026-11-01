@@ -446,6 +446,8 @@ AgentToolOut = Literal[
 AgentStepStatusOut = Literal["ok", "skipped", "failed"]
 AgentSuggestionKindOut = Literal["structure", "source", "experiment", "clarify"]
 AgentSuggestionSourceOut = Literal["rule", "knowledge", "execution", "system"]
+AgentPlannerStatusOut = Literal["off", "used", "fallback"]
+AgentPlanningToolOut = Literal["search_patterns", "search_sources", "compare_options"]
 
 
 class AgentRunRequest(StrictModel):
@@ -504,12 +506,29 @@ class AgentReflectionOut(StrictModel):
     boundary: str = Field(min_length=1, max_length=200)
 
 
+class AgentPlannerOut(StrictModel):
+    """Which middle-step tool the optional planner picked, never an outcome."""
+
+    status: AgentPlannerStatusOut
+    reason: str = Field(min_length=1, max_length=200)
+    tool: AgentPlanningToolOut | None = None
+
+    @model_validator(mode="after")
+    def tool_matches_status(self) -> AgentPlannerOut:
+        if self.status == "used" and self.tool is None:
+            raise ValueError("used planner requires a tool")
+        if self.status != "used" and self.tool is not None:
+            raise ValueError("only a used planner may carry a tool")
+        return self
+
+
 class AgentTraceOut(StrictModel):
     """A bounded tool trace, not a diagnosis and not a chain of thought."""
 
-    version: Literal["0.2"]
+    version: Literal["0.3"]
     session_id: str = Field(min_length=1, max_length=64)
-    mode: Literal["rules"]
+    mode: Literal["rules", "llm"]
+    planner: AgentPlannerOut
     steps: list[AgentStepOut] = Field(default_factory=list, max_length=3)
     suggestions: list[AgentSuggestionOut] = Field(default_factory=list, max_length=3)
     reflection: AgentReflectionOut

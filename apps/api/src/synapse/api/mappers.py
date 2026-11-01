@@ -9,6 +9,7 @@ from __future__ import annotations
 from synapse.api.schemas import (
     AgentCitationOut,
     AgentLimitsOut,
+    AgentPlannerOut,
     AgentReflectionOut,
     AgentStepOut,
     AgentSuggestionOut,
@@ -357,6 +358,11 @@ def agent_trace_out(trace: AgentTrace) -> AgentTraceOut:
         version=trace.version,
         session_id=trace.session_id,
         mode=trace.mode,
+        planner=AgentPlannerOut(
+            status=trace.planner.status,
+            reason=trace.planner.reason,
+            tool=trace.planner.tool,
+        ),
         steps=[
             AgentStepOut(
                 index=step.index,

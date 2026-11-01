@@ -20,6 +20,7 @@ from typing import cast
 
 from fastapi import Request
 
+from synapse.application.agent_planner import ToolPlanner
 from synapse.application.audit import CallAuditor
 from synapse.application.composer import (
     CanaryProbeComposer,
@@ -59,6 +60,7 @@ from synapse.infrastructure.in_memory import (
     InMemorySessionRepository,
 )
 from synapse.infrastructure.knowledge import build_knowledge_service
+from synapse.infrastructure.llm.agent_planner import LLMToolPlanner
 from synapse.infrastructure.llm.audit import JsonlCallAuditor
 from synapse.infrastructure.llm.client import OpenAICompatibleClient
 from synapse.infrastructure.llm.composer import LLMProbeComposer
@@ -104,6 +106,7 @@ def build_container(
     step_limiter: StepRateLimiter | None = None,
     knowledge: KnowledgeService | None = None,
     executor: CodeExecutor | None = None,
+    tool_planner: ToolPlanner | None = None,
 ) -> Container:
     resolved = settings or LLMSettings.from_env()
     flags = features or FeatureFlags.from_env()
@@ -208,6 +211,15 @@ def build_container(
     # The feature flag is the outer switch: an injected adapter cannot turn the
     # endpoint on when ``SYNAPSE_EXEC`` is off.
     code_executor = executor if executor is not None and flags.execution else build_executor(flags)
+    # Phase 4 (second slice): optional planner. Injected fakes are still gated
+    # by the switch so a test cannot pretend the production path is on.
+    tool_planner_adapter = build_tool_planner(
+        resolved,
+        candidate=tool_planner,
+        client=llm_client,
+        auditor=sink,
+    )
+    planner_reason = "" if tool_planner_adapter is not None else tool_planner_off_reason(resolved)
     service = SessionService(
         sessions=sessions,
         problems=problems,
@@ -225,6 +237,8 @@ def build_container(
         chc_attribution=flags.chc_attribution,
         knowledge=knowledge_service,
         code_executor=code_executor,
+        tool_planner=tool_planner_adapter,
+        tool_planner_reason=planner_reason,
     )
     return Container(
         sessions=sessions,
@@ -280,6 +294,46 @@ def build_generic_graph_generator(
         settings=settings,
         auditor=auditor,
     )
+
+
+def build_tool_planner(
+    settings: LLMSettings,
+    *,
+    candidate: ToolPlanner | None = None,
+    client: LLMClient | None = None,
+    auditor: CallAuditor | None = None,
+) -> ToolPlanner | None:
+    """The optional planner needs its own switch, a live model and no shadow.
+
+    ``off`` must keep the deterministic trace. ``shadow`` must not change what
+    the student sees, so it keeps the rule choice even if a key is present.
+    """
+
+    if not settings.agent_planner:
+        return None
+    if not settings.llm_enabled or settings.mode == "shadow":
+        return None
+    if candidate is not None:
+        return candidate
+    return LLMToolPlanner(
+        client or OpenAICompatibleClient(settings),
+        settings=settings,
+        auditor=auditor,
+    )
+
+
+def tool_planner_off_reason(settings: LLMSettings) -> str:
+    """A stable code explaining why no planner was wired (shown in the trace)."""
+
+    if not settings.agent_planner:
+        return "planner_off"
+    if settings.mode == "off":
+        return "llm_off"
+    if not settings.api_key:
+        return "no_api_key"
+    if settings.mode == "shadow":
+        return "shadow"
+    return "planner_off"
 
 
 def build_executor(

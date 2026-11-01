@@ -16,17 +16,28 @@ from jsonschema import Draft202012Validator
 
 from synapse.api.deps import build_container
 from synapse.api.main import create_app
+from synapse.application.agent_planner import (
+    AgentPlanningTool,
+    PlannerContext,
+    PlannerRejected,
+)
 from synapse.application.execution import (
     ExecutionResult,
     RunCodeCommand,
 )
+from synapse.application.generic_graph import (
+    GenericGraphBuildFailed,
+    GenericGraphDraft,
+)
 from synapse.application.knowledge import KnowledgeService, KnowledgeUnavailable
+from synapse.application.llm import LLMRequest, LLMResponse
 from synapse.domain.knowledge.models import (
     KnowledgeCard,
     KnowledgeHit,
     KnowledgeSource,
 )
 from synapse.infrastructure.features import FeatureFlags
+from synapse.infrastructure.llm.settings import LLMSettings
 
 SPEC_PATH = Path(__file__).resolve().parents[3] / "specs" / "agent-trace.schema.json"
 CODE = "我的 Python 脚本报错了：IndexError: list index out of range，列表里明明有元素，应该怎么修？"
@@ -162,8 +173,9 @@ def test_trace_is_read_only_bounded_and_schema_valid(client: TestClient) -> None
     assert response.status_code == 200, response.text
     body = response.json()
     Draft202012Validator(json.loads(SPEC_PATH.read_text(encoding="utf-8"))).validate(body)
-    assert body["version"] == "0.2"
+    assert body["version"] == "0.3"
     assert body["mode"] == "rules"
+    assert body["planner"] == {"status": "off", "reason": "planner_off", "tool": None}
     assert body["steps"][0]["tool"] == "check_structure"
     assert len(body["steps"]) <= 3
     assert body["limits"] == {"max_steps": 3, "steps_used": len(body["steps"])}
@@ -409,3 +421,265 @@ def test_replay_returns_the_same_tool_sequence(client: TestClient) -> None:
         return copy
 
     assert strip_duration(first) == strip_duration(second)
+
+
+# --- Phase 4 (second slice): optional LLM planner -------------------------
+
+
+class _NoGraph:
+    """A model path is live in these tests, but structure generation is not."""
+
+    def generate(self, draft: GenericGraphDraft) -> object:
+        raise GenericGraphBuildFailed("disabled", detail="planner test")
+
+
+class _DeadLLM:
+    """Any unplanned model call is a test failure, not a network request."""
+
+    def complete(self, request: LLMRequest, *, timeout_s: float) -> LLMResponse:
+        raise AssertionError(f"unexpected model call: {request.purpose}")
+
+
+class _FakePlanner:
+    def __init__(
+        self,
+        choice: str | None = None,
+        *,
+        reject: str | None = None,
+    ) -> None:
+        self.choice = choice
+        self.reject = reject
+        self.contexts: list[PlannerContext] = []
+
+    def choose(self, context: PlannerContext) -> AgentPlanningTool | None:
+        self.contexts.append(context)
+        if self.reject is not None:
+            raise PlannerRejected(self.reject)  # type: ignore[arg-type]
+        return self.choice  # type: ignore[return-value]
+
+
+def _planner_client(
+    planner: _FakePlanner,
+    *,
+    rag: bool = True,
+    settings: LLMSettings | None = None,
+) -> TestClient:
+    knowledge = KnowledgeService(_Retriever((_card(),))) if rag else KnowledgeService(None)
+    resolved = settings or LLMSettings(
+        mode="on",
+        api_key="test",
+        agent_planner=True,
+    )
+    return TestClient(
+        create_app(
+            build_container(
+                settings=resolved,
+                generic_generator=_NoGraph(),  # type: ignore[arg-type]
+                llm_client=_DeadLLM(),
+                knowledge=knowledge,
+                tool_planner=planner,
+            )
+        )
+    )
+
+
+def _decision_body(client: TestClient, planner: _FakePlanner) -> dict[str, object]:
+    created = _start(client, DECISION, "SECRET_ATTEMPT 我想换工作。")
+    return client.get(f"/api/v1/sessions/{created['session_id']}/agent").json()
+
+
+def test_planner_choice_is_used_only_for_the_middle_step() -> None:
+    planner = _FakePlanner("search_patterns")
+    client = _planner_client(planner)
+
+    body = _decision_body(client, planner)
+
+    assert body["mode"] == "llm"
+    assert body["planner"] == {
+        "status": "used",
+        "reason": "selected",
+        "tool": "search_patterns",
+    }
+    assert [step["tool"] for step in body["steps"]] == [
+        "check_structure",
+        "search_patterns",
+        "ask_clarifying",
+    ]
+    assert len(planner.contexts) == 1
+    context = planner.contexts[0]
+    assert context.tools == ("compare_options", "search_patterns")
+    assert "SECRET_ATTEMPT" not in repr(context)
+    # The planner was not offered the fixed steps or execution tools.
+    assert "check_structure" not in context.tools
+    assert "run_code" not in context.tools
+
+
+def test_planner_can_choose_sources_for_a_writing_framework() -> None:
+    planner = _FakePlanner("search_sources")
+    client = _planner_client(planner)
+    created = _start(
+        client,
+        "帮我看看这篇论文的文献综述怎么组织，先读哪些来源？",
+        "我想先理清综述结构。",
+        subject="research",
+    )
+
+    body = client.get(f"/api/v1/sessions/{created['session_id']}/agent").json()
+
+    assert body["planner"]["status"] == "used"
+    assert body["steps"][1]["tool"] == "search_sources"
+    assert planner.contexts[0].tools == ("search_sources", "search_patterns")
+
+
+def test_planner_timeout_falls_back_to_the_rule_tool() -> None:
+    planner = _FakePlanner(reject="timeout")
+    client = _planner_client(planner)
+
+    body = _decision_body(client, planner)
+
+    assert body["mode"] == "rules"
+    assert body["planner"] == {
+        "status": "fallback",
+        "reason": "timeout",
+        "tool": None,
+    }
+    assert body["steps"][1]["tool"] == "compare_options"
+
+
+def test_planner_bad_json_falls_back_to_the_rule_tool() -> None:
+    planner = _FakePlanner(reject="bad_json")
+    client = _planner_client(planner)
+
+    body = _decision_body(client, planner)
+
+    assert body["mode"] == "rules"
+    assert body["planner"]["status"] == "fallback"
+    assert body["planner"]["reason"] == "bad_json"
+    assert body["steps"][1]["tool"] == "compare_options"
+
+
+def test_planner_illegal_tool_never_runs() -> None:
+    planner = _FakePlanner("run_code")
+    client = _planner_client(planner)
+
+    body = _decision_body(client, planner)
+
+    assert body["mode"] == "rules"
+    assert body["planner"] == {
+        "status": "fallback",
+        "reason": "tool_not_allowed",
+        "tool": None,
+    }
+    assert "run_code" not in [step["tool"] for step in body["steps"]]
+    assert "get_answer" not in str(body)
+
+
+def test_planner_is_off_when_rag_is_off() -> None:
+    planner = _FakePlanner("search_patterns")
+    client = _planner_client(planner, rag=False)
+
+    body = _decision_body(client, planner)
+
+    assert body["mode"] == "rules"
+    assert body["planner"] == {"status": "off", "reason": "rag_off", "tool": None}
+    assert planner.contexts == []
+    assert body["steps"][1]["tool"] == "compare_options"
+
+
+def test_planner_without_a_key_is_off_not_faked() -> None:
+    planner = _FakePlanner("search_patterns")
+    client = _planner_client(
+        planner,
+        settings=LLMSettings(mode="on", api_key=None, agent_planner=True),
+    )
+
+    body = _decision_body(client, planner)
+
+    assert body["mode"] == "rules"
+    assert body["planner"] == {
+        "status": "off",
+        "reason": "no_api_key",
+        "tool": None,
+    }
+    assert planner.contexts == []
+
+
+def test_planner_switch_off_keeps_the_rule_trace() -> None:
+    planner = _FakePlanner("search_patterns")
+    client = _planner_client(
+        planner,
+        settings=LLMSettings(mode="on", api_key="test", agent_planner=False),
+    )
+
+    body = _decision_body(client, planner)
+
+    assert body["mode"] == "rules"
+    assert body["planner"]["reason"] == "planner_off"
+    assert planner.contexts == []
+
+
+def test_planner_is_not_consulted_for_explicit_code() -> None:
+    planner = _FakePlanner("search_patterns")
+    executor = _Executor(ExecutionResult(status="pass", detail="", exit_code=0, duration_ms=1))
+    knowledge = KnowledgeService(_Retriever((_card(),)))
+    client = TestClient(
+        create_app(
+            build_container(
+                settings=LLMSettings(mode="on", api_key="test", agent_planner=True),
+                features=FeatureFlags(execution=True),
+                generic_generator=_NoGraph(),  # type: ignore[arg-type]
+                llm_client=_DeadLLM(),
+                knowledge=knowledge,
+                executor=executor,
+                tool_planner=planner,
+            )
+        )
+    )
+    created = _start(client, CODE, "我想让它跑起来。")
+
+    body = client.post(
+        f"/api/v1/sessions/{created['session_id']}/agent/run",
+        json={"code": "print(1)\n"},
+    ).json()
+
+    assert body["planner"] == {"status": "off", "reason": "explicit_code", "tool": None}
+    assert planner.contexts == []
+    assert "run_code" in [step["tool"] for step in body["steps"]]
+
+
+def test_planner_trace_still_validates_against_the_spec() -> None:
+    planner = _FakePlanner("compare_options")
+    client = _planner_client(planner)
+
+    body = _decision_body(client, planner)
+
+    Draft202012Validator(json.loads(SPEC_PATH.read_text(encoding="utf-8"))).validate(body)
+    assert body["mode"] == "llm"
+    assert body["planner"]["tool"] == "compare_options"
+
+
+def test_planner_is_not_called_when_only_one_tool_can_run() -> None:
+    planner = _FakePlanner("search_patterns")
+    client = _planner_client(planner)
+    created = _start(client, CODE, "我的列表取值越界了。")
+
+    body = client.get(f"/api/v1/sessions/{created['session_id']}/agent").json()
+
+    assert body["mode"] == "rules"
+    assert body["planner"] == {"status": "off", "reason": "single_tool", "tool": None}
+    assert planner.contexts == []
+    assert body["steps"][1]["tool"] == "search_patterns"
+
+
+def test_planner_stays_off_in_shadow_mode() -> None:
+    planner = _FakePlanner("compare_options")
+    client = _planner_client(
+        planner,
+        settings=LLMSettings(mode="shadow", api_key="test", agent_planner=True),
+    )
+
+    body = _decision_body(client, planner)
+
+    assert body["mode"] == "rules"
+    assert body["planner"] == {"status": "off", "reason": "shadow", "tool": None}
+    assert planner.contexts == []

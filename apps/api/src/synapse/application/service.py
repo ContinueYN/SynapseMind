@@ -16,6 +16,7 @@ from synapse.application.agent import (
     AgentUnavailable,
     run_agent_trace,
 )
+from synapse.application.agent_planner import ToolPlanner
 from synapse.application.audit import AuditEntry, CallAuditor
 from synapse.application.card_builder import build_diagnosis_card
 from synapse.application.commands import (
@@ -144,6 +145,8 @@ class SessionService:
         chc_attribution: bool = False,
         knowledge: KnowledgeService | None = None,
         code_executor: CodeExecutor | None = None,
+        tool_planner: ToolPlanner | None = None,
+        tool_planner_reason: str = "planner_off",
     ) -> None:
         self._sessions = sessions
         self._problems = problems
@@ -184,6 +187,11 @@ class SessionService:
         # Explicit code execution is optional here too; ``None`` means the
         # trace must say "not executed" instead of pretending it ran.
         self._code_executor = code_executor
+        # Optional tool planner (Phase 4, second slice). ``None`` keeps the
+        # deterministic rule choice; the runner also treats a disabled RAG as
+        # "planner off" because a search tool could otherwise only be skipped.
+        self._tool_planner = tool_planner
+        self._tool_planner_reason = tool_planner_reason
 
     def start(self, command: StartSessionCommand) -> SessionView:
         # Check the student's own equals signs before alignment: a provable
@@ -301,6 +309,8 @@ class SessionService:
             intake,
             self._knowledge,
             self._code_executor,
+            planner=self._tool_planner,
+            planner_off_reason=self._tool_planner_reason,
             code=code,
             tests=tests,
         )

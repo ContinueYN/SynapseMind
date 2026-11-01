@@ -2,13 +2,14 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://synapsemind.dev/schemas/agent-trace.schema.json",
   "title": "AgentTrace",
-  "description": "有界工具轨迹 v0.2：只读、最多 3 步、不推进会话、不读答案；记录工具名、状态、输入/输出摘要与引用，不记录思维链。v0.2 增加 reflection（结构复盘），它不是诊断。",
+  "description": "有界工具轨迹 v0.3：只读、最多 3 步、不推进会话、不读答案；记录工具名、状态、输入/输出摘要与引用，不记录思维链。v0.2 增加 reflection（结构复盘）。v0.3 增加 planner：可选的 LLM 规划器只在白名单里决定中间一步用哪个工具，首步与末步仍由规则决定；失败、超时、坏 JSON、非法工具或 RAG 关闭时一律回退 rules，不伪造工具结果。",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "version",
     "session_id",
     "mode",
+    "planner",
     "steps",
     "suggestions",
     "reflection",
@@ -16,12 +17,34 @@
     "notice"
   ],
   "properties": {
-    "version": {"type": "string", "const": "0.2"},
+    "version": {"type": "string", "const": "0.3"},
     "session_id": {"type": "string", "minLength": 1, "maxLength": 64},
     "mode": {
       "type": "string",
-      "enum": ["rules"],
-      "description": "v0.2 仍只有确定性规则轨迹；LLM 规划器未接。"
+      "enum": ["rules", "llm"],
+      "description": "llm 仅表示中间一步的工具由规划器在白名单内选出；工具执行、状态与诊断仍由规则/应用层决定。"
+    },
+    "planner": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "规划器状态。off=未启用（开关关闭、无 key、影子模式或 RAG 关闭）；used=模型选择被采用；fallback=调用超时/坏 JSON/非法工具，已回退规则。它只决定中间一步，不能决定状态、不能读答案。",
+      "required": ["status", "reason"],
+      "properties": {
+        "status": {"type": "string", "enum": ["off", "used", "fallback"]},
+        "reason": {"type": "string", "minLength": 1, "maxLength": 200},
+        "tool": {
+          "type": ["string", "null"],
+          "enum": ["search_patterns", "search_sources", "compare_options", null]
+        }
+      },
+      "if": {"properties": {"status": {"const": "used"}}},
+      "then": {
+        "required": ["tool"],
+        "properties": {
+          "tool": {"enum": ["search_patterns", "search_sources", "compare_options"]}
+        }
+      },
+      "else": {"properties": {"tool": {"type": "null"}}}
     },
     "steps": {
       "type": "array",

@@ -320,6 +320,21 @@ export interface components {
             steps_used: number;
         };
         /**
+         * AgentPlannerOut
+         * @description Which middle-step tool the optional planner picked, never an outcome.
+         */
+        AgentPlannerOut: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "off" | "used" | "fallback";
+            /** Reason */
+            reason: string;
+            /** Tool */
+            tool?: ("search_patterns" | "search_sources" | "compare_options") | null;
+        };
+        /**
          * AgentReflectionOut
          * @description Two lines of coverage review; neither line is a diagnosis.
          */
@@ -391,14 +406,15 @@ export interface components {
              * Version
              * @constant
              */
-            version: "0.2";
+            version: "0.3";
             /** Session Id */
             session_id: string;
             /**
              * Mode
-             * @constant
+             * @enum {string}
              */
-            mode: "rules";
+            mode: "rules" | "llm";
+            planner: components["schemas"]["AgentPlannerOut"];
             /** Steps */
             steps?: components["schemas"]["AgentStepOut"][];
             /** Suggestions */

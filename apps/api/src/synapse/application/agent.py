@@ -1,10 +1,12 @@
 """Bounded, read-only tool trace for a generic intake (Phase 4, no state writes).
 
 The trace is not a mind dump and not a diagnosis. It records *which bounded
-tools ran*, what they were allowed to see, and a short summary. The runner is
-deliberately deterministic in v0.1: there is no model planner, so a checkout
-with ``SYNAPSE_LLM_MODE=off`` produces the same tool order and summary every
-time. Only wall-clock durations vary.
+tools ran*, what they were allowed to see, and a short summary. The first
+(``check_structure``) and last (``ask_clarifying``) steps are rule-driven. The
+middle step is too, unless an optional planner is wired: it may pick one tool
+from a framework-specific whitelist. With ``SYNAPSE_LLM_MODE=off`` (the
+default), the planner is not even constructed and the trace is byte-stable
+apart from wall-clock durations.
 
 Three boundaries are enforced here rather than left to the UI:
 
@@ -12,7 +14,12 @@ Three boundaries are enforced here rather than left to the UI:
 * the answer store is never read and no tool can set dialogue state;
 * code is executed only when the caller explicitly submits it to the run
   endpoint, and only for an EXECUTABLE framework. The runner never extracts
-  code from the attempt or the problem statement.
+  code from the attempt or the problem statement, and ``run_code``/``run_tests``
+  are not plannable.
+
+A planner failure never changes the trace into a fake result: the rule choice
+runs instead, and the trace says ``mode: rules`` with ``planner.status`` set to
+``fallback`` (or ``off`` when the planner was never available).
 """
 
 from __future__ import annotations
@@ -21,6 +28,13 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import Literal
 
+from synapse.application.agent_planner import (
+    PLANNER_TOOLS,
+    AgentPlanningTool,
+    PlannerContext,
+    PlannerRejected,
+    ToolPlanner,
+)
 from synapse.application.domains import IntakeFramework
 from synapse.application.execution import (
     CodeExecutor,
@@ -45,9 +59,12 @@ AgentTool = Literal[
 AgentStepStatus = Literal["ok", "skipped", "failed"]
 AgentSuggestionKind = Literal["structure", "source", "experiment", "clarify"]
 AgentSuggestionSource = Literal["rule", "knowledge", "execution", "system"]
+AgentPlannerStatus = Literal["off", "used", "fallback"]
 
 MAX_AGENT_STEPS = 3
 _NOTICE = "只读工具轨迹：不推进会话、不判断对错、不替你做选择，也没有读取答案。"
+# Why the planner produced no choice. Stable codes, not student-facing copy.
+_PLANNER_OFF = "planner_off"
 
 
 class AgentUnavailable(RuntimeError):
@@ -105,10 +122,25 @@ class AgentReflection:
 
 
 @dataclass(frozen=True, slots=True)
+class AgentPlannerState:
+    """Which tool the optional planner chose, and whether it was adopted.
+
+    ``tool`` is present only for ``used``. ``fallback`` means a model call was
+    attempted but produced no usable choice; ``off`` means it never ran (switch
+    off, no key, shadow mode, RAG off, or an explicit-code request).
+    """
+
+    status: AgentPlannerStatus
+    reason: str
+    tool: AgentPlanningTool | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class AgentTrace:
-    version: Literal["0.2"]
+    version: Literal["0.3"]
     session_id: str
-    mode: Literal["rules"]
+    mode: Literal["rules", "llm"]
+    planner: AgentPlannerState
     steps: tuple[AgentStep, ...]
     suggestions: tuple[AgentSuggestion, ...]
     reflection: AgentReflection
@@ -123,6 +155,8 @@ def run_agent_trace(
     knowledge: KnowledgeService,
     executor: CodeExecutor | None,
     *,
+    planner: ToolPlanner | None = None,
+    planner_off_reason: str = _PLANNER_OFF,
     code: str | None = None,
     tests: str | None = None,
 ) -> AgentTrace:
@@ -130,6 +164,9 @@ def run_agent_trace(
 
     ``code``/``tests`` are accepted only through the explicit run endpoint; a
     caller that does not pass them gets a trace with no execution step.
+
+    ``planner`` is consulted only for the middle step and only when code was
+    not explicitly submitted. It never executes anything itself.
     """
 
     if tests is not None and code is None:
@@ -143,20 +180,26 @@ def run_agent_trace(
     _add_check_structure(steps, suggestions, intake)
 
     if code is not None:
+        # The caller already decided what to run; a model must not reorder it.
+        planner_state = AgentPlannerState("off", "explicit_code")
         _add_execution(steps, suggestions, executor, code, tests or "")
-    elif intake.profile.framework is IntakeFramework.DECISION:
-        _add_compare_options(steps, suggestions, intake)
-    elif intake.profile.name in {"writing", "research"}:
-        _add_search_sources(steps, suggestions, problem, intake, knowledge)
     else:
-        _add_search_patterns(steps, suggestions, problem, intake, knowledge)
+        action, planner_state = _plan_action(planner, planner_off_reason, intake, knowledge)
+        if action == "compare_options":
+            _add_compare_options(steps, suggestions, intake)
+        elif action == "search_sources":
+            _add_search_sources(steps, suggestions, problem, intake, knowledge)
+        else:
+            _add_search_patterns(steps, suggestions, problem, intake, knowledge)
 
     _add_clarifying(steps, suggestions, intake)
 
+    used = planner_state.status == "used"
     return AgentTrace(
-        version="0.2",
+        version="0.3",
         session_id=session_id,
-        mode="rules",
+        mode="llm" if used else "rules",
+        planner=planner_state,
         steps=tuple(steps[:MAX_AGENT_STEPS]),
         suggestions=tuple(suggestions[:MAX_AGENT_STEPS]),
         reflection=_build_reflection(intake, suggestions),
@@ -166,6 +209,89 @@ def run_agent_trace(
         ),
         notice=_NOTICE,
     )
+
+
+def _rule_action(intake: DomainIntake) -> AgentPlanningTool:
+    """The existing deterministic choice, unchanged when the planner is off."""
+
+    if intake.profile.framework is IntakeFramework.DECISION:
+        return "compare_options"
+    if intake.profile.name in {"writing", "research"}:
+        return "search_sources"
+    return "search_patterns"
+
+
+def _candidate_tools(
+    intake: DomainIntake,
+    knowledge: KnowledgeService,
+) -> tuple[AgentPlanningTool, ...]:
+    """Framework-appropriate tools that can actually produce a step now.
+
+    Retrieval tools are only candidates while RAG is enabled, because the
+    planner must not pick a tool whose only possible outcome is ``skipped``.
+    ``check_structure``/``ask_clarifying`` are fixed steps and execution tools
+    need an explicit submission, so none of them is offered to the planner.
+    """
+
+    if intake.profile.framework is IntakeFramework.DECISION:
+        tools: tuple[AgentPlanningTool, ...] = ("compare_options",)
+        return tools + (("search_patterns",) if knowledge.enabled else ())
+    if intake.profile.name in {"writing", "research"}:
+        tools = ("search_sources",) if knowledge.enabled else ()
+        return tools + (("search_patterns",) if knowledge.enabled else ())
+    return ("search_patterns",) if knowledge.enabled else ()
+
+
+def _plan_action(
+    planner: ToolPlanner | None,
+    planner_off_reason: str,
+    intake: DomainIntake,
+    knowledge: KnowledgeService,
+) -> tuple[AgentPlanningTool, AgentPlannerState]:
+    """Ask the planner for one step, or use the rule choice.
+
+    Every non-``used`` outcome returns the rule choice. The planner is skipped
+    entirely when it was never constructed (flag off / no key / shadow), when
+    RAG is off, or when no candidate tool could run.
+    """
+
+    fallback = _rule_action(intake)
+    if planner is None:
+        return fallback, AgentPlannerState("off", planner_off_reason)
+    if not knowledge.enabled:
+        return fallback, AgentPlannerState("off", "rag_off")
+
+    tools = _candidate_tools(intake, knowledge)
+    if fallback not in tools:
+        # Defensive: the rule choice must stay available even if candidate
+        # construction changes, otherwise a model failure could remove a step.
+        tools = (fallback, *tools)
+    if len(tools) <= 1:
+        # Nothing to choose; do not pay for a model round trip.
+        return fallback, AgentPlannerState("off", "single_tool")
+
+    context = PlannerContext(
+        domain=intake.profile.name,
+        label=intake.profile.label,
+        verification=intake.profile.verification.value,
+        framework=intake.profile.framework.value,
+        observed=tuple(intake.observed),
+        gaps=tuple(intake.gaps),
+        tools=tools,
+        decision=intake.profile.framework is IntakeFramework.DECISION,
+    )
+    try:
+        chosen = planner.choose(context)
+    except PlannerRejected as exc:
+        return fallback, AgentPlannerState("fallback", exc.reason)
+    except Exception:  # tool boundary: a broken adapter must not crash the trace
+        return fallback, AgentPlannerState("fallback", "unavailable")
+
+    if chosen is None:
+        return fallback, AgentPlannerState("fallback", "no_choice")
+    if chosen not in tools or chosen not in PLANNER_TOOLS:
+        return fallback, AgentPlannerState("fallback", "tool_not_allowed")
+    return chosen, AgentPlannerState("used", "selected", chosen)
 
 
 def _build_reflection(

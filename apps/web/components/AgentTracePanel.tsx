@@ -9,9 +9,10 @@ import type { AgentStep, AgentTrace, VerificationMode } from "@/src/lib/api/type
 /**
  * 工具轨迹面板：让「系统做了什么」可见，但不把轨迹包装成诊断。
  *
- * v0.2 固定最多 3 步，只调用白名单里的只读工具；面板不展示思维链、不展示
- * 学生原文，也不把任何一步读成「答对了」。代码框只接收用户自己粘贴的最小
- * 复现；执行开关关闭时，后端会如实返回 skipped，面板不会把它说成通过。
+ * v0.3 固定最多 3 步，只调用白名单里的只读工具；首末两步由规则固定，中间一步
+ * 可选由规划器在白名单里选，失败/超时/非法工具/RAG 关闭时回退规则。面板不展示
+ * 思维链、不展示学生原文，也不把任何一步读成「答对了」。代码框只接收用户自己
+ * 粘贴的最小复现；执行开关关闭时，后端会如实返回 skipped，面板不会把它说成通过。
  * reflection 只复述结构缺口与工具状态，不是卡点结论，也不排序选项。
  */
 
@@ -30,6 +31,35 @@ const STATUS_LABEL: Record<AgentStep["status"], string> = {
   skipped: "未运行",
   failed: "失败",
 };
+
+const PLANNER_REASON_LABEL: Record<string, string> = {
+  planner_off: "规划器开关未开启（默认）",
+  llm_off: "模型路径关闭",
+  no_api_key: "没有 API key，未调用模型",
+  shadow: "影子模式不改展示",
+  rag_off: "RAG 关闭，不做检索规划",
+  single_tool: "本轮只有一个可用工具，无需规划",
+  explicit_code: "代码由你显式提交，不经过规划",
+  timeout: "规划超时，已回退规则",
+  bad_json: "规划输出不是合法 JSON，已回退规则",
+  tool_not_allowed: "规划器给了白名单外的工具，已回退规则",
+  transport: "规划服务不可达，已回退规则",
+  no_choice: "规划器没有给出选择，已回退规则",
+  unavailable: "规划器不可用，已回退规则",
+  selected: "模型在白名单内选中",
+};
+
+function plannerNote(trace: AgentTrace): string {
+  if (trace.mode === "llm" && trace.planner.tool) {
+    return `中间一步由规划器从白名单选中「${TOOL_LABEL[trace.planner.tool]}」；首末两步仍是规则。`;
+  }
+  const reason =
+    PLANNER_REASON_LABEL[trace.planner.reason] ?? trace.planner.reason;
+  if (trace.planner.status === "fallback") {
+    return `中间一步由规则选择（规划器回退：${reason}）。`;
+  }
+  return `中间一步由规则选择（${reason}）。`;
+}
 
 interface AgentTracePanelProps {
   sessionId: string;
@@ -188,6 +218,13 @@ export function AgentTracePanel({
                     {trace.reflection.boundary}
                   </p>
                 </div>
+
+                <p className="sm-lab" style={{ marginTop: 22 }}>
+                  中间一步是谁选的
+                </p>
+                <p className="sm-note sm-note-quiet" style={{ marginTop: 8 }}>
+                  {plannerNote(trace)}
+                </p>
 
                 <p className="sm-lab" style={{ marginTop: 22 }}>
                   这次走过的步骤

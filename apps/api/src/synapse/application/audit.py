@@ -17,6 +17,7 @@ AuditKind = Literal[
     "shadow",
     "graph_build",
     "generic_graph_build",
+    "agent_plan",
     "step_verify",
 ]
 
@@ -46,6 +47,9 @@ class AuditEntry:
     subject: str = ""
     finding_count: int = 0
     step_chars: int = 0
+    # Agent planner only: the whitelisted tool the model picked, or "" when it
+    # picked nothing. The reason for a rejection lives in ``fallback_reason``.
+    agent_tool: str = ""
 
     def as_dict(self) -> dict[str, object]:
         return asdict(self)
