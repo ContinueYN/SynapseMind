@@ -223,8 +223,8 @@ def _add_search_sources(
         knowledge,
         tool="search_sources",
         source_only=True,
-        query_suffix="来源 文献 教材",
-        limit=5,
+        query_suffix="原始来源 论文 文献",
+        limit=8,
         no_rag="RAG 未开启；本轮没有外部来源，也不伪造引用。",
         empty="没有命中来源卡；本轮不伪造引用。",
         found="检索到 {count} 个来源；只作参考，不替代你的判断。",
@@ -296,7 +296,7 @@ def _add_knowledge_search(
         if source_only
         else result.hits
     )
-    citations = tuple(_citation(hit) for hit in hits)
+    citations = tuple(_citation(hit) for hit in hits[:3])
     if not citations:
         steps.append(
             AgentStep(

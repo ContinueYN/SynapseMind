@@ -118,7 +118,7 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 - 后验 `≥0.80` 且领先 `≥0.25` 才出卡；到轮次上限仍 `<0.55` 明确不出确定卡点。
 - `/intake` 只接受入口整理里的那一个澄清问题（body `{"answer": "..."}`，1–500 字）：把补充并入 `initial_answer`、重新派生 `observed`/`gaps`，然后让 `clarifier` 变成 `null`。如果补充明确说了“这是决策问题/代码问题/…”，会话的展示领域和清单会切到对应标签（只把 `domain_override` 存在会话上，不改提交的题面）；`domain_confidence` 记为 0.8，仍然没有验证。会话仍是 `CLOSED`，不推进状态、不出卡、不给答案；第二次补充返回 200 + notice「只接受一次」，没有待补充问题时返回 409，空白/超长返回 422。
 - `/intake/probe` 只回答当前那**一个**结构缺口（body `{"answer": "..."}`，1–500 字）：把补充并入 `initial_answer`、重新派生 `observed`/`gaps`，然后把 `intake.probe` 换成下一个缺口或 `null`。最多接受 3 次，一次只显示一个问题；没有待补充缺口、澄清问题还没回答或次数用完时返回 **409**，空白/超长返回 **422**。它不推进状态、不出卡、不给答案，不会因为这段补充重新判定领域，也不会判断对错。
-- `/agent` 只读（`specs/agent-trace.schema.json` v0.1）：只对没有参考结构的入口会话可用，已有图/卡点卡的会话返回 **409**；最多 3 步，v0.1 是确定性规则选择，不调模型。工具白名单是 `check_structure` / `search_patterns` / `search_sources` / `compare_options` / `ask_clarifying` / `run_code` / `run_tests`，没有读答案或推进状态的工具。写作/研究优先用 `search_sources` 查 `source` 类卡；没有来源卡时写 skipped，不把概念卡当来源。`status` 只表示工具调用状态（`ok`/`skipped`/`failed`），不是答案对错；RAG 未开启写 skipped，检索不可用写 failed。轨迹只含输入/输出摘要与引用，不含学生原文或思维链；`suggestions` 不排序、不推荐选项。
+- `/agent` 只读（`specs/agent-trace.schema.json` v0.1）：只对没有参考结构的入口会话可用，已有图/卡点卡的会话返回 **409**；最多 3 步，v0.1 是确定性规则选择，不调模型。工具白名单是 `check_structure` / `search_patterns` / `search_sources` / `compare_options` / `ask_clarifying` / `run_code` / `run_tests`，没有读答案或推进状态的工具。写作/研究优先用 `search_sources` 查 `source` 类卡；没有来源卡时写 skipped，不把概念卡当来源。`status` 只表示工具调用状态（`ok`/`skipped`/`failed`），不是答案对错；RAG 未开启时检索工具写 skipped，检索不可用写 failed。轨迹只含输入/输出摘要与引用，不含学生原文或思维链；`suggestions` 不排序、不推荐选项。
 - `/agent/run` 只接受显式提交的 Python（`specs/agent-run.schema.json` v0.1），`tests` 必须和 `code` 一起提交；只有 `EXECUTABLE` 框架接受代码，不从题面自动抽代码。它和 `/executions` 共用 `SYNAPSE_EXEC` 开关与受限本地执行器：关闭时轨迹里是 **skipped（没有运行）**，不是 `pass`；执行结果只进轨迹摘要和可逆实验建议，不写会话、不读答案库、不出诊断卡。`pass` 仍只表示退出码 0 或提交的测试通过。
 - `/steps` 只验证提交的这一步（`specs/step-verification.schema.json`）：不推进状态、不出卡；`unknown` 表示未启用/读不懂/没有可判的断言，不是“这步正确”。
 - `/review/items` 只读（`specs/review-queue.schema.json`）：只返回卡面结论与位置，不含学生原文；没有鉴权，判断也不写回服务端——教师在浏览器里标记后自行导出 CSV。
@@ -166,9 +166,9 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 
 - 默认**关闭**。开启需要本地 ONNX 模型，不依赖 DeepSeek（DeepSeek 只提供 chat）。
 - 模型：`BAAI/bge-small-zh-v1.5`，512 维，约 90 MB；`fastembed` 在 CPU 上跑，首次运行下载到 `SYNAPSE_EMBED_CACHE`（默认 `~/.cache/synapsemind/fastembed`）。
-- 语料：`src/synapse/infrastructure/knowledge/corpus.jsonl`，当前 80 张跨领域卡（36 数学 / 20 物理 / 6 编程 / 6 写作 / 6 研究 / 4 决策 / 2 学习），每张都带 `source.title/url/license`，可选 `kind`/`verifications`（旧卡按 subject 保守推断）。改语料后重启 API 重建索引；向量不落库。
-- 检索：按 `q` + 可选 `subject` + 可选 `verification` 过滤，余弦相似度线性扫描，默认取前 3 条、分数低于 `0.55` 的不返回。阈值由评测标定：80 张语料下无关查询最高 0.490，最弱的相关查询 0.608，`0.35` 会让六条无关查询全部通过。语料只有几十张，暂不引入 pgvector；`KnowledgeRetriever` 端口保留替换点。
-- 评测：`python scripts/eval/knowledge_retrieval.py` 用固定 92 条概念查询跑 top-1 / top-3、subject/verification 过滤、无关查询拒答与阈值扫描（top-1 78/80、top-3 80/80、过滤 6/6、拒答 6/6）；`--check` 不加载模型，只校验语料和查询集。报告写到 `eval/reports/`（不入公开树），含语料/查询集哈希和复现命令。
+- 语料：`src/synapse/infrastructure/knowledge/corpus.jsonl`，当前 82 张跨领域卡（36 数学 / 20 物理 / 7 编程 / 7 写作 / 6 研究 / 4 决策 / 2 学习），每张都带 `source.title/url/license`，可选 `kind`/`verifications`（旧卡按 subject 保守推断）；另有 3 张 `source` 类卡供 `search_sources` 使用。改语料后重启 API 重建索引；向量不落库。
+- 检索：按 `q` + 可选 `subject` + 可选 `verification` 过滤，余弦相似度线性扫描，默认取前 3 条、分数低于 `0.55` 的不返回。阈值由评测标定：82 张语料下无关查询最高 0.490，最弱的相关查询 0.608，`0.35` 会让六条无关查询全部通过。语料只有几十张，暂不引入 pgvector；`KnowledgeRetriever` 端口保留替换点。
+- 评测：`python scripts/eval/knowledge_retrieval.py` 用固定 94 条概念查询跑 top-1 / top-3、subject/verification 过滤、无关查询拒答与阈值扫描（top-1 80/82、top-3 82/82、过滤 6/6、拒答 6/6）；`--check` 不加载模型，只校验语料和查询集。报告写到 `eval/reports/`（不入公开树），含语料/查询集哈希和复现命令。
 - 前端在诊断页、入口页和卡点卡页渲染 `KnowledgePanel`，标题前标出卡片类型；`enabled=false`、无命中或请求失败时整块隐藏，不遮挡诊断。通用入口只用 `intake.domain` 的系统标签检索领域级框架；澄清把它改成决策/代码后，检索过滤也跟随该标签。
 - 来源维护检查（**不是运行时校验**）：`python scripts/checks/check_knowledge_sources.py` 只检查 URL 主机、凭据和 license 前缀；加 `--fetch` 才会对语料里的每个唯一 URL 发 HEAD（被拒时用 Range GET 重试），报告可达性/重定向/超时。命令从仓库根运行，可访问性只说明这次网络请求到了哪里，不证明卡片内容正确；Wikipedia 在部分网络下会超时，不能据此判定来源失效。
 

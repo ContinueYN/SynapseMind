@@ -90,3 +90,5 @@
 {"id":"Q78","kind":"relevant","text":"机会成本 最佳替代 选择","subject":"decision","expect":["K_DECISION_OPPORTUNITY_COST"]}
 {"id":"Q79","kind":"relevant","text":"基准率 贝叶斯 先验","subject":"decision","expect":["K_DECISION_BASE_RATE"]}
 {"id":"Q80","kind":"relevant","text":"分散练习 间隔 交错 保持","subject":"learning","expect":["K_LEARN_SPACING"]}
+{"id":"Q81","kind":"relevant","text":"写作指南 论证 证据 结构","subject":"writing","expect":["K_SOURCE_WRITING_GUIDE"]}
+{"id":"Q82","kind":"relevant","text":"Python 异常 调用栈 官方文档","subject":"programming","expect":["K_SOURCE_PROGRAMMING_ERRORS"]}
