@@ -22,6 +22,7 @@ from synapse.api.mappers import (
     step_verdict_out,
 )
 from synapse.api.schemas import (
+    ClarifierRequest,
     CreateSessionRequest,
     DiagnosisOut,
     ExecutionOut,
@@ -51,6 +52,7 @@ from synapse.application.knowledge import KnowledgeService, KnowledgeUnavailable
 from synapse.application.limits import StepRateLimited
 from synapse.application.review import ReviewService
 from synapse.application.service import (
+    ClarifierUnavailable,
     DiagnosisNotReady,
     InvalidAnswer,
     SessionNotFound,
@@ -198,6 +200,38 @@ def get_session(
         view = service.get(session_id)
     except SessionNotFound as exc:
         raise HTTPException(status_code=404, detail="session not found") from exc
+    return _session_out(view, service)
+
+
+@router.post("/sessions/{session_id}/intake", response_model=SessionOut)
+def answer_intake_clarifier(
+    session_id: str,
+    request: ClarifierRequest,
+    service: SessionService = Depends(get_service),
+) -> SessionOut:
+    """Append the one allowed clarification to a reference-free intake.
+
+    The session stays closed; this does not probe, diagnose, or reveal an
+    answer. A second attempt returns 409 (or the current view with a notice if
+    the first one already stored the flag).
+    """
+
+    try:
+        view = service.answer_clarifier(session_id, request.answer)
+    except SessionNotFound as exc:
+        raise HTTPException(status_code=404, detail="session not found") from exc
+    except ClarifierUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="这次入口没有待补充的问题，或补充机会已经用过。",
+        ) from exc
+    except InvalidAnswer as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except SessionConflict as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"会话已被另一个请求更新，请刷新后重试（{exc}）。",
+        ) from exc
     return _session_out(view, service)
 
 

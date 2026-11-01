@@ -279,6 +279,12 @@ class ExitRequest(StrictModel):
     reveal: bool = False
 
 
+class ClarifierRequest(StrictModel):
+    """One answer to the intake's single clarifying question."""
+
+    answer: str = Field(min_length=1, max_length=500)
+
+
 class StepRequest(StrictModel):
     """One step to verify; ``data`` is a subject-owned structured payload.
 

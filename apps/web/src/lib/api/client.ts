@@ -92,6 +92,20 @@ export function submitTurn(
   );
 }
 
+/**
+ * Append the intake's one clarification. The session stays closed: this only
+ * updates what the intake derives from the student's words.
+ */
+export function answerClarifier(
+  sessionId: string,
+  answer: string,
+): Promise<SessionResponse> {
+  return request<SessionResponse>(
+    `/api/v1/sessions/${encodeURIComponent(sessionId)}/intake`,
+    { method: "POST", body: JSON.stringify({ answer }) },
+  );
+}
+
 /** Verify one step; read-only, so it never advances the dialogue. */
 export function verifyStep(
   sessionId: string,

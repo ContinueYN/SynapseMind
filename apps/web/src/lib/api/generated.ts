@@ -129,6 +129,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sessions/{session_id}/intake": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Answer Intake Clarifier
+         * @description Append the one allowed clarification to a reference-free intake.
+         *
+         *     The session stays closed; this does not probe, diagnose, or reveal an
+         *     answer. A second attempt returns 409 (or the current view with a notice if
+         *     the first one already stored the flag).
+         */
+        post: operations["answer_intake_clarifier_api_v1_sessions__session_id__intake_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sessions/{session_id}/steps": {
         parameters: {
             query?: never;
@@ -274,6 +298,14 @@ export interface components {
              */
             disagree: boolean;
             attribution?: components["schemas"]["AttributionOut"] | null;
+        };
+        /**
+         * ClarifierRequest
+         * @description One answer to the intake's single clarifying question.
+         */
+        ClarifierRequest: {
+            /** Answer */
+            answer: string;
         };
         /** CreateSessionRequest */
         CreateSessionRequest: {
@@ -1019,6 +1051,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    answer_intake_clarifier_api_v1_sessions__session_id__intake_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClarifierRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

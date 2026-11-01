@@ -161,6 +161,69 @@ def test_a_generic_session_has_no_answer_to_reveal(client: TestClient) -> None:
     assert body["intake"] is not None
 
 
+def test_the_single_clarifier_can_be_answered_once(client: TestClient) -> None:
+    created = _start(client, UNKNOWN)
+    session_id = created["session_id"]
+    assert created["intake"]["clarifier"] is not None
+
+    response = client.post(
+        f"/api/v1/sessions/{session_id}/intake",
+        json={"answer": "我纠结要不要换城市工作：要么留下，要么跳槽，但我担心收入下降。"},
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    # The one question is used up; the session stays closed and undiagnosed.
+    assert body["state"] == "CLOSED"
+    assert body["intake"]["clarifier"] is None
+    assert body["diagnosis"] is None
+    assert "不定位卡点" in body["notice"]
+    assert body["intake"]["observed"]
+
+    reloaded = client.get(f"/api/v1/sessions/{session_id}").json()
+    assert reloaded["intake"]["clarifier"] is None
+    assert reloaded["intake"]["observed"] == body["intake"]["observed"]
+    assert reloaded["intake"]["gaps"] == body["intake"]["gaps"]
+
+    # A second clarification is not appended; it returns the current view.
+    second = client.post(
+        f"/api/v1/sessions/{session_id}/intake",
+        json={"answer": "再补充一句。"},
+    )
+    assert second.status_code == 200, second.text
+    assert "只接受一次补充" in second.json()["notice"]
+    assert second.json()["intake"]["gaps"] == body["intake"]["gaps"]
+
+
+def test_a_confident_intake_rejects_a_clarifier(client: TestClient) -> None:
+    created = _start(client, CODE)
+    assert created["intake"]["clarifier"] is None
+
+    response = client.post(
+        f"/api/v1/sessions/{created['session_id']}/intake",
+        json={"answer": "补充一句。"},
+    )
+
+    assert response.status_code == 409, response.text
+
+
+def test_a_blank_or_oversized_clarifier_is_rejected(client: TestClient) -> None:
+    created = _start(client, UNKNOWN)
+    session_id = created["session_id"]
+
+    blank = client.post(
+        f"/api/v1/sessions/{session_id}/intake",
+        json={"answer": "   "},
+    )
+    assert blank.status_code == 422, blank.text
+
+    oversized = client.post(
+        f"/api/v1/sessions/{session_id}/intake",
+        json={"answer": "补" * 501},
+    )
+    assert oversized.status_code == 422, oversized.text
+
+
 def test_a_generic_session_does_not_accept_probe_answers(client: TestClient) -> None:
     created = _start(client, DECISION)
 

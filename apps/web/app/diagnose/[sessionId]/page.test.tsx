@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import DiagnosePage from "./page";
 import {
+  answerClarifier,
   ApiError,
   exitSession,
   getSession,
@@ -39,6 +40,7 @@ vi.mock("@/src/lib/api/client", () => {
   return {
     ApiError,
     API_BASE: "http://localhost:8000",
+    answerClarifier: vi.fn(),
     getSession: vi.fn(),
     submitTurn: vi.fn(),
     exitSession: vi.fn(),
@@ -213,6 +215,7 @@ describe("DiagnosePage generic entry", () => {
     vi.mocked(getSession).mockReset();
     vi.mocked(submitTurn).mockReset();
     vi.mocked(exitSession).mockReset();
+    vi.mocked(answerClarifier).mockReset();
     vi.mocked(searchKnowledge).mockReset();
     vi.mocked(searchKnowledge).mockResolvedValue({
       version: "0.2",
@@ -238,6 +241,37 @@ describe("DiagnosePage generic entry", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByText(/系统把握/)).not.toBeInTheDocument();
     expect(screen.getByText("通用问题（通用）")).toBeInTheDocument();
+  });
+
+  it("submits the single clarification and shows the updated intake", async () => {
+    vi.mocked(getSession).mockResolvedValueOnce(GENERIC);
+    vi.mocked(answerClarifier).mockResolvedValueOnce({
+      ...GENERIC,
+      notice: "补充已并入入口整理；它仍然只说明你提到了什么，不定位卡点。",
+      intake: {
+        ...GENERIC_INTAKE,
+        clarifier: null,
+        observed: ["目标"],
+      },
+    });
+
+    const user = userEvent.setup();
+    render(<DiagnosePage />);
+
+    await screen.findByText("入口整理 · 不定位卡点");
+    await user.type(
+      screen.getByLabelText("补充一句"),
+      "这更像一个生活决策：我要不要换城市工作。",
+    );
+    await user.click(screen.getByRole("button", { name: /并入入口整理/ }));
+
+    expect(answerClarifier).toHaveBeenCalledWith(
+      "S_CONFLICT",
+      "这更像一个生活决策：我要不要换城市工作。",
+    );
+    expect(await screen.findByText(/补充已并入入口整理/)).toBeInTheDocument();
+    expect(screen.queryByText(/只问一个/)).not.toBeInTheDocument();
+    expect(screen.getByText(/你写的里面看到了：目标/)).toBeInTheDocument();
   });
 
   it("labels a confident domain without calling it generic", async () => {

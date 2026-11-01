@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState, type FormEvent } from "react";
 
 import { Surface } from "@/components/Surface";
 import type { DomainIntake } from "@/src/lib/api/types";
@@ -59,9 +60,21 @@ const CHECK_STATUS: Record<IntakeCheck["status"], string> = {
 interface IntakeViewProps {
   intake: DomainIntake;
   sessionId: string;
+  notice?: string;
+  busy?: boolean;
+  /** When present, the single clarifying question becomes answerable once. */
+  onClarify?: (answer: string) => Promise<void>;
 }
 
-export function IntakeView({ intake, sessionId }: IntakeViewProps) {
+export function IntakeView({
+  intake,
+  sessionId,
+  notice,
+  busy = false,
+  onClarify,
+}: IntakeViewProps) {
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
   const domain = intake.domain;
   const mode = MODE_LABEL[domain.verification];
   const confidence = Math.round(domain.confidence * 100);
@@ -72,6 +85,21 @@ export function IntakeView({ intake, sessionId }: IntakeViewProps) {
   const graph = intake.graph ?? [];
   const verifications = intake.verifications ?? [];
   const origin = intake.origin ?? null;
+
+  async function clarify(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const text = draft.trim();
+    if (!text || !onClarify || sending || busy) return;
+    setSending(true);
+    try {
+      await onClarify(text);
+      setDraft("");
+    } catch {
+      // The parent surfaces the request error; keep the draft so it is not lost.
+    } finally {
+      setSending(false);
+    }
+  }
 
   return (
     <Surface>
@@ -188,8 +216,44 @@ export function IntakeView({ intake, sessionId }: IntakeViewProps) {
         ) : null}
 
         {intake.clarifier ? (
-          <p className="sm-note" style={{ marginTop: 16 }}>
-            {intake.clarifier}
+          <>
+            <p className="sm-note" style={{ marginTop: 16 }}>
+              {intake.clarifier}
+            </p>
+            {onClarify ? (
+              <form className="sm-form" onSubmit={clarify} style={{ marginTop: 16 }}>
+                <label className="sm-f">
+                  <span className="sm-f-label">补充一句</span>
+                  <textarea
+                    disabled={sending || busy}
+                    maxLength={500}
+                    onChange={(event) => setDraft(event.target.value)}
+                    placeholder="用一句话回答上面的问题；不写也可以先离开"
+                    rows={2}
+                    value={draft}
+                  />
+                </label>
+                <div className="sm-form-foot">
+                  <button
+                    className="sm-cta"
+                    disabled={sending || busy || !draft.trim()}
+                    type="submit"
+                  >
+                    {sending ? "正在并入" : "并入入口整理"}
+                    <span aria-hidden="true" className="sm-ar">
+                      →
+                    </span>
+                  </button>
+                  <span className="sm-fine">只补充一次，仍然不定位卡点。</span>
+                </div>
+              </form>
+            ) : null}
+          </>
+        ) : null}
+
+        {notice ? (
+          <p className="sm-note" role="status" style={{ marginTop: 16 }}>
+            {notice}
           </p>
         ) : null}
 

@@ -55,6 +55,11 @@ class DialogueSession:
     # not widen what the snapshot holds in kind, only what the reference-free
     # path keeps. Empty for sessions created before this field existed.
     initial_answer: str = ""
+    # A reference-free session may ask at most one clarifying question. Once the
+    # student appends an answer, the derived intake stops asking; the flag is
+    # stored so a reload cannot re-open the same question or accept a second
+    # answer. False for sessions created before this field existed.
+    clarifier_answered: bool = False
     # Optimistic-concurrency token owned by the repository adapter. 0 means
     # "not stored yet"; each successful save increments it. It is internal
     # storage metadata and is never exposed by the HTTP API.

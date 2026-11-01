@@ -163,6 +163,17 @@ def test_snapshot_round_trip_carries_version_and_revision() -> None:
     assert decode_session(snapshot).revision == 3
 
 
+def test_snapshot_round_trip_carries_the_used_clarifier_flag() -> None:
+    session = _minimal_session()
+    session.clarifier_answered = True
+    session.initial_answer = "不知道\n我纠结要不要换城市工作。"
+
+    restored = decode_session(encode_session(session))
+
+    assert restored.clarifier_answered is True
+    assert restored.initial_answer == "不知道\n我纠结要不要换城市工作。"
+
+
 def test_legacy_session_snapshot_is_rejected_with_a_migration_hint() -> None:
     legacy = _legacy_session(encode_session(_minimal_session()))
 

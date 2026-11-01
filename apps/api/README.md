@@ -100,6 +100,7 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 | `POST` | `/api/v1/sessions` | 交题 + 过程，返回首问 |
 | `GET` | `/api/v1/sessions/{id}` | 恢复会话/当前问题 |
 | `POST` | `/api/v1/sessions/{id}/turns` | 回答当前探针 |
+| `POST` | `/api/v1/sessions/{id}/intake` | 入口整理的唯一一次补充（不推进会话、不出卡） |
 | `POST` | `/api/v1/sessions/{id}/steps` | 验证一条步骤（只读，不推进会话） |
 | `POST` | `/api/v1/sessions/{id}/card/disagree` | 记录卡点卡异议（写回会话 + 本地复核队列） |
 | `GET` | `/api/v1/review/items` | 只读列出异议队列（不含学生原文） |
@@ -112,6 +113,7 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 - `option_id` 为 `A`–`D` 或 `unknown`；文本答案也可匹配选项。
 - 一次只返回一个 `prompt.question`；最多 6 轮。
 - 后验 `≥0.80` 且领先 `≥0.25` 才出卡；到轮次上限仍 `<0.55` 明确不出确定卡点。
+- `/intake` 只接受入口整理里的那一个澄清问题（body `{"answer": "..."}`，1–500 字）：把补充并入 `initial_answer`、重新派生 `observed`/`gaps`，然后让 `clarifier` 变成 `null`。会话仍是 `CLOSED`，不推进状态、不出卡、不给答案；第二次补充返回 200 + notice「只接受一次」，没有待补充问题时返回 409，空白/超长返回 422。
 - `/steps` 只验证提交的这一步（`specs/step-verification.schema.json`）：不推进状态、不出卡；`unknown` 表示未启用/读不懂/没有可判的断言，不是“这步正确”。
 - `/review/items` 只读（`specs/review-queue.schema.json`）：只返回卡面结论与位置，不含学生原文；没有鉴权，判断也不写回服务端——教师在浏览器里标记后自行导出 CSV。
 - `/knowledge/search` 只读（`specs/knowledge-search.schema.json` v0.2）：`q` 是概念标签，不是学生作答原文；`subject` 是开放标签（1–40 字符），可选 `verification` 过滤（formal/executable/empirical/argumentative）；返回卡片的五类 `kind`、`subject`、`verifications`、标题、摘录、出处（title/url/license）和余弦分数。`enabled=false` 表示 `SYNAPSE_RAG` 未开启；开启但模型不可用时返回 **503**，不会静默返回空结果。
@@ -125,8 +127,8 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 
 - 同一个文件存**会话快照**和**运行时生成的题**（标注种子题仍来自 `seed.py`）。只存会话不存生成题的话，重启后生成题会话就找不到自己的图；生成题图首次写入后优先复用，换生成器/prompt 后删文件才会重建。
 - 快照是版本化 JSON（`infrastructure/snapshots.py`），不是 `pickle`；损坏或版本不匹配会抛 `SnapshotError`，不会静默读成半条会话。
-- 快照包含学生探针回答、证据链和 `work_findings`（学生自己的式子），因此这个文件是**本地学生数据**：`var/` 已忽略，没有 TTL/加密/清理任务，删文件即清空。
-- 每个操作独立连接，没有读改写锁；同一会话的并发请求是 last-write-wins。这是本机单用户工具的边界，不是多教师并发方案。
+- 快照包含学生探针回答、证据链、`initial_answer`（含最多一次澄清补充）和 `work_findings`（学生自己的式子），因此这个文件是**本地学生数据**：`var/` 已忽略，没有 TTL/加密/清理任务，删文件即清空。
+- 每个操作独立连接；同一会话的写入是 compare-and-swap（`revision`），过期写返回 **409**，不会覆盖新状态；服务层不自动重试。SQLite 仍是单写者，多进程下 CAS 只保证不丢更新，不保证吞吐。这是本机单用户工具的边界，不是多教师并发方案。
 - 没有 PostgreSQL、Alembic、Redis；`ProblemRepository` / `SessionRepository` 端口不变，换 PostgreSQL 时只换适配器。
 
 ## LLM 追问（M2）

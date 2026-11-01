@@ -67,6 +67,10 @@ class InvalidAnswer(ValueError):
     pass
 
 
+class ClarifierUnavailable(RuntimeError):
+    """The intake has no open clarifying question (or already used its one)."""
+
+
 @dataclass(frozen=True, slots=True)
 class Reveal:
     """Only produced for an explicit exit request; never part of a probe turn."""
@@ -230,6 +234,43 @@ class SessionService:
             diagnosis=session.diagnosis,
             hint=self._hint(session),
             intake=self._intake_for(session),
+        )
+
+    def answer_clarifier(self, session_id: str, answer: str) -> SessionView:
+        """Append the one allowed clarification to a reference-free intake.
+
+        This is not a probe and not a state transition: the session stays closed,
+        no diagnosis is produced, and the text is only used to re-derive
+        ``observed``/``gaps``. At most one clarification is accepted; a second
+        call returns the current view with a notice instead of silently
+        accumulating prose.
+        """
+
+        session = self._get(session_id)
+        intake = self._intake_for(session)
+        if intake is None or intake.clarifier is None:
+            if intake is not None and session.clarifier_answered:
+                return SessionView(
+                    session=session,
+                    intake=intake,
+                    notice="这次入口只接受一次补充；补充已经并入入口整理。",
+                )
+            raise ClarifierUnavailable("this intake has no open clarifying question")
+
+        cleaned = answer.strip()
+        if not cleaned:
+            raise InvalidAnswer("clarification answer is empty")
+        if len(cleaned) > 500:
+            raise InvalidAnswer("clarification answer is too long")
+
+        parts = [part for part in (session.initial_answer.strip(), cleaned) if part]
+        session.initial_answer = "\n".join(parts)
+        session.clarifier_answered = True
+        self._sessions.save(session)
+        return SessionView(
+            session=session,
+            intake=self._intake_for(session),
+            notice="补充已并入入口整理；它仍然只说明你提到了什么，不定位卡点。",
         )
 
     def mark_card_disagree(self, session_id: str) -> DiagnosisCard:
@@ -704,7 +745,12 @@ class SessionService:
         if not self._is_reference_free(problem):
             return None
         profile = self._domains.profile_for(problem.subject)
-        return build_domain_intake(problem, profile, session.initial_answer)
+        return build_domain_intake(
+            problem,
+            profile,
+            session.initial_answer,
+            clarifier_answered=session.clarifier_answered,
+        )
 
     def _hint(self, session: DialogueSession) -> StructureHint | None:
         """Rebuild the structure hint for a NONE-tier session.

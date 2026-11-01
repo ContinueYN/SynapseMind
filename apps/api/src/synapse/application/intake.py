@@ -210,7 +210,11 @@ _NO_EMPIRICAL_CHECK = "有结构化声明，但这次没有运行经验验证器
 
 
 def build_domain_intake(
-    problem: Problem, profile: DomainProfile, attempt: str = ""
+    problem: Problem,
+    profile: DomainProfile,
+    attempt: str = "",
+    *,
+    clarifier_answered: bool = False,
 ) -> DomainIntake:
     """Compose the intake for a reference-free problem.
 
@@ -262,7 +266,7 @@ def build_domain_intake(
         origin=origin,
         graph=_intake_nodes(structure),
         verifications=_verifications(profile, structure, problem.generic_checks),
-        clarifier=_CLARIFIER if confidence < MIN_CONFIDENCE else None,
+        clarifier=(_CLARIFIER if confidence < MIN_CONFIDENCE and not clarifier_answered else None),
         next_step=copy.next_step,
         disclaimer=disclaimer,
     )

@@ -18,6 +18,7 @@ import { Surface } from "@/components/Surface";
 import { ProbeCard } from "@/components/ProbeCard";
 import { Thread } from "@/components/Thread";
 import {
+  answerClarifier,
   ApiError,
   API_BASE,
   exitSession,
@@ -97,11 +98,13 @@ export default function DiagnosePage() {
     probeRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [session]);
 
-  async function refreshAfterConflict(action: "answer" | "exit") {
+  async function refreshAfterConflict(action: "answer" | "exit" | "clarify") {
     const message =
       action === "answer"
         ? "这次回答没有提交：会话已在另一个窗口更新，已刷新到最新状态。请先看清当前页面再继续。"
-        : "退出没有生效：会话已在另一个窗口更新。已刷新到最新状态。";
+        : action === "clarify"
+          ? "这次补充没有提交：会话已在另一个窗口更新，已刷新到最新状态。"
+          : "退出没有生效：会话已在另一个窗口更新。已刷新到最新状态。";
     try {
       const latest = await getSession(sessionId);
       setSession(latest);
@@ -136,6 +139,25 @@ export default function DiagnosePage() {
     } finally {
       setBusy(false);
       setPending(null);
+    }
+  }
+
+  async function sendClarifier(answer: string) {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setSession(await answerClarifier(sessionId, answer));
+    } catch (caught) {
+      if (isSessionConflict(caught)) {
+        await refreshAfterConflict("clarify");
+      } else {
+        setError(caught instanceof Error ? caught.message : "补充没有提交，请重试。");
+      }
+      // Keep the student's draft in IntakeView when the request failed.
+      throw caught;
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -406,7 +428,13 @@ export default function DiagnosePage() {
               <StructureHintView hint={hint} sessionId={sessionId} />
             ) : intake ? (
               <>
-                <IntakeView intake={intake} sessionId={sessionId} />
+                <IntakeView
+                  busy={busy}
+                  intake={intake}
+                  notice={session.notice ?? undefined}
+                  onClarify={sendClarifier}
+                  sessionId={sessionId}
+                />
                 <KnowledgePanel
                   query={intake.domain.label}
                   subject={session.subject}
