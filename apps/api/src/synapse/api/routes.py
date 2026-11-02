@@ -104,7 +104,11 @@ def health() -> HealthOut:
     return HealthOut(version="0.1.0")
 
 
-@router.post("/executions", response_model=ExecutionOut)
+@router.post(
+    "/executions",
+    response_model=ExecutionOut,
+    dependencies=[Depends(require_authenticated)],
+)
 def run_code(
     request: ExecutionRequestIn,
     executor: CodeExecutor | None = Depends(get_executor),
@@ -116,6 +120,10 @@ def run_code(
     ``SYNAPSE_EXEC=on``; when off it returns 403 instead of pretending a run
     happened. ``pass`` means the process exited 0 or the submitted tests passed,
     never that the answer is correct.
+
+    With ``SYNAPSE_AUTH=on`` the middleware rejects a missing cookie with 401
+    before this body runs, even when execution is enabled; with the flag off the
+    dependency is a no-op and the 403/execute behaviour is unchanged.
     """
 
     if executor is None:
@@ -140,15 +148,23 @@ def run_code(
     return execution_out(result)
 
 
-@router.get("/review/items", response_model=ReviewItemsOut)
+@router.get(
+    "/review/items",
+    response_model=ReviewItemsOut,
+    dependencies=[Depends(require_authenticated)],
+)
 def list_review_items(
     review: ReviewService = Depends(get_review_service),
 ) -> ReviewItemsOut:
     """Read-only listing of disagreed cards for the internal review page.
 
-    There is no write endpoint and no authentication yet: the queue is a local
-    SQLite file, and the page exports the reviewer's judgment as a CSV instead
-    of storing it. The response never contains the student's own work.
+    There is no write endpoint and no per-owner filtering: the queue is a local
+    SQLite file. With ``SYNAPSE_AUTH=on`` the middleware requires a session, so
+    an anonymous caller gets 401; any logged-in account can read the global
+    queue (this is the internal operator view, not a per-user resource). With
+    auth off the listing is the local baseline and answers 200. The page
+    exports the reviewer's judgment as a CSV instead of storing it, and the
+    response never contains the student's own work.
     """
 
     return review_items_out(review.items())

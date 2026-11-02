@@ -27,7 +27,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, inspect, select
 
 from alembic import command
-from synapse.api.deps import Container
+from synapse.api.deps import Container, build_container
 from synapse.api.main import create_app
 from synapse.application.auth import (
     LOGIN_TICKET_PREFIX,
@@ -36,6 +36,7 @@ from synapse.application.auth import (
     SessionReuseDetected,
     hash_session_token,
 )
+from synapse.application.execution import ExecutionResult, RunCodeCommand
 from synapse.infrastructure.auth.build import build_auth
 from synapse.infrastructure.auth.db import (
     AuthSessionRow,
@@ -47,6 +48,9 @@ from synapse.infrastructure.auth.passwords import Argon2PasswordHasher
 from synapse.infrastructure.auth.settings import (
     COOKIE_NAME,
     DEFAULT_DATABASE_URL,
+    DEFAULT_FAILURE_WINDOW_S,
+    DEFAULT_MAX_FAILURES_PER_EMAIL,
+    DEFAULT_MAX_FAILURES_PER_IP,
     DEFAULT_SESSION_TTL_S,
     AuthSettings,
 )
@@ -56,6 +60,7 @@ from synapse.infrastructure.auth.stores import (
     SqlUserStore,
 )
 from synapse.infrastructure.credentials.db import UserModelCredentialRow
+from synapse.infrastructure.features import FeatureFlags
 
 APPS_API = Path(__file__).resolve().parents[1]
 ALEMBIC_INI = APPS_API / "alembic.ini"
@@ -104,6 +109,23 @@ class AuthHarness:
         return cast(Container, self.app.state.container)
 
 
+class _PassThroughExecutor:
+    """A fake executor so the gated executions route can return 200."""
+
+    def __init__(self) -> None:
+        self.commands: list[RunCodeCommand] = []
+
+    def run(self, command: RunCodeCommand) -> ExecutionResult:
+        self.commands.append(command)
+        return ExecutionResult(
+            status="pass",
+            detail="ok",
+            exit_code=0,
+            duration_ms=1,
+            stdout="ok\n",
+        )
+
+
 @pytest.fixture()
 def make_auth_app(
     tmp_path: Path,
@@ -120,6 +142,10 @@ def make_auth_app(
         ttl_s: int = 3600,
         cookie_secure: bool = False,
         redis_url: str | None = None,
+        max_failures_per_ip: int = 10,
+        max_failures_per_email: int = 5,
+        failure_window_s: int = 300,
+        executor: object | None = None,
     ) -> AuthHarness:
         database = tmp_path / f"auth-{next(counter)}.sqlite3"
         url = _sqlite_url(database)
@@ -128,12 +154,23 @@ def make_auth_app(
         monkeypatch.setenv("SYNAPSE_AUTH_SESSION_TTL_S", str(ttl_s))
         monkeypatch.setenv("SYNAPSE_AUTH_ALLOW_SIGNUP", "on" if allow_signup else "off")
         monkeypatch.setenv("SYNAPSE_COOKIE_SECURE", "on" if cookie_secure else "off")
+        monkeypatch.setenv("SYNAPSE_AUTH_MAX_FAILURES_PER_IP", str(max_failures_per_ip))
+        monkeypatch.setenv("SYNAPSE_AUTH_MAX_FAILURES_PER_EMAIL", str(max_failures_per_email))
+        monkeypatch.setenv("SYNAPSE_AUTH_FAILURE_WINDOW_S", str(failure_window_s))
         if redis_url is None:
             monkeypatch.delenv("SYNAPSE_REDIS_URL", raising=False)
         else:
             monkeypatch.setenv("SYNAPSE_REDIS_URL", redis_url)
         _upgrade(url)
-        app = create_app()
+        if executor is None:
+            app = create_app()
+        else:
+            app = create_app(
+                build_container(
+                    features=FeatureFlags(execution=True),
+                    executor=executor,  # type: ignore[arg-type]
+                )
+            )
         containers.append(cast(Container, app.state.container))
         return AuthHarness(app=app, client=TestClient(app), database=database, url=url)
 
@@ -168,6 +205,9 @@ def test_settings_defaults_are_off(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.allow_signup is False
     assert settings.cookie_secure is False
     assert settings.session_ttl_s == DEFAULT_SESSION_TTL_S
+    assert settings.max_failures_per_ip == DEFAULT_MAX_FAILURES_PER_IP == 10
+    assert settings.max_failures_per_email == DEFAULT_MAX_FAILURES_PER_EMAIL == 5
+    assert settings.failure_window_s == DEFAULT_FAILURE_WINDOW_S == 300
     assert COOKIE_NAME == "synapse_session"
 
 
@@ -181,6 +221,9 @@ def test_settings_read_the_documented_env(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setenv("SYNAPSE_AUTH_ALLOW_SIGNUP", "on")
     monkeypatch.setenv("SYNAPSE_COOKIE_SECURE", "on")
     monkeypatch.setenv("SYNAPSE_AUTH_SESSION_TTL_S", "900")
+    monkeypatch.setenv("SYNAPSE_AUTH_MAX_FAILURES_PER_IP", "20")
+    monkeypatch.setenv("SYNAPSE_AUTH_MAX_FAILURES_PER_EMAIL", "7")
+    monkeypatch.setenv("SYNAPSE_AUTH_FAILURE_WINDOW_S", "120")
     settings = AuthSettings.from_env()
     assert settings.enabled is True
     assert settings.database_url.startswith("postgresql+psycopg://")
@@ -188,6 +231,9 @@ def test_settings_read_the_documented_env(monkeypatch: pytest.MonkeyPatch) -> No
     assert settings.allow_signup is True
     assert settings.cookie_secure is True
     assert settings.session_ttl_s == 900
+    assert settings.max_failures_per_ip == 20
+    assert settings.max_failures_per_email == 7
+    assert settings.failure_window_s == 120
 
 
 def test_settings_reject_a_bad_flag(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -202,6 +248,25 @@ def test_settings_validate_the_ttl(monkeypatch: pytest.MonkeyPatch) -> None:
         AuthSettings.from_env()
     monkeypatch.setenv("SYNAPSE_AUTH_SESSION_TTL_S", "0")
     with pytest.raises(ValueError, match="SYNAPSE_AUTH_SESSION_TTL_S"):
+        AuthSettings.from_env()
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "SYNAPSE_AUTH_MAX_FAILURES_PER_IP",
+        "SYNAPSE_AUTH_MAX_FAILURES_PER_EMAIL",
+        "SYNAPSE_AUTH_FAILURE_WINDOW_S",
+    ],
+)
+@pytest.mark.parametrize("raw", ["0", "-3", "later", "1.5"])
+def test_settings_validate_the_failure_buckets(
+    monkeypatch: pytest.MonkeyPatch,
+    name: str,
+    raw: str,
+) -> None:
+    monkeypatch.setenv(name, raw)
+    with pytest.raises(ValueError, match=name):
         AuthSettings.from_env()
 
 
@@ -372,6 +437,127 @@ def test_logout_without_a_cookie_is_idempotent(
 
 
 # --------------------------------------------------------------------------
+# Brute-force throttle (process-local, fixed window)
+# --------------------------------------------------------------------------
+
+
+def _wrong_login(client: TestClient, email: str = OWNER_EMAIL):
+    return client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": "wrong-password"},
+    )
+
+
+def test_login_is_throttled_per_email(
+    make_auth_app: Callable[..., AuthHarness],
+) -> None:
+    harness = make_auth_app(
+        max_failures_per_ip=10,
+        max_failures_per_email=2,
+        failure_window_s=120,
+    )
+    assert _register(harness.client).status_code == 201
+    anonymous = harness.anonymous()
+
+    assert _wrong_login(anonymous).status_code == 401
+    assert _wrong_login(anonymous).status_code == 401
+    blocked = _wrong_login(anonymous)
+
+    assert blocked.status_code == 429
+    assert blocked.json()["detail"] == "尝试次数过多，请稍后再试。"
+    retry_after = int(blocked.headers["Retry-After"])
+    assert 1 <= retry_after <= 120
+    # No credential echo and no account-existence hint in the body.
+    assert OWNER_EMAIL not in blocked.text
+
+
+def test_login_is_throttled_per_ip_across_different_emails(
+    make_auth_app: Callable[..., AuthHarness],
+) -> None:
+    harness = make_auth_app(
+        max_failures_per_ip=2,
+        max_failures_per_email=10,
+        failure_window_s=60,
+    )
+    assert _register(harness.client).status_code == 201
+    anonymous = harness.anonymous()
+
+    # Each address has its own (IP, email) budget; only the IP bucket is shared.
+    assert _wrong_login(anonymous, "nobody-1@example.com").status_code == 401
+    assert _wrong_login(anonymous, "nobody-2@example.com").status_code == 401
+    blocked = _wrong_login(anonymous, "nobody-3@example.com")
+
+    assert blocked.status_code == 429
+    assert int(blocked.headers["Retry-After"]) >= 1
+
+
+def test_a_successful_login_clears_that_accounts_failure_count(
+    make_auth_app: Callable[..., AuthHarness],
+) -> None:
+    harness = make_auth_app(max_failures_per_ip=10, max_failures_per_email=2)
+    assert _register(harness.client).status_code == 201
+    anonymous = harness.anonymous()
+
+    def login(password: str):
+        return anonymous.post(
+            "/api/v1/auth/login",
+            json={"email": OWNER_EMAIL, "password": password},
+        )
+
+    assert login("wrong-password").status_code == 401
+    assert login(OWNER_PASSWORD).status_code == 200  # clears the (IP, email) count
+    assert login("wrong-password").status_code == 401
+    assert login(OWNER_PASSWORD).status_code == 200
+
+    # Two more failures fill the reset bucket; the next attempt is blocked.
+    assert login("wrong-password").status_code == 401
+    assert login("wrong-password").status_code == 401
+    assert login(OWNER_PASSWORD).status_code == 429
+
+
+def test_closed_or_duplicate_registration_attempts_count(
+    make_auth_app: Callable[..., AuthHarness],
+) -> None:
+    harness = make_auth_app(
+        allow_signup=True,
+        max_failures_per_ip=10,
+        max_failures_per_email=2,
+    )
+    assert _register(harness.client).status_code == 201
+    anonymous = harness.anonymous()
+
+    assert _register(anonymous).status_code == 409
+    assert _register(anonymous).status_code == 409
+    blocked = _register(anonymous)
+
+    assert blocked.status_code == 429
+    assert blocked.json()["detail"] == "尝试次数过多，请稍后再试。"
+
+
+def test_a_throttled_login_never_reaches_credential_verification(
+    make_auth_app: Callable[..., AuthHarness],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    harness = make_auth_app(max_failures_per_ip=10, max_failures_per_email=1)
+    assert _register(harness.client).status_code == 201
+    anonymous = harness.anonymous()
+    assert _wrong_login(anonymous).status_code == 401
+
+    service = harness.container.auth
+    assert service is not None
+
+    def _explode(**_kwargs: object) -> None:
+        raise AssertionError("a throttled request must not run the password KDF")
+
+    monkeypatch.setattr(service, "login", _explode)
+    blocked = anonymous.post(
+        "/api/v1/auth/login",
+        json={"email": OWNER_EMAIL, "password": OWNER_PASSWORD},
+    )
+    assert blocked.status_code == 429
+
+
+# --------------------------------------------------------------------------
 # Cookie expiry / invalidity
 # --------------------------------------------------------------------------
 
@@ -434,9 +620,17 @@ def test_gate_blocks_diagnostic_routes_when_auth_is_on(
     assert anonymous.get("/docs").status_code == 200
     assert anonymous.get("/openapi.json").status_code == 200
 
-    # Gating only covers sessions in this slice: the local review queue and
-    # executors keep their own flags/behaviour.
-    assert anonymous.get("/api/v1/review/items").status_code == 200
+    # Protected on purpose too: the review queue and the executor are internal
+    # resources, so auth on turns an anonymous call into 401 (not the local 200
+    # review listing or the executor's 403).
+    assert anonymous.get("/api/v1/review/items").status_code == 401
+    assert (
+        anonymous.post(
+            "/api/v1/executions",
+            json={"language": "python", "code": "print(1)"},
+        ).status_code
+        == 401
+    )
 
 
 def test_gate_admits_the_logged_in_owner(
@@ -449,6 +643,43 @@ def test_gate_admits_the_logged_in_owner(
     assert created.status_code == 201, created.text
     session_id = created.json()["session_id"]
     assert harness.client.get(f"/api/v1/sessions/{session_id}").status_code == 200
+    assert harness.client.get("/api/v1/review/items").status_code == 200
+    # Executor stays off in this harness: login gating is what is under test.
+    executions = harness.client.post(
+        "/api/v1/executions",
+        json={"language": "python", "code": "print(1)"},
+    )
+    assert executions.status_code == 403
+    assert "SYNAPSE_EXEC=on" in executions.json()["detail"]
+
+
+def test_gate_admits_the_logged_in_owner_to_executions(
+    make_auth_app: Callable[..., AuthHarness],
+) -> None:
+    executor = _PassThroughExecutor()
+    harness = make_auth_app(executor=executor)
+    anonymous = harness.anonymous()
+
+    # Even with the executor on, auth runs first: no cookie means 401 and the
+    # submitted code never reaches the executor.
+    assert (
+        anonymous.post(
+            "/api/v1/executions",
+            json={"language": "python", "code": "print('nope')"},
+        ).status_code
+        == 401
+    )
+    assert executor.commands == []
+
+    assert _register(harness.client).status_code == 201
+    response = harness.client.post(
+        "/api/v1/executions",
+        json={"language": "python", "code": "print('ok')"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "pass"
+    assert executor.commands[0].code == "print('ok')"
 
 
 def test_gate_off_keeps_existing_local_behavior(
@@ -951,6 +1182,39 @@ def test_two_consumes_cannot_both_succeed(tmp_path: Path) -> None:
         assert loser.family_id == "F_1"
     finally:
         engine.dispose()
+
+
+def test_a_route_error_after_the_exchange_leaves_a_spent_ticket(
+    make_auth_app: Callable[..., AuthHarness],
+) -> None:
+    """No response object means no replacement cookie; the next call is reuse.
+
+    This pins the documented edge rather than redesigning ticket semantics: the
+    ticket is consumed before dispatch, so an unhandled route error cannot put
+    the ordinary session on the 500 response. The browser keeps the spent value
+    and the next protected request trips the family revocation.
+    """
+
+    harness = make_auth_app()
+    assert _register(harness.client).status_code == 201
+    ticket = _cookie_token(harness.client)
+
+    @harness.app.get("/api/v1/sessions/__boom__/explode")
+    def explode() -> None:
+        raise RuntimeError("boom")
+
+    failing = TestClient(harness.app, raise_server_exceptions=False)
+    failing.cookies.set(COOKIE_NAME, ticket)
+    response = failing.get("/api/v1/sessions/__boom__/explode")
+
+    assert response.status_code == 500
+    assert "set-cookie" not in response.headers
+
+    replay = harness.anonymous()
+    replay.cookies.set(COOKIE_NAME, ticket)
+    reused = replay.get("/api/v1/sessions/S_missing")
+    assert reused.status_code == 401
+    assert "会话被复用" in reused.json()["detail"]
 
 
 def test_sql_lookup_is_read_only_and_reports_state(tmp_path: Path) -> None:

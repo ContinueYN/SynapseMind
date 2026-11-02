@@ -69,4 +69,13 @@ else
     echo "[entrypoint] no alembic.ini: skipping migrations (SQLite stores only)"
 fi
 
-exec uvicorn synapse.api.main:app --host 0.0.0.0 --port 8000
+# nginx is the only published entry point; the API port is on the compose
+# network only. It overwrites X-Forwarded-For with the connection address
+# (infra/nginx.conf), so trusting that header here gives request.client.host the
+# real client instead of the nginx container IP (otherwise every login shares
+# one throttle bucket). Do not publish :8000 directly with this setting.
+exec uvicorn synapse.api.main:app \
+    --host 0.0.0.0 \
+    --port 8000 \
+    --proxy-headers \
+    --forwarded-allow-ips='*'

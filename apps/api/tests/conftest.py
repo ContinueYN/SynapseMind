@@ -29,6 +29,9 @@ def pytest_configure(config: pytest.Config) -> None:
         "SYNAPSE_AUTH_ALLOW_SIGNUP",
         "SYNAPSE_COOKIE_SECURE",
         "SYNAPSE_AUTH_SESSION_TTL_S",
+        "SYNAPSE_AUTH_MAX_FAILURES_PER_IP",
+        "SYNAPSE_AUTH_MAX_FAILURES_PER_EMAIL",
+        "SYNAPSE_AUTH_FAILURE_WINDOW_S",
         "SYNAPSE_CREDENTIAL_KEY",
         "SYNAPSE_BYOK",
     ):
@@ -60,6 +63,9 @@ def _rule_mode_by_default(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> No
         "SYNAPSE_AUTH_ALLOW_SIGNUP",
         "SYNAPSE_COOKIE_SECURE",
         "SYNAPSE_AUTH_SESSION_TTL_S",
+        "SYNAPSE_AUTH_MAX_FAILURES_PER_IP",
+        "SYNAPSE_AUTH_MAX_FAILURES_PER_EMAIL",
+        "SYNAPSE_AUTH_FAILURE_WINDOW_S",
         # BYOK: a real master key or a shell-level SYNAPSE_BYOK must not turn on
         # credential storage during an unrelated test.
         "SYNAPSE_CREDENTIAL_KEY",

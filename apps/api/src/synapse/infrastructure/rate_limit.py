@@ -1,7 +1,8 @@
 """In-process token bucket for the single-step verifier.
 
-The API has no Redis and no authentication (see ``AGENTS.md``), so this guard
-is intentionally small and process-local: it stops one session from hammering
+The step verifier has no shared throttle store (the optional account layer's
+login limiter is separate and also process-local), so this guard is
+intentionally small and process-local: it stops one session from hammering
 SymPy/AST verification, and it resets whenever the process restarts. It is not
 an edge rate limit and does not defend against many sessions created by the
 same client; that belongs to a real deployment layer.

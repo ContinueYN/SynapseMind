@@ -63,6 +63,9 @@ docker compose -f infra/compose.yaml config --quiet
 | `SYNAPSE_REDIS_URL` | `redis://redis:6379/0` | `SYNAPSE_AUTH=on` 时 auth 会话 token 存 Redis；诊断链路还没用 Redis |
 | `SYNAPSE_AUTH` | `on` | `on`：注册/登录/一次性会话 cookie 生效；`off`：回到匿名本地基线（不建 engine） |
 | `SYNAPSE_AUTH_ALLOW_SIGNUP` | `on` | `on`：任何人都能注册（每人一个隔离工作区）；`off`：只有第一个账号能注册 |
+| `SYNAPSE_AUTH_MAX_FAILURES_PER_IP` | `10` | 登录/注册失败次数上限（每个客户端 IP，`SYNAPSE_AUTH=on` 时生效） |
+| `SYNAPSE_AUTH_MAX_FAILURES_PER_EMAIL` | `5` | 登录/注册失败次数上限（每个 `IP + 规范化邮箱`） |
+| `SYNAPSE_AUTH_FAILURE_WINDOW_S` | `300` | 失败计数的固定窗口秒数；三个值都必须是正整数，否则 API 启动失败 |
 | `SYNAPSE_COOKIE_SECURE` | `off` | 本地是 HTTP，`Secure` cookie 浏览器不会回传 |
 | `SYNAPSE_BYOK` | `on` | 用登录用户自己保存的模型 key；`SYNAPSE_LLM_MODE` 仍需非 `off` 才会真的调用模型 |
 | `SYNAPSE_CREDENTIAL_KEY` | 空 | 加密用户 key 的主密钥（Fernet）；**空 = 关闭 BYOK 存储**：设置页读写返回 503，`encryption_ready=false` |
@@ -92,7 +95,11 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 - 换成另一个主密钥不会自动重加密：已保存的行会变成“无法解密”，设置页显示 `configured=false` + 警告，用户重新保存一次即可；**丢主密钥等于所有用户要重填 key**，这是刻意的（明文不落库）。
 - 用户 key 只在调用模型时短暂解密，随请求结束丢弃；API 从不回传 key，只回传 `key_last4`。
 
-**一次性登录票据**：登录/注册成功时，`synapse_session` 里放的是一次性登录票据（服务端只存哈希）；第一个受保护请求（`/auth/me`、`/api/v1/sessions/*` 或 `/api/v1/settings/*`）消费它并换发普通会话 cookie。之后同一个普通 cookie 反复使用，不再轮转，也不会因为并发认证请求被判成复用——标签页里正常并发请求是安全的。已经消费过的**登录票据**再次出现才会被判定为复用（可能是被窃取），服务端会撤销整条 token family 并让用户重新登录；普通会话只在 logout、过期或显式撤销时失效。`SYNAPSE_AUTH_SESSION_TTL_S` 是整条链的硬过期（默认 7 天）。
+**一次性登录票据**：登录/注册成功时，`synapse_session` 里放的是一次性登录票据（服务端只存哈希）；第一个受保护请求（`/auth/me`、`/api/v1/sessions/*`、`/api/v1/settings/*`、`/api/v1/review/*` 或 `/api/v1/executions`）消费它并换发普通会话 cookie。之后同一个普通 cookie 反复使用，不再轮转，也不会因为并发认证请求被判成复用——标签页里正常并发请求是安全的。已经消费过的**登录票据**再次出现才会被判定为复用（可能是被窃取），服务端会撤销整条 token family 并让用户重新登录；普通会话只在 logout、过期或显式撤销时失效。`SYNAPSE_AUTH_SESSION_TTL_S` 是整条链的硬过期（默认 7 天）。
+
+**登录/注册限流**：`SYNAPSE_AUTH=on` 时，失败的登录和失败/重复的注册按固定窗口计数，同时看两个桶：每个客户端 IP（默认 10 次/300 秒）和每个 `(IP, 规范化邮箱)`（默认 5 次/300 秒）。超限返回 **429** + `Retry-After`，文案是通用的“尝试次数过多，请稍后再试。”，不区分邮箱是否存在；检查在密码 KDF 之前，被限流的请求不会做 Argon2 校验。计数在 API 进程内，重启即清空——本栈只有一个 API 进程，所以够用；多副本部署需要换成 Redis 等共享实现。API 的 uvicorn 信任 nginx 转发的 `X-Forwarded-For`（见 `infra/docker/api-entrypoint.sh`），而 nginx 对 `/api/` 会覆盖而不是追加该头（`infra/nginx.conf`），所以客户端不能自带上假 IP；仍不要把 `:8000` 直接发布到宿主。
+
+**复核接口也需要登录**：`GET /api/v1/review/items` 和 `POST /api/v1/executions` 在 `SYNAPSE_AUTH=on` 时同样受保护，匿名调用返回 401；`SYNAPSE_AUTH=off` 时仍是本机基线（review 200，executions 由 `SYNAPSE_EXEC` 决定 403 或执行）。`/review/items` 没有 owner 过滤，任何登录账号都能读全局队列，所以 `/admin/review` 仍只适合内部使用，不要直接暴露公网。
 
 **诊断数据仍在 SQLite**：`/data/synapse.sqlite3` 存会话快照（含学生作答原文），`/data/review.sqlite3` 存复核队列；Postgres 只放账号、会话 token 的哈希和加密后的模型 key。
 
@@ -200,7 +207,7 @@ docker compose -f infra/compose.yaml exec -u root api chown 10001:10001 /data/sy
 1. 在 nginx 加 `listen 443 ssl;` 的 server 块（挂载证书/私钥，只读），80 端口只做跳转；或在前面再加一层 Caddy/Traefik 做终止。
 2. `SYNAPSE_COOKIE_SECURE=on`（HTTPS 下才回传 Secure cookie）。
 3. `SYNAPSE_WEB_ORIGINS` 加上真实 origin；如果 `NEXT_PUBLIC_API_BASE` 要改成绝对地址，**必须重建 web 镜像**。
-4. 不要把 `/admin/review` 直接暴露公网：它目前和诊断接口共用同一套权限模型，没有独立的管理员鉴权。
+4. 不要把 `/admin/review` 直接暴露公网：`SYNAPSE_AUTH=on` 时它背后的接口需要登录，但没有独立的管理员角色，任何账号都能读全局复核队列。
 5. 建议只开放 80/443，Postgres/Redis 不映射宿主端口（当前配置本来就没有映射）。
 
 ## 已知限制（known limits）
@@ -209,6 +216,7 @@ docker compose -f infra/compose.yaml exec -u root api chown 10001:10001 /data/sy
 - **没有完整 Postgres 迁移**：Postgres 目前只有账号、会话链和加密后的模型 key；诊断会话、复核队列、生成题仍是 `/data` 上的 SQLite 文件。
 - **主密钥只有一把**：`SYNAPSE_CREDENTIAL_KEY` 同时加密所有用户的 key，不做轮换/多版本；换值后已保存的行无法解密（设置页显示未配置，用户重填即可），丢了也只能重填。没有 KMS 或硬件密钥。
 - **只有登录票据是一次性的**：登录后的首个受保护请求消费票据并换发普通会话；普通会话可并发复用，不会因为并发被强制下线。复用已消费的登录票据才会撤销整条 token family。
+- **登录限流是进程内的**：两个失败计数桶只存在于当前 API 进程，重启清零，也不跨副本共享；单进程 Compose 成立，扩成多副本前必须换成共享存储。被限流的 429 只有通用文案，不区分账号是否存在。
 - 没有 worker / 后台 TTL / 对象存储 / OCR / pgvector 检索；RAG 默认关，开了还会在容器里下模型（默认 `~/.cache`，重启即失）。
 - 没有自动备份、监控、日志采集；`json-file` 日志按 10 MB × 3 轮转。
 - healthcheck 用 `/api/v1/health`，并**故意把 401/403 当作存活**（auth 开启时会话路由会要求登录）；这只证明进程在服务，不证明鉴权配置正确。
@@ -217,6 +225,6 @@ docker compose -f infra/compose.yaml exec -u root api chown 10001:10001 /data/sy
 
 ## 与 auth/Alembic 的契约
 
-- 本栈只消费约定好的环境变量（`SYNAPSE_DATABASE_URL` / `SYNAPSE_REDIS_URL` / `SYNAPSE_AUTH` / `SYNAPSE_AUTH_ALLOW_SIGNUP` / `SYNAPSE_COOKIE_SECURE` / `SYNAPSE_BYOK` / `SYNAPSE_CREDENTIAL_KEY` / `SYNAPSE_SESSION_DB` / `SYNAPSE_REVIEW_DB`），不实现登录、不建迁移、不碰 `apps/api` 业务代码；登录/迁移/加密代码在 `apps/api` 自己那侧。
+- 本栈只消费约定好的环境变量（`SYNAPSE_DATABASE_URL` / `SYNAPSE_REDIS_URL` / `SYNAPSE_AUTH` / `SYNAPSE_AUTH_ALLOW_SIGNUP` / `SYNAPSE_AUTH_MAX_FAILURES_PER_IP` / `SYNAPSE_AUTH_MAX_FAILURES_PER_EMAIL` / `SYNAPSE_AUTH_FAILURE_WINDOW_S` / `SYNAPSE_COOKIE_SECURE` / `SYNAPSE_BYOK` / `SYNAPSE_CREDENTIAL_KEY` / `SYNAPSE_SESSION_DB` / `SYNAPSE_REVIEW_DB`），不实现登录、不建迁移、不碰 `apps/api` 业务代码；登录/迁移/加密代码在 `apps/api` 自己那侧。
 - 迁移只认 `apps/api/alembic.ini`（镜像 `WORKDIR /app`）。如果那边把 ini 放到别处或改了命令名，需要同步 `infra/docker/api-entrypoint.sh`。
 - 浏览器默认同源（`NEXT_PUBLIC_API_BASE` 为空），cookie 会跟着 `/api/` 请求走；如果 auth 改成跨域，除了 `SYNAPSE_WEB_ORIGINS`，还要给 API 的 CORS 打开 `allow_credentials`，那属于 `apps/api` 的改动。

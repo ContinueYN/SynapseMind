@@ -25,6 +25,10 @@ from httpx import BaseTransport
 from synapse.application.agent_planner import ToolPlanner
 from synapse.application.audit import CallAuditor
 from synapse.application.auth import AuthService, AuthUser
+from synapse.application.auth_limits import (
+    AuthFailureLimiter,
+    FixedWindowAuthFailureLimiter,
+)
 from synapse.application.coach import CoachNarrator, CoachService
 from synapse.application.composer import (
     CanaryProbeComposer,
@@ -110,6 +114,9 @@ class Container:
     # the session gate knows it must not run.
     auth: AuthService | None
     auth_settings: AuthSettings
+    # Process-local login/register failure counter. None when auth is off; a
+    # multi-replica deployment would need a shared implementation.
+    auth_limiter: AuthFailureLimiter | None = None
     # Per-user encrypted model credentials (BYOK). None when auth is off or a
     # gate-only runtime was injected without a database.
     credentials: CredentialService | None = None
@@ -133,6 +140,7 @@ def build_container(
     coach_narrator: CoachNarrator | None = None,
     auth_settings: AuthSettings | None = None,
     auth_runtime: AuthRuntime | None = None,
+    auth_limiter: AuthFailureLimiter | None = None,
     credential_settings: CredentialSettings | None = None,
     credential_guard: RemoteUrlGuard | None = None,
     credential_tester: ModelTester | None = None,
@@ -153,6 +161,19 @@ def build_container(
         )
     )
     credentials = auth.credentials if auth is not None else None
+    # Brute-force guard for login/register. Built only when auth is on; an
+    # injected limiter (deterministic clock in tests) wins over the default.
+    login_limiter: AuthFailureLimiter | None = None
+    if auth_cfg.enabled:
+        login_limiter = (
+            auth_limiter
+            if auth_limiter is not None
+            else FixedWindowAuthFailureLimiter(
+                max_failures_per_ip=auth_cfg.max_failures_per_ip,
+                max_failures_per_email=auth_cfg.max_failures_per_email,
+                window_s=auth_cfg.failure_window_s,
+            )
+        )
     # One model client for every path. It resolves the request's own credential
     # on each call; an injected client (tests) still wins.
     if llm_client is not None:
@@ -319,6 +340,7 @@ def build_container(
         executor=code_executor,
         auth=auth.service if auth is not None else None,
         auth_settings=auth_cfg,
+        auth_limiter=login_limiter,
         credentials=credentials,
         auth_dispose=auth.close if auth is not None else None,
     )

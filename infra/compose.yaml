@@ -88,6 +88,12 @@ services:
       # account gets an isolated workspace. Set it off for the old
       # "first registration claims the instance" policy.
       SYNAPSE_AUTH_ALLOW_SIGNUP: ${SYNAPSE_AUTH_ALLOW_SIGNUP:-on}
+      # Process-local brute-force throttle for login/register. Two fixed
+      # windows: per client IP and per (IP, email). One API process, so the
+      # counters are not shared across replicas.
+      SYNAPSE_AUTH_MAX_FAILURES_PER_IP: ${SYNAPSE_AUTH_MAX_FAILURES_PER_IP:-10}
+      SYNAPSE_AUTH_MAX_FAILURES_PER_EMAIL: ${SYNAPSE_AUTH_MAX_FAILURES_PER_EMAIL:-5}
+      SYNAPSE_AUTH_FAILURE_WINDOW_S: ${SYNAPSE_AUTH_FAILURE_WINDOW_S:-300}
       # Bring-your-own-key: a logged-in user's saved model credential is used for
       # that user's requests. Needs SYNAPSE_LLM_MODE != off to be active.
       SYNAPSE_BYOK: ${SYNAPSE_BYOK:-on}

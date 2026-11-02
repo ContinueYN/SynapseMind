@@ -16,12 +16,13 @@ simply keeps authenticating until it is revoked or expires.
 
 Where the exchange happens:
 
-* ``/api/v1/sessions…`` and ``/api/v1/settings…`` — the async
-  ``session_auth_middleware``. It must be async because the model runtime reads
-  the current user from a ``ContextVar``, and a ``ContextVar`` set inside a sync
-  FastAPI dependency is not guaranteed to reach the sync route in another
-  worker thread. ``anyio`` copies the async context into the threadpool, so a
-  value set before dispatch is visible downstream.
+* ``/api/v1/sessions…``, ``/api/v1/settings…``, ``/api/v1/review…`` and
+  ``/api/v1/executions`` — the async ``session_auth_middleware``. It must be
+  async because the model runtime reads the current user from a
+  ``ContextVar``, and a ``ContextVar`` set inside a sync FastAPI dependency is
+  not guaranteed to reach the sync route in another worker thread. ``anyio``
+  copies the async context into the threadpool, so a value set before dispatch
+  is visible downstream.
 * ``GET /auth/me`` — the endpoint itself, because it is not under a protected
   prefix. ``POST /auth/login|register`` start a new family; ``POST /auth/logout``
   revokes the family and clears the cookie.
@@ -29,6 +30,13 @@ Where the exchange happens:
 Endpoints: ``POST /api/v1/auth/register`` 201 (open only when signup is on),
 ``POST /api/v1/auth/login`` 200, ``POST /api/v1/auth/logout`` 200,
 ``GET /api/v1/auth/me`` 200.
+
+Failed login/register attempts are throttled by a process-local fixed-window
+limiter (``application/auth_limits.py``): two buckets, per client IP and per
+(IP, normalized email). The route checks before the password KDF and counts
+only after a failure, so a blocked request answers 429 with ``Retry-After``
+without touching credential verification. With ``SYNAPSE_AUTH=off`` the routes
+stay 403 and no limiter is consulted.
 
 The cookie is ``synapse_session``: HttpOnly, SameSite=Lax, path=/, Secure only
 when ``SYNAPSE_COOKIE_SECURE=on``, max-age = ``SYNAPSE_AUTH_SESSION_TTL_S``.
@@ -41,6 +49,7 @@ single-user flow is unchanged.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from math import ceil
 from typing import cast
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
@@ -68,12 +77,19 @@ _LOGIN_REQUIRED = "需要先登录。"
 _AUTH_DISABLED = "认证未启用；设置 SYNAPSE_AUTH=on 后才能使用账号接口。"
 _REUSE_DETAIL = "检测到会话被复用，已强制下线，请重新登录。"
 _STORE_UNAVAILABLE = "账号服务暂不可用："
+_THROTTLED = "尝试次数过多，请稍后再试。"
 
 # Only these resources exchange the login ticket. Public routes (health, docs,
-# knowledge search, executions, the local review queue, the account endpoints)
-# must never touch the cookie: a public page load would otherwise burn the
-# session the diagnostic page is using.
-_PROTECTED_PREFIXES = ("/api/v1/sessions", "/api/v1/settings")
+# knowledge search, the account endpoints) must never touch the cookie: a
+# public page load would otherwise burn the session the diagnostic page is
+# using. Review and executions are internal resources, so they are protected
+# too; /auth/* is the only route family that starts a session.
+_PROTECTED_PREFIXES = (
+    "/api/v1/sessions",
+    "/api/v1/settings",
+    "/api/v1/review",
+    "/api/v1/executions",
+)
 
 
 def _container(request: Request) -> Container:
@@ -88,6 +104,43 @@ def _enabled_service(request: Request) -> AuthService:
             detail=_AUTH_DISABLED,
         )
     return service
+
+
+def _client_ip(request: Request) -> str:
+    """The peer address uvicorn derived; nginx proxy headers are trusted there."""
+
+    client = request.client
+    return client.host if client is not None else "unknown"
+
+
+def _check_failure_budget(request: Request, email: str) -> None:
+    """Reject a throttled attempt before any KDF or account work happens."""
+
+    limiter = _container(request).auth_limiter
+    if limiter is None:
+        return
+    retry_after = limiter.check(client_ip=_client_ip(request), email=email)
+    if retry_after is None:
+        return
+    # Whole seconds, never 0: Retry-After = 0 invites a hot retry loop.
+    wait_seconds = max(1, ceil(retry_after))
+    raise HTTPException(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        detail=_THROTTLED,
+        headers={"Retry-After": str(wait_seconds)},
+    )
+
+
+def _record_failure(request: Request, email: str) -> None:
+    limiter = _container(request).auth_limiter
+    if limiter is not None:
+        limiter.record_failure(client_ip=_client_ip(request), email=email)
+
+
+def _clear_email_failures(request: Request, email: str) -> None:
+    limiter = _container(request).auth_limiter
+    if limiter is not None:
+        limiter.clear(client_ip=_client_ip(request), email=email)
 
 
 def _set_cookie(response: Response, container: Container, token: str) -> None:
@@ -207,6 +260,10 @@ async def session_auth_middleware(
         forwarded: Response = await call_next(request)
     finally:
         reset_owner(owner_token)
+    # A ticket is consumed before dispatch. If the route raises, this header is
+    # never sent and the browser keeps the spent value; the next request trips
+    # the reuse alarm and asks for a fresh login. We do not swallow the
+    # exception just to attach the replacement cookie.
     if authenticated.replacement_token is not None:
         _set_cookie(forwarded, container, authenticated.replacement_token)
     return forwarded
@@ -224,11 +281,14 @@ def register(payload: RegisterRequest, request: Request, response: Response) -> 
     ``SYNAPSE_AUTH_ALLOW_SIGNUP=on`` (multi-user mode). Without it the first
     account claims the instance and later registrations answer 409. A duplicate
     email is the same 409, so the endpoint does not tell a caller whether a
-    different account exists.
+    different account exists. A closed or duplicate attempt counts against the
+    brute-force budget; a successful registration clears this account's
+    (IP, email) counter.
     """
 
     service = _enabled_service(request)
     container = _container(request)
+    _check_failure_budget(request, payload.email)
     try:
         issued = service.register(
             email=payload.email,
@@ -236,10 +296,12 @@ def register(payload: RegisterRequest, request: Request, response: Response) -> 
             display_name=payload.display_name,
         )
     except (RegistrationClosed, EmailAlreadyRegistered) as exc:
+        _record_failure(request, payload.email)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc
+    _clear_email_failures(request, payload.email)
     _issued_cookie(response, container, issued)
     return auth_user_out(issued.user)
 
@@ -250,19 +312,23 @@ def login(payload: LoginRequest, request: Request, response: Response) -> AuthUs
 
     A wrong password, an unknown email and a closed shop all answer 401 with the
     same message; the password check runs the KDF even for an unknown email so
-    timing does not become an account oracle.
+    timing does not become an account oracle. The failure budget is checked
+    first: a throttled attempt answers 429 and never reaches the KDF.
     """
 
     service = _enabled_service(request)
     container = _container(request)
+    _check_failure_budget(request, payload.email)
     try:
         issued = service.login(email=payload.email, password=payload.password)
     except InvalidCredentials as exc:
+        _record_failure(request, payload.email)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(exc),
             headers={"WWW-Authenticate": "Cookie"},
         ) from exc
+    _clear_email_failures(request, payload.email)
     _issued_cookie(response, container, issued)
     return auth_user_out(issued.user)
 
@@ -309,8 +375,9 @@ def require_authenticated(request: Request) -> AuthUser | None:
     value here means the route is not covered by the middleware, so it fails
     closed with 401 instead of running unauthenticated.
 
-    Health, ``/auth/*``, docs/openapi, executions, knowledge search and the
-    local review queue stay public on purpose.
+    Health, ``/auth/*``, docs/openapi and knowledge search stay public on purpose.
+    Review and executions are internal resources: they are in the middleware's
+    protected prefixes, so enabling auth turns an anonymous call into 401.
     """
 
     container = _container(request)

@@ -106,7 +106,8 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 | `POST` | `/api/v1/sessions/{id}/agent/run` | 同一轨迹 + 显式提交的 Python 复现（默认关；不写会话） |
 | `POST` | `/api/v1/sessions/{id}/steps` | 验证一条步骤（只读，不推进会话） |
 | `POST` | `/api/v1/sessions/{id}/card/disagree` | 记录卡点卡异议（写回会话 + 本地复核队列） |
-| `GET` | `/api/v1/review/items` | 只读列出异议队列（不含学生原文） |
+| `POST` | `/api/v1/executions` | 受限本地执行显式提交的 Python（默认 `SYNAPSE_EXEC=off` 时 403；`SYNAPSE_AUTH=on` 时需要登录） |
+| `GET` | `/api/v1/review/items` | 只读列出异议队列（不含学生原文；`SYNAPSE_AUTH=on` 时需要登录） |
 | `GET` | `/api/v1/knowledge/search` | 只读知识卡检索（可选 RAG，不含学生原文） |
 | `POST` | `/api/v1/sessions/{id}/exit` | 显式退出学习模式；可选 body `{"reveal": true}` 在退出后返回标注题答案与完整解法（生成题返回 notice，不编造） |
 
@@ -121,11 +122,39 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 - `/agent` 只读（`specs/agent-trace.schema.json` v0.2）：只对没有参考结构的入口会话可用，已有图/卡点卡的会话返回 **409**；最多 3 步，v0.2 仍是确定性规则选择，不调模型。`reflection` 只复述结构缺口与工具状态，不是卡点结论。工具白名单是 `check_structure` / `search_patterns` / `search_sources` / `compare_options` / `ask_clarifying` / `run_code` / `run_tests`，没有读答案或推进状态的工具。写作/研究优先用 `search_sources` 查 `source` 类卡；没有来源卡时写 skipped，不把概念卡当来源。`status` 只表示工具调用状态（`ok`/`skipped`/`failed`），不是答案对错；RAG 未开启时检索工具写 skipped，检索不可用写 failed。轨迹只含输入/输出摘要与引用，不含学生原文或思维链；`suggestions` 不排序、不推荐选项。
 - `/agent/run` 只接受显式提交的 Python（`specs/agent-run.schema.json` v0.1），`tests` 必须和 `code` 一起提交；只有 `EXECUTABLE` 框架接受代码，不从题面自动抽代码。它和 `/executions` 共用 `SYNAPSE_EXEC` 开关与受限本地执行器：关闭时轨迹里是 **skipped（没有运行）**，不是 `pass`；执行结果只进轨迹摘要和可逆实验建议，不写会话、不读答案库、不出诊断卡。`pass` 仍只表示退出码 0 或提交的测试通过。
 - `/steps` 只验证提交的这一步（`specs/step-verification.schema.json`）：不推进状态、不出卡；`unknown` 表示未启用/读不懂/没有可判的断言，不是“这步正确”。
-- `/review/items` 只读（`specs/review-queue.schema.json`）：只返回卡面结论与位置，不含学生原文；没有鉴权，判断也不写回服务端——复核者在浏览器里标记后自行导出 CSV。
+- `/review/items` 只读（`specs/review-queue.schema.json`）：只返回卡面结论与位置，不含学生原文；`SYNAPSE_AUTH=on` 时中间件要求登录，`off` 时是本机匿名基线。登录后读到的是**全局**队列：没有 owner 过滤，也没有管理员角色，所以 `/admin/review` 仍不应直接暴露公网。判断不写回服务端——复核者在浏览器里标记后自行导出 CSV。
 - `/knowledge/search` 只读（`specs/knowledge-search.schema.json` v0.2）：`q` 是概念标签，不是学生作答原文；`subject` 是开放标签（1–40 字符），可选 `verification` 过滤（formal/executable/empirical/argumentative）；返回卡片的五类 `kind`、`subject`、`verifications`、标题、摘录、出处（title/url/license）和余弦分数。`enabled=false` 表示 `SYNAPSE_RAG` 未开启；开启但模型不可用时返回 **503**，不会静默返回空结果。
 - `SessionOut.subject` 是插件键（内部路由用）；`SessionOut.domain` 才是展示用的开放领域标签与验证方式（`formal`/`executable`/`empirical`/`argumentative`）。入口澄清若点名了领域，只改 `domain`（展示/清单/检索），`subject` 仍是提交时的插件键。前端只在 `domain.name` 为数学/物理时显示单步检查入口。
 - 没有参考结构的问题（开放领域、未知领域，或本环境没有生成器）返回 `SessionOut.intake`（`specs/` 未单列 schema，字段见 `DomainIntakeOut`）；它不是卡点卡的简化版：不定位卡点、不估把握、不给唯一答案。
 - `intake` v0.4 会读学生自己那段话（随会话保存的 `initial_answer`）：`observed` 列出被认出的结构项（目标/约束/选项/风险…），`gaps` 列出该验证方式要求但没提到的项（最多 3 条）。两者都只是“有没有写到”，不是对错判断；选项只列出、不排序，决策问题也不会被推荐其中一个。没有作答时两段都为空。识别是确定性线索匹配（`application/generic_slots.py`），不调用模型，因此离线模式同样可用。
+
+## 多账号与鉴权（可选）
+
+默认 `SYNAPSE_AUTH=off`：没有登录页、没有数据库连接，诊断链路和单用户基线完全一致。设为 `on` 后注册/登录生效，每个账号一个隔离工作区；账号、会话 token 和 BYOK 凭据在 Postgres/Redis，诊断快照仍是 SQLite。
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `SYNAPSE_AUTH` | `off` | `on` 才启用注册/登录与受保护路由 |
+| `SYNAPSE_DATABASE_URL` | `sqlite+pysqlite:///var/auth.sqlite3` | 账号/session/凭据表；Compose 覆盖为 Postgres |
+| `SYNAPSE_REDIS_URL` | 空 | 空 = 会话 token 落 SQL；设为 Redis 后 token 存 Redis |
+| `SYNAPSE_AUTH_ALLOW_SIGNUP` | `off` | `off` 时只有第一个账号能注册，`on` 时对所有人开放 |
+| `SYNAPSE_COOKIE_SECURE` | `off` | 只有 HTTPS 部署才设 `on` |
+| `SYNAPSE_AUTH_SESSION_TTL_S` | `604800` | 登录票据/普通会话的硬过期（秒） |
+| `SYNAPSE_AUTH_MAX_FAILURES_PER_IP` | `10` | 每个客户端 IP 在窗口内允许的失败次数 |
+| `SYNAPSE_AUTH_MAX_FAILURES_PER_EMAIL` | `5` | 每个 `(IP, 规范化邮箱)` 在窗口内允许的失败次数 |
+| `SYNAPSE_AUTH_FAILURE_WINDOW_S` | `300` | 失败计数的固定窗口（秒） |
+
+三个限流值必须是正整数；`0`、负数、小数或非数字会在启动时抛 `ValueError`，不会静默退回默认值。
+
+行为：
+
+- 登录/注册成功先发一次性登录票据（`L_…`，HttpOnly `synapse_session`）；第一个受保护请求把它换成普通会话（`S_…`）。普通会话可并发复用、不轮转；只有已消费的**票据**再次出现才是复用信号，服务端撤销整条 token family。
+- `SYNAPSE_AUTH=on` 时受保护前缀是 `/api/v1/sessions`、`/api/v1/settings`、`/api/v1/review`、`/api/v1/executions`；匿名请求在路由前返回 **401**。`/auth/*`、`/api/v1/health`、docs/openapi 和 `/api/v1/knowledge/search` 保持公开。
+- `SYNAPSE_AUTH=off` 时中间件完全不跑：`GET /review/items` 仍返回 **200**（本机基线），`POST /executions` 仍按 `SYNAPSE_EXEC` 返回 403 或正常执行。
+- 暴力破解限流是**进程内**固定窗口，两个桶同时检查：失败登录（含未知邮箱/错误密码）和失败的注册（重复邮箱、注册已关闭）都会计数；成功登录/注册清除该 `(IP, 邮箱)` 的计数。超限返回 **429** + 中文通用文案 `尝试次数过多，请稍后再试。` 和整数秒 `Retry-After`，不透露邮箱是否存在。
+- 检查发生在 Argon2 校验之前；被限流的请求不会调用密码 KDF。粗粒度的 per-IP 计数在成功登录后**不会**清零，避免用一次合法登录抹掉同 IP 上其他账号的失败记录。
+- 计数只在本进程有效，重启即清空。Docker 目前只跑一个 API 进程，所以够用；多副本部署需要把 `AuthFailureLimiter` 换成 Redis 等共享实现，否则每个副本各算各的。
+- 客户端 IP 取 `request.client.host`。`infra/docker/api-entrypoint.sh` 让 uvicorn 信任内网 nginx 的转发头，`infra/nginx.conf` 对 `/api/` **覆盖**（而不是追加）`X-Forwarded-For`，所以调用方不能自带一个假 IP 来绕过 per-IP 桶。如果直接把 API 端口暴露公网，必须收窄 `--forwarded-allow-ips`。
 
 ## 本地会话快照
 
@@ -259,6 +288,6 @@ python ..\..\scripts\contracts\generate.py
 
 - 不做拍照 OCR：`problem.image_url` 已在 DTO 预留，但未实现（M3）。
 - 不做 LLM 辅助步骤对齐（第 12 章 T5）：对齐结果直接决定先验与证据链，交给模型后规则基线不再可比，回滚成本高；**默认不做**。
-- 不做 PostgreSQL/鉴权/多租户：默认仓储是内存版；本地可选 SQLite 会话快照（`SYNAPSE_SESSION_DB`），但没有迁移框架、TTL 或多进程并发控制（M3/M4）。
+- 默认不做鉴权/多租户：`SYNAPSE_AUTH=off` 时仍是匿名单用户基线；打开后只是可自托管多账号演示（每个账号一个隔离工作区），不是角色/组织/租户模型。默认仓储是内存版；本地可选 SQLite 会话快照（`SYNAPSE_SESSION_DB`），没有后台 TTL 或多进程并发控制（M3/M4）。
 - 不返回标准答案：即使答错，也只给卡点卡和下一练。
 - 不提前拆服务：拆分触发条件见 [apps/README.md](../README.md) 与 ADR。

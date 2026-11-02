@@ -10,6 +10,9 @@ plain checkout behaving exactly like the baseline:
 ``SYNAPSE_AUTH_ALLOW_SIGNUP=off``  only the first account may register
 ``SYNAPSE_COOKIE_SECURE=off``      plain-HTTP localhost default
 ``SYNAPSE_AUTH_SESSION_TTL_S``     cookie max-age and server-side TTL
+``SYNAPSE_AUTH_MAX_FAILURES_PER_IP=10``     login/register failures / window
+``SYNAPSE_AUTH_MAX_FAILURES_PER_EMAIL=5``   the same, per (IP, email)
+``SYNAPSE_AUTH_FAILURE_WINDOW_S=300``       fixed failure window
 
 A typo in a flag is loud (``ValueError``) for the same reason it is in
 ``features.py``: silently treating ``SYNAPSE_AUTH=onn`` as off would hide why
@@ -36,6 +39,13 @@ DEFAULT_DATABASE_URL = "sqlite+pysqlite:///var/auth.sqlite3"
 # cookie stops working without a background sweeper.
 DEFAULT_SESSION_TTL_S = 7 * 24 * 60 * 60
 
+# Brute-force guard for login/register. Ten failures per address and five per
+# (address, account) in five minutes leave room for typos while making a
+# password guess expensive. Both counters are process-local.
+DEFAULT_MAX_FAILURES_PER_IP = 10
+DEFAULT_MAX_FAILURES_PER_EMAIL = 5
+DEFAULT_FAILURE_WINDOW_S = 300
+
 _MAX_SESSION_TTL_S = 365 * 24 * 60 * 60
 
 
@@ -49,6 +59,9 @@ class AuthSettings:
     allow_signup: bool = False
     cookie_secure: bool = False
     session_ttl_s: int = DEFAULT_SESSION_TTL_S
+    max_failures_per_ip: int = DEFAULT_MAX_FAILURES_PER_IP
+    max_failures_per_email: int = DEFAULT_MAX_FAILURES_PER_EMAIL
+    failure_window_s: int = DEFAULT_FAILURE_WINDOW_S
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> AuthSettings:
@@ -66,6 +79,21 @@ class AuthSettings:
                 source.get("SYNAPSE_COOKIE_SECURE", "off"),
             ),
             session_ttl_s=_parse_ttl(source.get("SYNAPSE_AUTH_SESSION_TTL_S", "")),
+            max_failures_per_ip=_parse_positive_int(
+                "SYNAPSE_AUTH_MAX_FAILURES_PER_IP",
+                source.get("SYNAPSE_AUTH_MAX_FAILURES_PER_IP", ""),
+                DEFAULT_MAX_FAILURES_PER_IP,
+            ),
+            max_failures_per_email=_parse_positive_int(
+                "SYNAPSE_AUTH_MAX_FAILURES_PER_EMAIL",
+                source.get("SYNAPSE_AUTH_MAX_FAILURES_PER_EMAIL", ""),
+                DEFAULT_MAX_FAILURES_PER_EMAIL,
+            ),
+            failure_window_s=_parse_positive_int(
+                "SYNAPSE_AUTH_FAILURE_WINDOW_S",
+                source.get("SYNAPSE_AUTH_FAILURE_WINDOW_S", ""),
+                DEFAULT_FAILURE_WINDOW_S,
+            ),
         )
 
 
@@ -82,3 +110,16 @@ def _parse_ttl(raw: str) -> int:
             f"SYNAPSE_AUTH_SESSION_TTL_S={raw!r}: expected 1..{_MAX_SESSION_TTL_S} seconds"
         )
     return ttl
+
+
+def _parse_positive_int(name: str, raw: str, default: int) -> int:
+    value = raw.strip()
+    if not value:
+        return default
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise ValueError(f"{name}={raw!r}: expected a positive integer") from exc
+    if parsed < 1:
+        raise ValueError(f"{name}={raw!r}: expected a positive integer")
+    return parsed
