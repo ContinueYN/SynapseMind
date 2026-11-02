@@ -3,8 +3,10 @@ import type {
   AgentTrace,
   CreateSessionInput,
   Diagnosis,
+  GenericReview,
   KnowledgeSearch,
   ReviewListing,
+  ReviewRunInput,
   SessionResponse,
   StepInput,
   StepVerdict,
@@ -143,6 +145,22 @@ export function runAgentTrace(
 ): Promise<AgentTrace> {
   return request<AgentTrace>(
     `/api/v1/sessions/${encodeURIComponent(sessionId)}/agent/run`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+/**
+ * Run one explicitly pasted Python reproduction and return a code review card.
+ * Only an executable session accepts this (409 otherwise); with
+ * `SYNAPSE_EXEC=off` the card records `skipped` instead of a fake run. The
+ * session is not modified and the answer store is not read.
+ */
+export function runReview(
+  sessionId: string,
+  input: ReviewRunInput,
+): Promise<GenericReview> {
+  return request<GenericReview>(
+    `/api/v1/sessions/${encodeURIComponent(sessionId)}/review/run`,
     { method: "POST", body: JSON.stringify(input) },
   );
 }

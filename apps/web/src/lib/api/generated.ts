@@ -173,6 +173,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sessions/{session_id}/review/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Review
+         * @description Turn one explicitly submitted run into a code reproduction card.
+         *
+         *     This is the only path that produces ``kind="execution"``; it never pulls
+         *     code out of the problem or the attempt. Only a session whose verification
+         *     mode is ``executable`` is accepted (409 otherwise). With ``SYNAPSE_EXEC=off``
+         *     the card reports ``skipped`` and the executor is not called; ``pass`` means
+         *     the process exited 0 or the submitted tests passed, never that the code is
+         *     correct. The session is read-only: nothing is stored and the answer store is
+         *     never read.
+         */
+        post: operations["run_review_api_v1_sessions__session_id__review_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sessions/{session_id}/intake": {
         parameters: {
             query?: never;
@@ -544,14 +572,16 @@ export interface components {
          *     (at most three). v0.3 adds ``origin``/``graph`` (the generated or extracted
          *     structure, with its source) and ``verifications`` (formal/empirical only).
          *     v0.4 adds ``probe``: one at-a-time structural follow-up, capped at three.
-         *     None of these is a verdict on the student's work.
+         *     v0.5 adds ``review``: the optional v0.1 ``GenericReview`` (structure or
+         *     decision), first composed for ARGUMENTATIVE modes. None of these is a verdict
+         *     on the student's work.
          */
         DomainIntakeOut: {
             /**
              * Version
              * @constant
              */
-            version: "0.4";
+            version: "0.5";
             domain: components["schemas"]["DomainOut"];
             /** One Line */
             one_line: string;
@@ -574,6 +604,7 @@ export interface components {
             next_step: string;
             /** Disclaimer */
             disclaimer: string;
+            review?: components["schemas"]["GenericReviewOut"] | null;
         };
         /**
          * DomainOut
@@ -662,6 +693,101 @@ export interface components {
              * @default false
              */
             reveal: boolean;
+        };
+        /**
+         * GenericEvidenceOut
+         * @description One source behind a finding; ``ref`` points at the source itself.
+         */
+        GenericEvidenceOut: {
+            /** Id */
+            id: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "student" | "graph" | "execution" | "knowledge";
+            /** Ref */
+            ref: string;
+            /** Excerpt */
+            excerpt?: string | null;
+        };
+        /**
+         * GenericFindingOut
+         * @description One "saw / did not see" item; always tied to evidence in the same review.
+         */
+        GenericFindingOut: {
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "blocking" | "notable";
+            /** Summary */
+            summary: string;
+            /** Evidence Refs */
+            evidence_refs: string[];
+        };
+        /**
+         * GenericReviewDomainOut
+         * @description The open domain label plus what the review could be checked against.
+         */
+        GenericReviewDomainOut: {
+            /** Name */
+            name: string;
+            /** Label */
+            label: string;
+            /**
+             * Verification
+             * @enum {string}
+             */
+            verification: "formal" | "executable" | "empirical" | "argumentative";
+        };
+        /**
+         * GenericReviewOut
+         * @description Generic review contract v0.1: structure, decision or code reproduction.
+         *
+         *     Mirrors ``specs/generic-review.schema.json``. The API attaches it to an
+         *     ``intake`` response or returns it from ``review/run``; it is derived, never
+         *     stored, and never a diagnosis.
+         */
+        GenericReviewOut: {
+            /**
+             * Version
+             * @constant
+             */
+            version: "0.1";
+            /** Session Id */
+            session_id: string;
+            /** Problem Id */
+            problem_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "structure" | "decision" | "execution";
+            domain: components["schemas"]["GenericReviewDomainOut"];
+            /** Headline */
+            headline: string;
+            /** Findings */
+            findings: components["schemas"]["GenericFindingOut"][];
+            /** Evidence */
+            evidence: components["schemas"]["GenericEvidenceOut"][];
+            /** Not Checked */
+            not_checked: string[];
+            /** Next Step */
+            next_step: string;
+            /** Disclaimer */
+            disclaimer: string;
+            /** Options */
+            options?: components["schemas"]["ReviewOptionOut"][] | null;
+            /** Tradeoff Question */
+            tradeoff_question?: string | null;
+            execution?: components["schemas"]["ReviewExecutionOut"] | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -929,6 +1055,26 @@ export interface components {
             top_hypothesis: string;
         };
         /**
+         * ReviewExecutionOut
+         * @description A code reproduction record from an explicit run. ``skipped`` means nothing ran.
+         */
+        ReviewExecutionOut: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pass" | "fail" | "timeout" | "rejected" | "skipped";
+            /** First Failure */
+            first_failure?: string | null;
+            /** Stdout Excerpt */
+            stdout_excerpt?: string | null;
+            /**
+             * Tests Submitted
+             * @default false
+             */
+            tests_submitted: boolean;
+        };
+        /**
          * ReviewItemOut
          * @description One disagreed card, as the teacher review page sees it.
          *
@@ -966,6 +1112,37 @@ export interface components {
             version: "0.1";
             /** Items */
             items: components["schemas"]["ReviewItemOut"][];
+        };
+        /**
+         * ReviewOptionOut
+         * @description One decision option. The contract has no score, rank or recommendation.
+         */
+        ReviewOptionOut: {
+            /** Label */
+            label: string;
+            /** Costs */
+            costs: string[];
+            /** Risks */
+            risks: string[];
+            /** Reversible Test */
+            reversible_test: string;
+        };
+        /**
+         * ReviewRunRequest
+         * @description Explicit code for one reproduction card; ``tests`` is optional.
+         *
+         *     The API never extracts code from the problem or the attempt: the caller must
+         *     paste it. A blank ``tests`` string means "no tests submitted", while blank
+         *     code is a validation error.
+         */
+        ReviewRunRequest: {
+            /** Code */
+            code: string;
+            /**
+             * Tests
+             * @default
+             */
+            tests: string;
         };
         /**
          * ScaffoldOut
@@ -1354,6 +1531,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentTraceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_review_api_v1_sessions__session_id__review_run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenericReviewOut"];
                 };
             };
             /** @description Validation Error */

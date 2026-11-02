@@ -28,12 +28,22 @@ export type KnowledgeHit = Schemas["KnowledgeHitOut"];
 export type KnowledgeSearch = Schemas["KnowledgeSearchOut"];
 export type Domain = Schemas["DomainOut"];
 export type DomainIntake = Schemas["DomainIntakeOut"];
+export type GenericReview = Schemas["GenericReviewOut"];
+export type GenericReviewFinding = NonNullable<GenericReview["findings"]>[number];
+export type GenericReviewEvidence = NonNullable<GenericReview["evidence"]>[number];
+export type GenericReviewOption = NonNullable<GenericReview["options"]>[number];
 export type AgentTrace = Schemas["AgentTraceOut"];
 export type AgentStep = Schemas["AgentStepOut"];
 export type AgentSuggestion = Schemas["AgentSuggestionOut"];
 export type VerificationMode = Domain["verification"];
 
 export interface AgentRunInput {
+  code: string;
+  tests?: string;
+}
+
+/** Explicit code for one reproduction card; a blank `tests` means "none". */
+export interface ReviewRunInput {
   code: string;
   tests?: string;
 }

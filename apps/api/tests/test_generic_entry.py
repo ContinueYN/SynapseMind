@@ -87,7 +87,7 @@ def test_the_decision_intake_reads_the_students_own_words(client: TestClient) ->
 
     intake = body["intake"]
     assert intake is not None
-    assert intake["version"] == "0.4"
+    assert intake["version"] == "0.5"
     # What the submission mentions, and only that.
     assert "目标" in intake["observed"]
     assert "选项" in intake["observed"]

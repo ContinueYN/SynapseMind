@@ -92,7 +92,7 @@ def test_a_generated_graph_is_shown_as_system_structure_not_a_card() -> None:
     assert body["diagnosis"] is None
     assert body["prompt"] is None
     intake = body["intake"]
-    assert intake["version"] == "0.4"
+    assert intake["version"] == "0.5"
     assert intake["origin"] == "system"
     assert [node["kind"] for node in intake["graph"]] == [
         "goal",

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 
+import { GenericReviewView } from "@/components/GenericReviewView";
 import { Surface } from "@/components/Surface";
 import type { DomainIntake } from "@/src/lib/api/types";
 
@@ -20,6 +21,10 @@ import type { DomainIntake } from "@/src/lib/api/types";
  * 人工审核），要么仍是从学生原话里抽的；两种都只说明「问题由什么组成」。
  * formal/empirical 检查只在真的跑了之后出现，`unknown` 一律写成「未检查」，
  * 不能读成通过。
+ *
+ * v0.5 起多一块可选的 review（结构复盘 / 决策框）：它用同一批缺口和证据替代旧的
+ * 「还缺」列表，不再叠一份清单；execution 分支（T4）只在 verification=executable
+ * 时出现，输入框默认空，只有显式提交才请求运行，结果不写回会话。
  */
 
 const MODE_LABEL: Record<DomainIntake["domain"]["verification"], string> = {
@@ -92,6 +97,9 @@ export function IntakeView({
   const verifications = intake.verifications ?? [];
   const origin = intake.origin ?? null;
   const probe: IntakeProbe | null = intake.probe ?? null;
+  // v0.5: the optional structure/decision review. It replaces the old gap list
+  // (same coverage, now with evidence) instead of stacking a second checklist.
+  const review = intake.review ?? null;
 
   async function clarify(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -172,7 +180,7 @@ export function IntakeView({
           </p>
         ) : null}
 
-        {gaps.length > 0 ? (
+        {gaps.length > 0 && !review ? (
           <>
             <p className="sm-lab" style={{ marginTop: 22 }}>
               你写的里面还缺
@@ -212,6 +220,12 @@ export function IntakeView({
             ) : null}
           </>
         ) : null}
+
+        <GenericReviewView
+          review={review}
+          verification={domain.verification}
+          sessionId={sessionId}
+        />
 
         {verifications.length > 0 ? (
           <>

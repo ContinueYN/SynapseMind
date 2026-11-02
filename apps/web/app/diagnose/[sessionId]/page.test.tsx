@@ -44,6 +44,7 @@ vi.mock("@/src/lib/api/client", () => {
     answerClarifier: vi.fn(),
     answerProbe: vi.fn(),
     getSession: vi.fn(),
+    runReview: vi.fn(),
     submitTurn: vi.fn(),
     exitSession: vi.fn(),
     searchKnowledge: vi.fn().mockResolvedValue({
@@ -139,7 +140,7 @@ const GENERIC_DOMAIN = {
 };
 
 const GENERIC_INTAKE = {
-  version: "0.4" as const,
+  version: "0.5" as const,
   domain: GENERIC_DOMAIN,
   one_line: "按「通用问题」处理（论证结构）。没有参考结构，先不判断卡点。",
   checklist: ["目标：这一轮想解决什么", "约束：哪些条件不能动"],

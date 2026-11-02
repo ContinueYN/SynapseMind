@@ -249,6 +249,100 @@ class IntakeProbeOut(StrictModel):
     limit: int = Field(ge=1, le=3)
 
 
+class GenericReviewDomainOut(StrictModel):
+    """The open domain label plus what the review could be checked against."""
+
+    name: str = Field(min_length=1, max_length=40)
+    label: str = Field(min_length=1, max_length=40)
+    verification: Literal["formal", "executable", "empirical", "argumentative"]
+
+
+class GenericFindingOut(StrictModel):
+    """One "saw / did not see" item; always tied to evidence in the same review."""
+
+    id: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_-]{0,31}$")
+    kind: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
+    label: str = Field(min_length=1, max_length=40)
+    severity: Literal["blocking", "notable"]
+    summary: str = Field(min_length=1, max_length=240)
+    evidence_refs: list[str] = Field(min_length=1, max_length=8)
+
+
+class GenericEvidenceOut(StrictModel):
+    """One source behind a finding; ``ref`` points at the source itself."""
+
+    id: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_-]{0,31}$")
+    source: Literal["student", "graph", "execution", "knowledge"]
+    ref: str = Field(min_length=1, max_length=80)
+    excerpt: str | None = Field(default=None, min_length=1, max_length=200)
+
+
+class ReviewOptionOut(StrictModel):
+    """One decision option. The contract has no score, rank or recommendation."""
+
+    label: str = Field(min_length=1, max_length=80)
+    costs: list[str] = Field(max_length=6)
+    risks: list[str] = Field(max_length=6)
+    reversible_test: str = Field(max_length=200)
+
+
+class ReviewExecutionOut(StrictModel):
+    """A code reproduction record from an explicit run. ``skipped`` means nothing ran."""
+
+    status: Literal["pass", "fail", "timeout", "rejected", "skipped"]
+    first_failure: str | None = Field(default=None, min_length=1, max_length=300)
+    stdout_excerpt: str | None = Field(default=None, max_length=400)
+    tests_submitted: bool = False
+
+
+class GenericReviewOut(StrictModel):
+    """Generic review contract v0.1: structure, decision or code reproduction.
+
+    Mirrors ``specs/generic-review.schema.json``. The API attaches it to an
+    ``intake`` response or returns it from ``review/run``; it is derived, never
+    stored, and never a diagnosis.
+    """
+
+    version: Literal["0.1"]
+    session_id: str = Field(pattern=r"^S_[A-Za-z0-9_]+$", max_length=40)
+    problem_id: str = Field(pattern=r"^P_[A-Za-z0-9_]+$", max_length=48)
+    kind: Literal["structure", "decision", "execution"]
+    domain: GenericReviewDomainOut
+    headline: str = Field(min_length=1, max_length=200)
+    findings: list[GenericFindingOut] = Field(max_length=12)
+    evidence: list[GenericEvidenceOut] = Field(max_length=24)
+    not_checked: list[str] = Field(max_length=8)
+    next_step: str = Field(min_length=1, max_length=240)
+    disclaimer: str = Field(min_length=1, max_length=300)
+    options: list[ReviewOptionOut] | None = Field(default=None, min_length=2, max_length=6)
+    tradeoff_question: str | None = Field(default=None, max_length=300)
+    execution: ReviewExecutionOut | None = None
+
+
+class ReviewRunRequest(StrictModel):
+    """Explicit code for one reproduction card; ``tests`` is optional.
+
+    The API never extracts code from the problem or the attempt: the caller must
+    paste it. A blank ``tests`` string means "no tests submitted", while blank
+    code is a validation error.
+    """
+
+    code: str = Field(min_length=1, max_length=20000)
+    tests: str = Field(default="", max_length=20000)
+
+    @field_validator("code")
+    @classmethod
+    def code_must_not_be_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("code must not be blank")
+        return value
+
+    @field_validator("tests")
+    @classmethod
+    def blank_tests_mean_not_submitted(cls, value: str) -> str:
+        return "" if not value.strip() else value
+
+
 class DomainIntakeOut(StrictModel):
     """The reference-free generic entry: structure, never a diagnosis.
 
@@ -257,10 +351,12 @@ class DomainIntakeOut(StrictModel):
     (at most three). v0.3 adds ``origin``/``graph`` (the generated or extracted
     structure, with its source) and ``verifications`` (formal/empirical only).
     v0.4 adds ``probe``: one at-a-time structural follow-up, capped at three.
-    None of these is a verdict on the student's work.
+    v0.5 adds ``review``: the optional v0.1 ``GenericReview`` (structure or
+    decision), first composed for ARGUMENTATIVE modes. None of these is a verdict
+    on the student's work.
     """
 
-    version: Literal["0.4"]
+    version: Literal["0.5"]
     domain: DomainOut
     one_line: str = Field(min_length=1, max_length=200)
     checklist: list[str] = Field(min_length=1, max_length=6)
@@ -273,6 +369,7 @@ class DomainIntakeOut(StrictModel):
     probe: IntakeProbeOut | None = None
     next_step: str = Field(min_length=1, max_length=300)
     disclaimer: str = Field(min_length=1, max_length=300)
+    review: GenericReviewOut | None = None
 
 
 class SessionOut(StrictModel):

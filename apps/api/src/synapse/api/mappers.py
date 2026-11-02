@@ -22,6 +22,7 @@ from synapse.api.schemas import (
     DomainOut,
     ExecutionFindingOut,
     ExecutionOut,
+    GenericReviewOut,
     HintOut,
     HintStepOut,
     HistoryItemOut,
@@ -57,6 +58,7 @@ from synapse.domain.diagnosis.hint import StructureHint
 from synapse.domain.diagnosis.models import DiagnosisCard
 from synapse.domain.dialogue.session import DialogueSession, TurnRecord
 from synapse.domain.knowledge.models import KnowledgeHit
+from synapse.domain.problem.generic_review import GenericReview
 
 
 def _knowledge_excerpt(body: str, limit: int = 300) -> str:
@@ -264,6 +266,17 @@ def domain_out(descriptor: DomainDescriptor) -> DomainOut:
     )
 
 
+def generic_review_out(review: GenericReview) -> GenericReviewOut:
+    """Validate the published generic-review shape through the DTO.
+
+    The domain object builds ``to_dict()`` with the contract's own keys, so the
+    DTO is checked against the schema instead of being hand-mapped field by
+    field. If the two ever drift, response validation fails here.
+    """
+
+    return GenericReviewOut.model_validate(review.to_dict())
+
+
 def intake_out(intake: DomainIntake) -> DomainIntakeOut:
     """Map the generic entry; it carries no answer and no diagnosis."""
 
@@ -307,6 +320,7 @@ def intake_out(intake: DomainIntake) -> DomainIntakeOut:
         ),
         next_step=_clip(intake.next_step, 300),
         disclaimer=_clip(intake.disclaimer, 300),
+        review=generic_review_out(intake.review) if intake.review is not None else None,
     )
 
 

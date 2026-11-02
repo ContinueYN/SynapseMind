@@ -7,6 +7,7 @@
 | [`problem-input.schema.json`](problem-input.schema.json) | 交题入口 | Web、API |
 | [`solution-graph.schema.json`](solution-graph.schema.json) | 题目解法图 | API（生成物运行时严格校验）、内容后台 |
 | [`problem-graph.schema.json`](problem-graph.schema.json) | 通用问题图（目标/约束/选项/风险/下一步，v0.1） | API（生成物运行时严格校验）、Web、评测 |
+| [`generic-review.schema.json`](generic-review.schema.json) | 通用产物：结构复盘/决策框/复现卡共用外壳（v0.1） | API、Web、评测 |
 | [`diagnosis.schema.json`](diagnosis.schema.json) | 卡点卡输出（v0.1；`SYNAPSE_CHC_ATTRIBUTION=on` 时 v0.2 追加可选 `card.attribution`） | API、Web、评测 |
 | [`structure-hint.schema.json`](structure-hint.schema.json) | 结构提示输出（NONE 档学科） | API、Web、评测 |
 | [`step-verification.schema.json`](step-verification.schema.json) | 单步验证输出（`POST /sessions/{id}/steps`） | API、Web |
@@ -40,6 +41,8 @@
 入口的澄清问题**最多问一次、最多收一次**：`POST /api/v1/sessions/{id}/intake` 接受 `{"answer": "..."}`，把这段补充并入 `initial_answer` 后重新派生 `observed`/`gaps`，并让 `clarifier` 变成 `null`。如果补充明确点名“决策/代码/数学/物理/写作/科研/工作”中的一类，服务端会把该会话的**展示领域**切到对应标签（`SessionOut.domain` 与 `intake.domain` 一起变，内部 `subject` 仍是提交时的插件键），`domain_confidence` 记为 0.8；它只换清单和检索标签，仍然没有验证。它不推进状态、不生成卡点卡、不给答案；会话仍是 `CLOSED`。第二次补充不会被追加，返回 200 且 `notice` 说明「只接受一次」；没有待补充问题的入口（包括高置信领域和已有卡点卡的会话）返回 **409**，空串或超过 500 字返回 **422**。
 
 `intake` 再升 **v0.4**：新增可选 `probe`（`kind`/`question`/`answered`/`limit`），它是**结构补充**，不是诊断探针。一次只显示一个缺口问题，最多接受 3 次；`POST /api/v1/sessions/{id}/intake/probe` 接受 `{"answer": "..."}`，把补充并入 `initial_answer` 后重新派生 `observed`/`gaps`，再把 `probe` 换成下一个缺口或 `null`。领域澄清问题优先：它还没回答时 `probe` 为 `null`，答完后才会出现结构补充。没有待补充缺口、澄清问题未答或次数用完时返回 **409**，空串或超过 500 字返回 **422**。这段补充不推进入口状态、不出卡、不给答案，也不会重新判定领域或判断对错；会话仍是 `CLOSED`。
+
+`intake` 再升 **v0.5**：新增可选 `review`，形状即 [`generic-review.schema.json`](generic-review.schema.json) v0.1。它只在有作答、且验证方式为 `ARGUMENTATIVE`（写作/科研/决策/通用）时派生：`kind=structure` 是结构复盘（headline/findings/evidence/not_checked/next_step/disclaimer），`kind=decision` 另给按学生写到顺序排列的 `options`（每个含代价、风险与可逆实验）与 `tradeoff_question`，不排序、不推荐；`kind=execution` 留给 T4。`formal`/`empirical`/`executable` 不生成 review；组合失败时 `review=null` 并保留 v0.4 的全部字段，入口不返回 500。review 每次读取时派生，不进会话快照、不读 `AnswerStore`、不推进状态，也不是卡点卡。
 
 `solution-graph.schema.json` 的 `probe.evidence` 是可选字段：生成图必须为每个选项给出 log-odds 权重（结构规则强制），手写种子图可省略并从 `EVIDENCE` 取权重；字段形状在 schema 里约束，跨字段一致性（选项覆盖、targets 对应、每个 target 至少被使用一次）在 `domain/problem/graph_structure.py` 里校验（M2.5 S5）。**键是选项字母**（`A`/`B`/`C`…，与 `SubmitAnswerCommand.option_id` 同一套编码），不是选项文本——`HypothesisSet.observe()` 按字母查表，写错键名不报错，只是那次作答不更新后验。
 

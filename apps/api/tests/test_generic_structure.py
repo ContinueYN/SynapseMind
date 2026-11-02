@@ -271,7 +271,7 @@ class TestAnswerAwareIntake:
             _problem("decision"), REGISTRY.profile_for("decision"), DECISION_ATTEMPT
         )
 
-        assert intake.version == "0.4"
+        assert intake.version == "0.5"
         assert "目标" in intake.observed
         assert "选项" in intake.observed
         assert "风险" in intake.observed

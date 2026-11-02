@@ -11,11 +11,20 @@ no annotated graph and no plugin can build one (unknown domain, or
   which required pieces it does not (``gaps``), both computed from the student's
   own words by ``application/generic_slots.py`` + ``generic_check.py``;
 * at most one clarifying question when the label was not confident;
-* one next step, and a disclaimer naming what was **not** checked.
+* one next step, and a disclaimer naming what was **not** checked;
+* **v0.5**: an optional ``review`` (``GenericReview``, contract v0.1) for the
+  argumentative modes, composed from the same graph and gaps.
 
 The gap list is still coverage, not correctness: "没看到约束" means the text never
 mentions one, never that the constraint is wrong. An empty attempt produces no
 gaps at all, because there is nothing to compare; the checklist alone is shown.
+
+The review is composed only when there is an attempt to compare and the mode is
+``ARGUMENTATIVE`` (writing/research/decision/generic). A formal, empirical or
+executable problem has no honest structure review yet, so it keeps the old
+intake untouched. Composition is best-effort: a composer failure is logged and
+the intake keeps its previous fields with ``review=None``, rather than letting
+the entry return 500 or inventing a ``not_checked`` line.
 
 It must not claim the student missed a step in a *solution*, must not produce a
 卡点卡, and for a decision it must not produce a single right answer. Those need
@@ -24,6 +33,7 @@ a verifier (Phase 1/2); this module is the honest floor until then.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Literal
 
@@ -34,7 +44,9 @@ from synapse.application.domains import (
     VerificationMode,
 )
 from synapse.application.generic_check import StructureGap, structure_gaps
+from synapse.application.generic_review import GenericReviewComposer
 from synapse.application.generic_slots import CueSlotExtractor
+from synapse.application.knowledge import KnowledgeService
 from synapse.domain.problem.generic import (
     KIND_LABELS,
     ClaimCheck,
@@ -44,9 +56,13 @@ from synapse.domain.problem.generic import (
     NodeKind,
     NodeSource,
 )
+from synapse.domain.problem.generic_review import GenericReview
 from synapse.domain.problem.models import Problem
 
-VERSION: Literal["0.4"] = "0.4"
+VERSION: Literal["0.5"] = "0.5"
+
+_LOGGER = logging.getLogger(__name__)
+_REVIEW_COMPOSER = GenericReviewComposer()
 
 # Shown as the closed session's notice so a client that only reads ``notice``
 # still learns why there is no card.
@@ -221,9 +237,12 @@ class DomainIntake:
     so a reloaded session shows the same words without the snapshot storing them.
     ``graph`` is either the generated structure (system) or the cue extraction
     (student); ``verifications`` exists only for modes that have a verifier.
+    ``review`` is the v0.5 optional structure/decision composition; it is absent
+    when there is no attempt to compare, when the mode has no honest review, or
+    when composition failed.
     """
 
-    version: Literal["0.4"]
+    version: Literal["0.5"]
     profile: DomainProfile
     confidence: float
     one_line: str
@@ -237,6 +256,7 @@ class DomainIntake:
     probe: IntakeProbe | None
     next_step: str
     disclaimer: str
+    review: GenericReview | None = None
 
 
 _GENERATED_SUMMARY = "系统整理了一张结构图（未验证）；它只说明问题由什么组成，不是诊断结论。"
@@ -252,8 +272,10 @@ def build_domain_intake(
     profile: DomainProfile,
     attempt: str = "",
     *,
+    session_id: str = "",
     clarifier_answered: bool = False,
     probe_count: int = 0,
+    knowledge: KnowledgeService | None = None,
 ) -> DomainIntake:
     """Compose the intake for a reference-free problem.
 
@@ -261,11 +283,18 @@ def build_domain_intake(
     it decides the single clarifying question, not whether the session may start.
     ``attempt`` is the student's own text; when it is blank no gap is reported,
     because there is nothing to compare and "你什么都没写" is not a finding.
+    ``session_id`` is required by the ``GenericReview`` contract; when it is not
+    supplied (direct unit calls) no review is composed, because inventing an id
+    would make the review claim a session that does not exist.
 
     A generated graph (``problem.generic``) is displayed separately from
     ``observed``/``gaps``: those two describe the student's words, while the
     generated graph organises the problem. Mixing them would let a model's
     reading masquerade as something the student wrote.
+
+    ``knowledge`` is optional and read-only. When it is a live service, the
+    review may add up to two retrieved knowledge cards as top-level evidence;
+    when it is absent or disabled, the review is composed exactly as before.
     """
 
     copy = _COPY[profile.framework]
@@ -298,6 +327,17 @@ def build_domain_intake(
     # One question at a time: the domain clarifier comes first, then the first
     # missing structure piece. The count is stored per session, not per read.
     probe = _gap_probe(structured_gaps, probe_count) if clarifier is None else None
+    # The review cites node ids, so it reads the same graph the card displays:
+    # the generated structure when there is one, the cue extraction otherwise.
+    review = _compose_review(
+        session_id=session_id,
+        problem=problem,
+        profile=profile,
+        attempt=attempt,
+        graph=structure,
+        gaps=structured_gaps,
+        knowledge=knowledge,
+    )
     return DomainIntake(
         version=VERSION,
         profile=profile,
@@ -313,7 +353,61 @@ def build_domain_intake(
         probe=probe,
         next_step=_PROBE_NEXT_STEP if probe is not None else copy.next_step,
         disclaimer=disclaimer,
+        review=review,
     )
+
+
+def _compose_review(
+    *,
+    session_id: str,
+    problem: Problem,
+    profile: DomainProfile,
+    attempt: str,
+    graph: GenericGraph | None,
+    gaps: tuple[StructureGap, ...],
+    knowledge: KnowledgeService | None = None,
+) -> GenericReview | None:
+    """Best-effort structure/decision review; never fail the entry over it.
+
+    The composer only knows the argumentative branches, and the contract needs a
+    real session id. A formal/empirical/executable problem therefore keeps the
+    pre-v0.5 intake with ``review=None``. If composition raises, the intake is
+    still served with its old fields; the failure is logged, not rewritten as a
+    ``not_checked`` line or a notice. A live ``knowledge`` service is passed only
+    to the composer; it cannot change the review's findings or its evidence refs.
+    """
+
+    if not session_id or not attempt.strip() or graph is None:
+        return None
+    if profile.verification is not VerificationMode.ARGUMENTATIVE:
+        return None
+    # A disabled service keeps the shared composer (and its monkeypatch point);
+    # a live one is injected so retrieval can add top-level evidence. Either way
+    # the review's findings and refs are composed by the same code.
+    composer = (
+        GenericReviewComposer(knowledge=knowledge)
+        if knowledge is not None and knowledge.enabled
+        else _REVIEW_COMPOSER
+    )
+    try:
+        return composer.compose(
+            session_id=session_id,
+            problem_id=problem.id,
+            domain_name=profile.name,
+            domain_label=profile.label,
+            verification=profile.verification,
+            graph=graph,
+            gaps=gaps,
+            initial_answer=attempt,
+            framework=profile.framework,
+        )
+    except Exception:
+        # No student text in the log line: the attempt stays in the session.
+        _LOGGER.exception(
+            "generic review composition failed; serving the intake without it (session=%s)",
+            session_id,
+        )
+        return None
 
 
 def _gap_probe(

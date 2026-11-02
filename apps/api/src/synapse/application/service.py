@@ -30,9 +30,14 @@ from synapse.application.domain_detection import declared_domain
 from synapse.application.domains import (
     DomainDescriptor,
     DomainRegistry,
+    VerificationMode,
     verifiability_level,
 )
-from synapse.application.execution import CodeExecutor
+from synapse.application.execution import CodeExecutor, RunCodeCommand
+from synapse.application.execution_review import (
+    build_execution_review,
+    build_skipped_execution_review,
+)
 from synapse.application.factory import SessionFactory
 from synapse.application.hint_builder import build_structure_hint
 from synapse.application.intake import (
@@ -67,11 +72,16 @@ from synapse.domain.dialogue.session import DialogueSession, TurnRecord
 from synapse.domain.dialogue.states import DialogueState
 from synapse.domain.evidence.models import Evidence
 from synapse.domain.problem.alignment import normalize
+from synapse.domain.problem.generic_review import GenericReview
 from synapse.domain.problem.models import Probe, Problem, StudentAttempt
 
 
 class SessionNotFound(LookupError):
     pass
+
+
+class ReviewRunRejected(RuntimeError):
+    """The session's verification mode cannot be checked by running code."""
 
 
 class DiagnosisNotReady(LookupError):
@@ -313,6 +323,55 @@ class SessionService:
             planner_off_reason=self._tool_planner_reason,
             code=code,
             tests=tests,
+        )
+
+    def review_run(
+        self,
+        session_id: str,
+        *,
+        code: str,
+        tests: str = "",
+    ) -> GenericReview:
+        """Turn one explicitly submitted run into a code reproduction card.
+
+        The card is derived, never stored: this method does not save the
+        session, does not touch the probe budget and does not read the answer
+        store. It also never selects code itself — ``code``/``tests`` are the
+        caller's explicit submission. Only an ``EXECUTABLE`` domain may use it;
+        anything else is rejected instead of being dressed up as a run.
+
+        With ``SYNAPSE_EXEC=off`` the executor is ``None``, so the card reports
+        ``skipped`` and the executor is not called at all (an injected test
+        adapter cannot bypass the flag; the composition root gates it).
+        """
+
+        session = self._get(session_id)
+        descriptor = self.domain_for(session)
+        if descriptor.verification is not VerificationMode.EXECUTABLE:
+            raise ReviewRunRejected(
+                "代码复现卡只用于可执行验证的会话；"
+                f"这道题的验证方式是 {descriptor.verification.value}。"
+            )
+
+        problem = self._effective_problem(session)
+        tests_submitted = bool(tests.strip())
+        if self._code_executor is None:
+            return build_skipped_execution_review(
+                session_id=session.session_id,
+                problem_id=problem.id,
+                domain_name=descriptor.name,
+                domain_label=descriptor.label,
+                tests_submitted=tests_submitted,
+            )
+
+        result = self._code_executor.run(RunCodeCommand(language="python", code=code, tests=tests))
+        return build_execution_review(
+            session_id=session.session_id,
+            problem_id=problem.id,
+            domain_name=descriptor.name,
+            domain_label=descriptor.label,
+            result=result,
+            tests_submitted=tests_submitted,
         )
 
     def answer_clarifier(self, session_id: str, answer: str) -> SessionView:
@@ -890,8 +949,10 @@ class SessionService:
             problem,
             profile,
             session.initial_answer,
+            session_id=session.session_id,
             clarifier_answered=session.clarifier_answered,
             probe_count=session.intake_probe_count,
+            knowledge=self._knowledge,
         )
 
     def _hint(self, session: DialogueSession) -> StructureHint | None:

@@ -13,6 +13,7 @@ import type { AgentStep, AgentTrace, VerificationMode } from "@/src/lib/api/type
  * 可选由规划器在白名单里选，失败/超时/非法工具/RAG 关闭时回退规则。面板不展示
  * 思维链、不展示学生原文，也不把任何一步读成「答对了」。代码框只接收用户自己
  * 粘贴的最小复现；执行开关关闭时，后端会如实返回 skipped，面板不会把它说成通过。
+ * 它是诊断/复现卡之外的旁路：这里只记录工具轨迹，不生成复现卡，也不定位卡点。
  * reflection 只复述结构缺口与工具状态，不是卡点结论，也不排序选项。
  */
 
@@ -149,10 +150,11 @@ export function AgentTracePanel({
           <>
             {verification === "executable" ? (
               <div style={{ marginTop: 22 }}>
-                <p className="sm-lab">可选：自己粘贴一段最小复现</p>
+                <p className="sm-lab">可选：自己粘贴一段最小复现（旁路）</p>
                 <p className="sm-fine" style={{ marginTop: 8 }}>
                   只运行你显式提交的 Python；默认关闭，关闭时只记录「未运行」，
-                  不会假装通过。执行器是受限本地进程，不是容器级安全沙箱。
+                  不会假装通过。这里只记录轨迹，不生成复现卡；要留下一张结果卡片，
+                  用上面的「代码复现卡」。执行器是受限本地进程，不是容器级安全沙箱。
                 </p>
                 <label className="sm-f" style={{ marginTop: 14 }}>
                   <span className="sm-f-label">Python 代码</span>

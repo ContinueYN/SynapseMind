@@ -17,6 +17,7 @@ from synapse.api.mappers import (
     agent_trace_out,
     diagnosis_out,
     execution_out,
+    generic_review_out,
     knowledge_search_out,
     review_items_out,
     session_out,
@@ -31,10 +32,12 @@ from synapse.api.schemas import (
     ExecutionOut,
     ExecutionRequestIn,
     ExitRequest,
+    GenericReviewOut,
     HealthOut,
     IntakeProbeRequest,
     KnowledgeSearchOut,
     ReviewItemsOut,
+    ReviewRunRequest,
     SessionOut,
     StepRequest,
     StepVerdictOut,
@@ -61,6 +64,7 @@ from synapse.application.service import (
     DiagnosisNotReady,
     IntakeProbeUnavailable,
     InvalidAnswer,
+    ReviewRunRejected,
     SessionNotFound,
     SessionService,
     SessionView,
@@ -257,6 +261,45 @@ def run_agent_trace(
     except AgentInputRejected as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return agent_trace_out(trace)
+
+
+@router.post(
+    "/sessions/{session_id}/review/run",
+    response_model=GenericReviewOut,
+    response_model_exclude_none=True,
+)
+def run_review(
+    session_id: str,
+    request: ReviewRunRequest,
+    service: SessionService = Depends(get_service),
+) -> GenericReviewOut:
+    """Turn one explicitly submitted run into a code reproduction card.
+
+    This is the only path that produces ``kind="execution"``; it never pulls
+    code out of the problem or the attempt. Only a session whose verification
+    mode is ``executable`` is accepted (409 otherwise). With ``SYNAPSE_EXEC=off``
+    the card reports ``skipped`` and the executor is not called; ``pass`` means
+    the process exited 0 or the submitted tests passed, never that the code is
+    correct. The session is read-only: nothing is stored and the answer store is
+    never read.
+    """
+
+    try:
+        review = service.review_run(session_id, code=request.code, tests=request.tests)
+    except SessionNotFound as exc:
+        raise HTTPException(status_code=404, detail="session not found") from exc
+    except ReviewRunRejected as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except ExecutionBusy as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(exc),
+            headers={"Retry-After": "1"},
+        ) from exc
+    return generic_review_out(review)
 
 
 @router.post("/sessions/{session_id}/intake", response_model=SessionOut)

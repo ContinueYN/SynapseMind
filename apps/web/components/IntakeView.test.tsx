@@ -3,10 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { IntakeView } from "./IntakeView";
-import type { DomainIntake } from "@/src/lib/api/types";
+import type { DomainIntake, GenericReview } from "@/src/lib/api/types";
 
 const GENERIC: DomainIntake = {
-  version: "0.4",
+  version: "0.5",
   domain: {
     name: "generic",
     label: "通用问题",
@@ -80,6 +80,31 @@ const WITH_PROBE: DomainIntake = {
     limit: 3,
   },
 };
+
+const REVIEW: GenericReview = {
+  version: "0.1",
+  session_id: "S_DECISION",
+  problem_id: "P_GEN_TEST",
+  kind: "structure",
+  domain: { name: "decision", label: "生活决策", verification: "argumentative" },
+  headline: "看到了部分结构，但还有 1 处没有写到；逐条列在下面。",
+  findings: [
+    {
+      id: "f1",
+      kind: "missing_constraint",
+      label: "缺约束",
+      severity: "blocking",
+      summary: "没看到约束：时间、钱、关系、不可逆性。",
+      evidence_refs: ["ev1"],
+    },
+  ],
+  evidence: [{ id: "ev1", source: "student", ref: "student", excerpt: "我想两年内转做后端。" }],
+  not_checked: ["没有判断内容对错。"],
+  next_step: "哪些条件不能动？写一句时间、范围或关系上的限制。",
+  disclaimer: "这是结构复盘：不判断观点对错，也不给分。",
+};
+
+const WITH_REVIEW: DomainIntake = { ...WITH_ATTEMPT, review: REVIEW };
 
 describe("IntakeView", () => {
   it("never shows a confidence percentage when the domain is a guess", () => {
@@ -171,5 +196,36 @@ describe("IntakeView", () => {
     expect(screen.getByText("从你的话里整理的结构")).toBeInTheDocument();
     expect(screen.getByText("决定在哪里工作")).toBeInTheDocument();
     expect(screen.queryByText("模型整理")).not.toBeInTheDocument();
+  });
+
+  it("offers the code reproduction form only for an executable intake", () => {
+    const { unmount } = render(<IntakeView intake={CODE} sessionId="S_CODE" />);
+
+    expect(screen.getByText(/代码复现卡 · 只跑你显式提交的代码/)).toBeInTheDocument();
+    const codeBox = screen.getByLabelText("Python 代码");
+    expect(codeBox).toHaveValue("");
+    expect(screen.getByText(/不会从题面、作答或轨迹里替你抽代码/)).toBeInTheDocument();
+
+    unmount();
+    render(<IntakeView intake={GENERIC} sessionId="S_GENERIC" />);
+
+    expect(screen.queryByText(/代码复现卡/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Python 代码")).not.toBeInTheDocument();
+  });
+
+  it("shows the review in place of the old gap list, without stacking both", () => {
+    render(<IntakeView intake={WITH_REVIEW} sessionId="S_DECISION" />);
+
+    expect(screen.getByText("结构复盘 · 只看写到没写到")).toBeInTheDocument();
+    expect(screen.getByText("缺约束")).toBeInTheDocument();
+    // The v0.4 gap list would repeat the same coverage; the review replaces it.
+    expect(screen.queryByText("你写的里面还缺")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("没看到约束：时间、钱、关系、不可逆性。", {
+        selector: "p.sm-note",
+      }),
+    ).not.toBeInTheDocument();
+    // What the student did write is still read back separately.
+    expect(screen.getByText(/你写的里面看到了：目标、选项、风险/)).toBeInTheDocument();
   });
 });
