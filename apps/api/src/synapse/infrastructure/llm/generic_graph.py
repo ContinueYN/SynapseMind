@@ -34,17 +34,17 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
 
-from synapse.application import trace
-from synapse.application.audit import AuditEntry, CallAuditor
-from synapse.application.domains import IntakeFramework, VerificationMode
-from synapse.application.generic_graph import (
+from synapse.application.diagnosis import trace
+from synapse.application.diagnosis.domains import IntakeFramework, VerificationMode
+from synapse.application.diagnosis.generic_graph import (
     GenericGraphBuildFailed,
     GenericGraphBuildResult,
     GenericGraphDraft,
     GenericGraphFailureReason,
 )
-from synapse.application.generic_verify import EmpiricalVerifier, FormalVerifier
-from synapse.application.llm import (
+from synapse.application.diagnosis.generic_verify import EmpiricalVerifier, FormalVerifier
+from synapse.application.shared.audit import AuditEntry, CallAuditor
+from synapse.application.shared.llm import (
     LLMCallFailed,
     LLMClient,
     LLMRequest,

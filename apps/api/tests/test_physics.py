@@ -12,9 +12,9 @@ from fastapi.testclient import TestClient
 
 from synapse.api.deps import build_container
 from synapse.api.main import create_app
-from synapse.application.commands import StartSessionCommand
-from synapse.application.graph import GraphBuildFailed, GraphBuildResult
-from synapse.application.subject import StudentStep, SubjectRegistry, VerifiabilityLevel
+from synapse.application.diagnosis.graph import GraphBuildFailed, GraphBuildResult
+from synapse.application.sessions.commands import StartSessionCommand
+from synapse.application.shared.subject import StudentStep, SubjectRegistry, VerifiabilityLevel
 from synapse.domain.diagnosis.hypotheses import HYPOTHESES, HypothesisSet
 from synapse.domain.problem.alignment import AlignmentResult, TypeCueAligner
 from synapse.domain.problem.models import (

@@ -13,8 +13,8 @@ from pathlib import Path
 import pytest
 
 from synapse.api.deps import build_container
-from synapse.application.llm import LLMRequest, LLMResponse
-from synapse.application.replay import load_cases, replay_case
+from synapse.application.diagnosis.replay import load_cases, replay_case
+from synapse.application.shared.llm import LLMRequest, LLMResponse
 from synapse.infrastructure.llm.audit import InMemoryCallAuditor
 from synapse.infrastructure.llm.settings import LLMSettings
 

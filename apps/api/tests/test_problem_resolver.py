@@ -8,10 +8,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from synapse.api.deps import build_container
-from synapse.application.errors import ProblemNotSupported
-from synapse.application.graph import GraphBuildFailed, GraphBuildResult
-from synapse.application.problem_resolver import ProblemResolver, generated_id
-from synapse.application.subject import SubjectRegistry
+from synapse.application.diagnosis.graph import GraphBuildFailed, GraphBuildResult
+from synapse.application.diagnosis.problem_resolver import ProblemResolver, generated_id
+from synapse.application.shared.errors import ProblemNotSupported
+from synapse.application.shared.subject import SubjectRegistry
 from synapse.domain.problem.models import (
     Probe,
     ProblemDraft,

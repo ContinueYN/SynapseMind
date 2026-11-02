@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-from synapse.application.commitment import capabilities_for
-from synapse.application.subject import VerifiabilityLevel
+from synapse.application.shared.commitment import capabilities_for
+from synapse.application.shared.subject import VerifiabilityLevel
 
 
 def test_strong_tier_probes_and_cards() -> None:

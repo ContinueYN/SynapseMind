@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import CardPage from "./page";
-import { getSession } from "@/src/lib/api/client";
+import { getSession } from "@/src/lib/api/sessions";
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({ sessionId: "S_CARD" }),
@@ -15,29 +15,20 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-vi.mock("@/src/lib/api/client", () => {
-  class ApiError extends Error {
-    readonly status: number;
+vi.mock("@/src/lib/api/sessions", () => ({
+  exitSession: vi.fn(),
+  getSession: vi.fn(),
+}));
 
-    constructor(status: number, message: string) {
-      super(message);
-      this.status = status;
-    }
-  }
-  return {
-    ApiError,
-    getSession: vi.fn(),
-    requestCoach: vi.fn(),
-    exitSession: vi.fn(),
-    isUnauthorized: (error: unknown) =>
-      Boolean(
-        error &&
-          typeof error === "object" &&
-          "status" in error &&
-          (error as { status?: number }).status === 401,
-      ),
-  };
-});
+vi.mock("@/src/lib/api/http", () => ({
+  isUnauthorized: (error: unknown) =>
+    Boolean(
+      error &&
+        typeof error === "object" &&
+        "status" in error &&
+        (error as { status?: number }).status === 401,
+    ),
+}));
 
 describe("CardPage auth gate", () => {
   beforeEach(() => {

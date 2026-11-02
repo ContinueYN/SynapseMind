@@ -4,16 +4,16 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import DiagnosePage from "./page";
+import { requestCoach } from "@/src/lib/api/coach";
+import { ApiError } from "@/src/lib/api/http";
+import { searchKnowledge } from "@/src/lib/api/knowledge";
 import {
   answerClarifier,
   answerProbe,
-  ApiError,
   exitSession,
   getSession,
-  requestCoach,
-  searchKnowledge,
   submitTurn,
-} from "@/src/lib/api/client";
+} from "@/src/lib/api/sessions";
 import type { SessionResponse } from "@/src/lib/api/types";
 
 vi.mock("next/navigation", () => ({
@@ -30,37 +30,31 @@ vi.mock("@/src/lib/session-handoff", () => ({
   adoptSession: () => null,
 }));
 
-vi.mock("@/src/lib/api/client", () => {
-  class ApiError extends Error {
-    readonly status: number;
+vi.mock("@/src/lib/api/sessions", () => ({
+  answerClarifier: vi.fn(),
+  answerProbe: vi.fn(),
+  disagreeWithCard: vi.fn(),
+  getSession: vi.fn(),
+  exitSession: vi.fn(),
+  submitTurn: vi.fn(),
+}));
 
-    constructor(status: number, message: string) {
-      super(message);
-      this.status = status;
-    }
-  }
-  return {
-    ApiError,
-    API_BASE: "http://localhost:8000",
-    answerClarifier: vi.fn(),
-    answerProbe: vi.fn(),
-    getSession: vi.fn(),
-    requestCoach: vi.fn(),
-    runReview: vi.fn(),
-    submitTurn: vi.fn(),
-    exitSession: vi.fn(),
-    searchKnowledge: vi.fn().mockResolvedValue({
-      version: "0.2",
-      enabled: false,
-      query: "",
-      hits: [],
-    }),
-    isSessionConflict: (error: unknown) =>
-      error instanceof ApiError && error.status === 409,
-    isUnauthorized: (error: unknown) =>
-      error instanceof ApiError && error.status === 401,
-  };
-});
+vi.mock("@/src/lib/api/coach", () => ({
+  requestCoach: vi.fn(),
+}));
+
+vi.mock("@/src/lib/api/knowledge", () => ({
+  searchKnowledge: vi.fn().mockResolvedValue({
+    version: "0.2",
+    enabled: false,
+    query: "",
+    hits: [],
+  }),
+}));
+
+vi.mock("@/src/lib/api/review", () => ({
+  runReview: vi.fn(),
+}));
 
 const FIRST: SessionResponse = {
   session_id: "S_CONFLICT",

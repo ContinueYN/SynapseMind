@@ -12,7 +12,7 @@ import re
 from collections.abc import Iterable, Sequence
 from typing import Protocol
 
-from synapse.application.knowledge import KnowledgeUnavailable
+from synapse.application.knowledge.service import KnowledgeUnavailable
 
 DEFAULT_MODEL = "BAAI/bge-small-zh-v1.5"
 _ASCII_WORD = re.compile(r"[a-zA-Z0-9_]+")

@@ -34,14 +34,14 @@ from fastapi.testclient import TestClient
 from alembic import command
 from synapse.api.deps import Container, build_container
 from synapse.api.main import create_app
-from synapse.application.context import bind_owner, reset_owner
-from synapse.application.credentials import (
+from synapse.application.credentials.service import (
     CredentialDecryptionError,
     CredentialInput,
     CredentialService,
     SecretCredential,
 )
-from synapse.application.llm import LLMCallFailed, LLMRequest
+from synapse.application.shared.context import bind_owner, reset_owner
+from synapse.application.shared.llm import LLMCallFailed, LLMRequest
 from synapse.infrastructure.llm.client import CredentialAwareLLMClient
 from synapse.infrastructure.llm.settings import LLMMode, LLMSettings
 

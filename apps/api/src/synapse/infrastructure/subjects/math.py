@@ -18,8 +18,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from synapse.application.graph import GraphBuildFailed, GraphGenerator
-from synapse.application.subject import (
+from synapse.application.diagnosis.graph import GraphBuildFailed, GraphGenerator
+from synapse.application.diagnosis.work_check import EqualityChecker
+from synapse.application.shared.subject import (
     EvidenceModel,
     ProblemIdentifier,
     ProblemRef,
@@ -27,7 +28,6 @@ from synapse.application.subject import (
     Verdict,
     VerifiabilityLevel,
 )
-from synapse.application.work_check import EqualityChecker
 from synapse.domain.diagnosis.hypotheses import EVIDENCE, HYPOTHESES
 from synapse.domain.problem.alignment import (
     CompositeAligner,

@@ -10,9 +10,9 @@ from dataclasses import replace
 from fastapi.testclient import TestClient
 
 from synapse.api.deps import build_container
-from synapse.application.commands import StartSessionCommand
-from synapse.application.factory import SessionFactory
-from synapse.application.subject import (
+from synapse.application.sessions.commands import StartSessionCommand
+from synapse.application.sessions.factory import SessionFactory
+from synapse.application.shared.subject import (
     EvidenceModel,
     StudentStep,
     SubjectRegistry,

@@ -14,8 +14,8 @@ import json
 from fastapi.testclient import TestClient
 
 from synapse.api.deps import build_container
-from synapse.application.graph import GraphBuildResult
-from synapse.application.llm import LLMRequest, LLMResponse
+from synapse.application.diagnosis.graph import GraphBuildResult
+from synapse.application.shared.llm import LLMRequest, LLMResponse
 from synapse.domain.problem.models import (
     Probe,
     ProblemDraft,

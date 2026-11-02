@@ -18,7 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
-from synapse.application.credentials import (
+from synapse.application.credentials.service import (
     CredentialStoreUnavailable,
     StoredCredential,
 )

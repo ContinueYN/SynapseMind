@@ -34,7 +34,7 @@ from sqlalchemy import CursorResult, func, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
-from synapse.application.auth import (
+from synapse.application.auth.service import (
     AuthStoreUnavailable,
     EmailAlreadyRegistered,
     TokenState,

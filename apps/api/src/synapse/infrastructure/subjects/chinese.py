@@ -6,7 +6,7 @@ card on structured steps. Chinese has no automatic truth, so the product may
 only show the reference structure and which steps the process appears to
 mention. Everything else is refused by construction:
 
-* ``level = NONE`` — ``application/commitment.py`` turns that into "no probes,
+* ``level = NONE`` — ``application/shared/commitment.py`` turns that into "no probes,
   no diagnosis card, structure hint only";
 * ``probes_for`` returns nothing, so even a graph that somehow carries probes
   cannot start a probe turn;
@@ -21,8 +21,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from synapse.application.graph import GraphBuildFailed, GraphGenerator
-from synapse.application.subject import (
+from synapse.application.diagnosis.graph import GraphBuildFailed, GraphGenerator
+from synapse.application.shared.subject import (
     EvidenceModel,
     ProblemRef,
     StudentStep,
@@ -66,7 +66,7 @@ class ChinesePlugin:
 
         This hook only identifies reviewed problems owned by the plugin. The
         decision to send an undeclared stem to the Chinese graph generator is
-        made by ``application.domains.DomainResolver`` before this hook is
+        made by ``application.diagnosis.domains.DomainResolver`` before this hook is
         reached.
         """
 

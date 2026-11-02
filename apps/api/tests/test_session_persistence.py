@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from synapse.api.deps import build_container
 from synapse.api.main import create_app
-from synapse.application.graph import GraphBuildResult
+from synapse.application.diagnosis.graph import GraphBuildResult
 from synapse.domain.diagnosis.hypotheses import HypothesisSet
 from synapse.domain.diagnosis.work import WorkFinding
 from synapse.domain.dialogue.session import DialogueSession

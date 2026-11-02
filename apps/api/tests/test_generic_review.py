@@ -24,10 +24,10 @@ from typing import Any
 import pytest
 from jsonschema import Draft202012Validator
 
-from synapse.application.domains import IntakeFramework, VerificationMode
-from synapse.application.generic_check import StructureGap, structure_gaps
-from synapse.application.generic_review import GenericReviewComposer
-from synapse.application.generic_slots import CueSlotExtractor
+from synapse.application.diagnosis.domains import IntakeFramework, VerificationMode
+from synapse.application.diagnosis.generic_check import StructureGap, structure_gaps
+from synapse.application.diagnosis.generic_slots import CueSlotExtractor
+from synapse.application.review.generic import GenericReviewComposer
 from synapse.domain.problem.generic import GenericGraph, GenericNode, NodeKind
 from synapse.domain.problem.generic_review import (
     EvidenceSource,

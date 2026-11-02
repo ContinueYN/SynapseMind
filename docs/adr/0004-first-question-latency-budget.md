@@ -3,7 +3,7 @@
 - **状态**：accepted
 - **日期**：2026-10-30
 - **决策者**：开发与架构评审
-- **相关**：[`service.py`](../../apps/api/src/synapse/application/service.py)、[`graph.py`](../../apps/api/src/synapse/infrastructure/llm/graph.py)、[`verification/__init__.py`](../../apps/api/src/synapse/infrastructure/verification/__init__.py)
+- **相关**：[`service.py`](../../apps/api/src/synapse/application/sessions/service.py)、[`graph.py`](../../apps/api/src/synapse/infrastructure/llm/graph.py)、[`verification/__init__.py`](../../apps/api/src/synapse/infrastructure/verification/__init__.py)
 
 ## 1. 背景
 

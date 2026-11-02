@@ -16,7 +16,7 @@ from argon2.exceptions import InvalidHashError, VerificationError
 
 
 class Argon2PasswordHasher:
-    """Adapter behind ``synapse.application.auth.PasswordHasher``."""
+    """Adapter behind ``synapse.application.auth.service.PasswordHasher``."""
 
     def __init__(self, hasher: _Argon2 | None = None) -> None:
         # Tests may pass a cheaper hasher; production keeps the library default

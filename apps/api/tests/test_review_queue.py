@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from jsonschema import Draft202012Validator
 
 from synapse.api.main import create_app
-from synapse.application.review import ReviewItem
+from synapse.application.review.service import ReviewItem
 from synapse.infrastructure.review import SqliteReviewQueue
 
 SPEC_PATH = Path(__file__).resolve().parents[3] / "specs" / "review-queue.schema.json"

@@ -2,7 +2,7 @@
 
 A generic review is the first product the open-domain path can show: a structure
 review, a decision frame or a code reproduction card. This module only pins the
-shape — who composes it (``application/generic_review.py``, later phases) and how
+shape — who composes it (``application/review/generic.py``, later phases) and how
 it is displayed are deliberately out of scope.
 
 Two rules are enforced here rather than left to the composer:

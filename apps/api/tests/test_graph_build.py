@@ -8,8 +8,8 @@ from typing import Any
 
 import pytest
 
-from synapse.application.graph import GraphBuildFailed
-from synapse.application.llm import LLMRequest, LLMResponse, LLMTimeout
+from synapse.application.diagnosis.graph import GraphBuildFailed
+from synapse.application.shared.llm import LLMRequest, LLMResponse, LLMTimeout
 from synapse.domain.problem.graph_structure import fingerprint
 from synapse.domain.problem.models import Interval, ProblemDraft, SolutionGraph
 from synapse.infrastructure.llm.audit import InMemoryCallAuditor

@@ -4,15 +4,14 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useState } from "react";
 
-import { Plane } from "@/components/Plane";
+import { Plane } from "@/components/ui/Plane";
+import { loginAccount, registerAccount } from "@/src/lib/api/auth";
 import {
   ApiError,
   isAuthDisabled,
   isSessionReused,
   isUnauthorized,
-  loginAccount,
-  registerAccount,
-} from "@/src/lib/api/client";
+} from "@/src/lib/api/http";
 
 type Mode = "login" | "register";
 

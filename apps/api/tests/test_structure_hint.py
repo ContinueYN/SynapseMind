@@ -17,8 +17,8 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
-from synapse.api.mappers import hint_out
-from synapse.application.hint_builder import DISCLAIMER, build_structure_hint
+from synapse.api.mappers.sessions import hint_out
+from synapse.application.diagnosis.hint_builder import DISCLAIMER, build_structure_hint
 from synapse.domain.diagnosis.hypotheses import HYPOTHESES, HypothesisSet
 from synapse.domain.dialogue.session import DialogueSession
 from synapse.domain.dialogue.states import DialogueState

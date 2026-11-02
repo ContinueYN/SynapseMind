@@ -13,7 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from synapse.api.main import create_app
-from synapse.application.errors import SessionConflict
+from synapse.application.shared.errors import SessionConflict
 from synapse.domain.diagnosis.hypotheses import HypothesisSet
 from synapse.domain.dialogue.session import DialogueSession
 from synapse.domain.dialogue.states import DialogueState

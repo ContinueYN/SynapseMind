@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from synapse.api.deps import build_container
 from synapse.api.main import create_app
-from synapse.application.graph import GraphBuildResult
+from synapse.application.diagnosis.graph import GraphBuildResult
 from synapse.domain.problem.models import ProblemDraft, SolutionGraph, SolutionNode
 from synapse.infrastructure.llm.settings import LLMSettings
 from synapse.infrastructure.seed import SAMPLE_ANSWER, SAMPLE_PROBLEM

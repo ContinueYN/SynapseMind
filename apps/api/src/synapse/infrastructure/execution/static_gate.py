@@ -18,7 +18,7 @@ from __future__ import annotations
 import ast
 from dataclasses import dataclass
 
-from synapse.application.execution import ExecutionFinding, ExecutionFindingCode
+from synapse.application.execution.service import ExecutionFinding, ExecutionFindingCode
 
 _ALLOWED_IMPORTS = frozenset(
     {

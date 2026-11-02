@@ -16,21 +16,21 @@ from jsonschema import Draft202012Validator
 
 from synapse.api.deps import build_container
 from synapse.api.main import create_app
-from synapse.application.agent_planner import (
+from synapse.application.diagnosis.agent_planner import (
     AgentPlanningTool,
     PlannerContext,
     PlannerRejected,
 )
-from synapse.application.execution import (
-    ExecutionResult,
-    RunCodeCommand,
-)
-from synapse.application.generic_graph import (
+from synapse.application.diagnosis.generic_graph import (
     GenericGraphBuildFailed,
     GenericGraphDraft,
 )
-from synapse.application.knowledge import KnowledgeService, KnowledgeUnavailable
-from synapse.application.llm import LLMRequest, LLMResponse
+from synapse.application.execution.service import (
+    ExecutionResult,
+    RunCodeCommand,
+)
+from synapse.application.knowledge.service import KnowledgeService, KnowledgeUnavailable
+from synapse.application.shared.llm import LLMRequest, LLMResponse
 from synapse.domain.knowledge.models import (
     KnowledgeCard,
     KnowledgeHit,

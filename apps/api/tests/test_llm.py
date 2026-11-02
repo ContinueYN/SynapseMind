@@ -9,7 +9,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from synapse.application.llm import LLMCallFailed, LLMRequest, LLMTimeout
+from synapse.application.shared.llm import LLMCallFailed, LLMRequest, LLMTimeout
 from synapse.infrastructure.llm.client import OpenAICompatibleClient
 from synapse.infrastructure.llm.schema import SchemaRejected, parse_rewrite
 from synapse.infrastructure.llm.settings import LLMSettings, load_dotenv

@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, Any
 
-from synapse.application.execution import (
+from synapse.application.execution.service import (
     ExecutionBusy,
     ExecutionFinding,
     ExecutionResult,

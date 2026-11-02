@@ -1,6 +1,6 @@
 """Optional model classifier for ambiguous domain labels (Phase 0).
 
-The deterministic detector in ``application.domain_detection`` handles the
+The deterministic detector in ``application.diagnosis.domain_detection`` handles the
 common case without a network call. This adapter is only asked when that score
 is not decisive, so a normal start does not pay for a second model round trip.
 
@@ -15,8 +15,8 @@ from __future__ import annotations
 import json
 import re
 
-from synapse.application.domain_detection import DetectedDomain
-from synapse.application.llm import LLMCallFailed, LLMClient, LLMRequest, LLMTimeout
+from synapse.application.diagnosis.domain_detection import DetectedDomain
+from synapse.application.shared.llm import LLMCallFailed, LLMClient, LLMRequest, LLMTimeout
 
 _TIMEOUT_S = 3.0
 _MAX_STEM_CHARS = 2000

@@ -13,10 +13,16 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from synapse.application import trace
-from synapse.application.audit import AuditEntry, CallAuditor
-from synapse.application.composer import CompositionFailed, ProbePrompt
-from synapse.application.llm import LLMCallFailed, LLMClient, LLMRequest, LLMResponse, LLMTimeout
+from synapse.application.diagnosis import trace
+from synapse.application.diagnosis.composer import CompositionFailed, ProbePrompt
+from synapse.application.shared.audit import AuditEntry, CallAuditor
+from synapse.application.shared.llm import (
+    LLMCallFailed,
+    LLMClient,
+    LLMRequest,
+    LLMResponse,
+    LLMTimeout,
+)
 from synapse.domain.problem.models import Probe, Problem
 from synapse.infrastructure.llm.schema import SchemaRejected, parse_rewrite
 from synapse.infrastructure.llm.settings import LLMSettings

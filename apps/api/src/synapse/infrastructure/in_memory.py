@@ -1,6 +1,6 @@
 """In-memory adapters for the walking skeleton.
 
-No database yet; the Protocols in ``application.ports`` are the seam for
+No database yet; the Protocols in ``application.shared.ports`` are the seam for
 PostgreSQL/Alembic in M2.
 """
 
@@ -9,8 +9,8 @@ from __future__ import annotations
 from copy import deepcopy
 from threading import RLock
 
-from synapse.application.errors import SessionConflict
-from synapse.application.subject import SubjectRegistry
+from synapse.application.shared.errors import SessionConflict
+from synapse.application.shared.subject import SubjectRegistry
 from synapse.domain.dialogue.session import DialogueSession
 from synapse.domain.problem.models import Problem
 from synapse.infrastructure.seed import SAMPLE_ANSWER, SAMPLE_PROBLEM, SAMPLE_SOLUTION

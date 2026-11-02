@@ -14,7 +14,7 @@ without it is left alone.
 
 from __future__ import annotations
 
-from synapse.application.verification import (
+from synapse.application.diagnosis.verification import (
     CounterExample,
     GraphVerifier,
     VerificationResult,

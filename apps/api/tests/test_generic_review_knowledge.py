@@ -14,12 +14,12 @@ from fastapi.testclient import TestClient
 
 from synapse.api.deps import build_container
 from synapse.api.main import create_app
-from synapse.application.domains import DomainRegistry, IntakeFramework, VerificationMode
-from synapse.application.generic_check import structure_gaps
-from synapse.application.generic_review import GenericReviewComposer
-from synapse.application.generic_slots import CueSlotExtractor
-from synapse.application.intake import build_domain_intake
-from synapse.application.knowledge import KnowledgeService
+from synapse.application.diagnosis.domains import DomainRegistry, IntakeFramework, VerificationMode
+from synapse.application.diagnosis.generic_check import structure_gaps
+from synapse.application.diagnosis.generic_slots import CueSlotExtractor
+from synapse.application.diagnosis.intake import build_domain_intake
+from synapse.application.knowledge.service import KnowledgeService
+from synapse.application.review.generic import GenericReviewComposer
 from synapse.domain.knowledge.models import KnowledgeCard, KnowledgeHit, KnowledgeSource
 from synapse.domain.problem.generic_review import (
     EvidenceSource,

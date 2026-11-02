@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "apps" / "api" / "src"))
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-from synapse.application.subject import StudentStep  # noqa: E402
+from synapse.application.shared.subject import StudentStep  # noqa: E402
 from synapse.infrastructure.subjects.physics import PhysicsPlugin  # noqa: E402
 
 FORCE = {

@@ -22,15 +22,19 @@ from typing import cast
 from fastapi import HTTPException, Request, status
 from httpx import BaseTransport
 
-from synapse.application.agent_planner import ToolPlanner
-from synapse.application.audit import CallAuditor
-from synapse.application.auth import AuthService, AuthUser
-from synapse.application.auth_limits import (
+from synapse.application.auth.limits import (
     AuthFailureLimiter,
     FixedWindowAuthFailureLimiter,
 )
-from synapse.application.coach import CoachNarrator, CoachService
-from synapse.application.composer import (
+from synapse.application.auth.service import AuthService, AuthUser
+from synapse.application.credentials.service import (
+    CredentialService,
+    ModelTester,
+    RemoteUrlGuard,
+)
+from synapse.application.diagnosis.agent_planner import ToolPlanner
+from synapse.application.diagnosis.coach import CoachNarrator, CoachService
+from synapse.application.diagnosis.composer import (
     CanaryProbeComposer,
     FallbackProbeComposer,
     GraphProbeComposer,
@@ -38,31 +42,27 @@ from synapse.application.composer import (
     ProbeComposer,
     ShadowProbeComposer,
 )
-from synapse.application.credentials import (
-    CredentialService,
-    ModelTester,
-    RemoteUrlGuard,
-)
-from synapse.application.domain_detection import (
+from synapse.application.diagnosis.domain_detection import (
     CascadeDomainDetector,
     DomainDetector,
     HeuristicDomainDetector,
 )
-from synapse.application.domains import DomainRegistry, DomainResolver
-from synapse.application.execution import CodeExecutor
-from synapse.application.factory import SessionFactory
-from synapse.application.generic_graph import GenericGraphGenerator
-from synapse.application.graph import GraphGenerator
-from synapse.application.knowledge import KnowledgeService
-from synapse.application.limits import StepRateLimiter
-from synapse.application.llm import LLMClient
-from synapse.application.planner import HypothesisTargetedPlanner
-from synapse.application.ports import AnswerStore, ProblemRepository, SessionRepository
-from synapse.application.problem_resolver import ProblemResolver
-from synapse.application.review import ReviewService
-from synapse.application.service import SessionService
-from synapse.application.subject import SubjectRegistry
-from synapse.application.work_check import EqualityChecker
+from synapse.application.diagnosis.domains import DomainRegistry, DomainResolver
+from synapse.application.diagnosis.generic_graph import GenericGraphGenerator
+from synapse.application.diagnosis.graph import GraphGenerator
+from synapse.application.diagnosis.planner import HypothesisTargetedPlanner
+from synapse.application.diagnosis.problem_resolver import ProblemResolver
+from synapse.application.diagnosis.work_check import EqualityChecker
+from synapse.application.execution.service import CodeExecutor
+from synapse.application.knowledge.service import KnowledgeService
+from synapse.application.review.service import ReviewService
+from synapse.application.sessions.factory import SessionFactory
+from synapse.application.sessions.limits import StepRateLimiter
+from synapse.application.sessions.service import SessionService
+from synapse.application.shared.audit import CallAuditor
+from synapse.application.shared.llm import LLMClient
+from synapse.application.shared.ports import AnswerStore, ProblemRepository, SessionRepository
+from synapse.application.shared.subject import SubjectRegistry
 from synapse.domain.problem.alignment import RuleBasedAligner
 from synapse.infrastructure.auth.build import AuthRuntime, build_auth
 from synapse.infrastructure.auth.settings import AuthSettings

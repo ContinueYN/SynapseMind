@@ -27,12 +27,12 @@ sys.path.insert(0, str(ROOT / "apps" / "api" / "src"))
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from synapse.api.deps import build_container
-from synapse.application.commands import (
+from synapse.application.sessions.commands import (
     StartSessionCommand,
     SubmitAnswerCommand,
     VerifyStepCommand,
 )
-from synapse.application.service import SessionService, SessionView
+from synapse.application.sessions.service import SessionService, SessionView
 from synapse.infrastructure.llm.settings import LLMSettings, load_dotenv
 from synapse.infrastructure.seed import SAMPLE_PROBLEM
 

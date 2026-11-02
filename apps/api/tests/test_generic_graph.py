@@ -17,13 +17,13 @@ from typing import Any
 
 import pytest
 
-from synapse.application.audit import AuditEntry
-from synapse.application.domains import IntakeFramework, VerificationMode
-from synapse.application.generic_graph import (
+from synapse.application.diagnosis.domains import IntakeFramework, VerificationMode
+from synapse.application.diagnosis.generic_graph import (
     GenericGraphBuildFailed,
     GenericGraphDraft,
 )
-from synapse.application.llm import LLMRequest, LLMResponse
+from synapse.application.shared.audit import AuditEntry
+from synapse.application.shared.llm import LLMRequest, LLMResponse
 from synapse.domain.problem.generic import (
     ClaimCheck,
     EmpiricalClaim,

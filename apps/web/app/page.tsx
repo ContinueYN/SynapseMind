@@ -4,13 +4,14 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useState } from "react";
 
-import { CluePreview } from "@/components/CluePreview";
-import { Plane } from "@/components/Plane";
-import { EMPTY_DRAFT, ProblemForm, type Draft } from "@/components/ProblemForm";
-import { Reveal } from "@/components/Reveal";
-import { Surface } from "@/components/Surface";
-import { useTiltZone } from "@/components/useTilt";
-import { createSession, isUnauthorized } from "@/src/lib/api/client";
+import { CluePreview } from "@/components/diagnosis/CluePreview";
+import { EMPTY_DRAFT, ProblemForm, type Draft } from "@/components/diagnosis/ProblemForm";
+import { Plane } from "@/components/ui/Plane";
+import { Reveal } from "@/components/ui/Reveal";
+import { Surface } from "@/components/ui/Surface";
+import { useTiltZone } from "@/hooks/useTilt";
+import { isUnauthorized } from "@/src/lib/api/http";
+import { createSession } from "@/src/lib/api/sessions";
 import type { CreateSessionInput } from "@/src/lib/api/types";
 import {
   PAPERS,

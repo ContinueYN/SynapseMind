@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-from synapse.application.domain_detection import DetectedDomain
-from synapse.application.domains import (
+from synapse.application.diagnosis.domain_detection import DetectedDomain
+from synapse.application.diagnosis.domains import (
     DEFAULT_PROFILES,
     GENERIC_PROFILE,
     DomainProfile,
@@ -21,8 +21,8 @@ from synapse.application.domains import (
     normalize_label,
     verifiability_level,
 )
-from synapse.application.intake import build_domain_intake
-from synapse.application.subject import VerifiabilityLevel
+from synapse.application.diagnosis.intake import build_domain_intake
+from synapse.application.shared.subject import VerifiabilityLevel
 from synapse.domain.problem.models import Problem, SolutionGraph
 
 MATH = "已知函数 f(x)=x^2-a x+1，对任意 x∈R 有 f(x)>0，求 a 的取值范围。"

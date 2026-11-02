@@ -11,14 +11,14 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from synapse.api.deps import build_container
-from synapse.application.domain_detection import (
+from synapse.application.diagnosis.domain_detection import (
     CascadeDomainDetector,
     DetectedDomain,
     HeuristicDomainDetector,
     declared_domain,
 )
-from synapse.application.graph import GraphBuildResult
-from synapse.application.llm import LLMResponse
+from synapse.application.diagnosis.graph import GraphBuildResult
+from synapse.application.shared.llm import LLMResponse
 from synapse.domain.problem.models import ProblemDraft, SolutionGraph, SolutionNode
 from synapse.infrastructure.llm.domain_detector import LLMDomainDetector
 from synapse.infrastructure.llm.settings import LLMSettings

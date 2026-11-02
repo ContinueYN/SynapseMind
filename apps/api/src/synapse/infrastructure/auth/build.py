@@ -23,8 +23,8 @@ from typing import cast
 from redis import Redis
 from sqlalchemy.engine import Engine
 
-from synapse.application.auth import AuthService, SessionTokenStore
-from synapse.application.credentials import (
+from synapse.application.auth.service import AuthService, SessionTokenStore
+from synapse.application.credentials.service import (
     CredentialService,
     ModelTester,
     RemoteUrlGuard,

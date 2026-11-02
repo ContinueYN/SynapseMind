@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import pytest
 
-from synapse.application.subject import StudentStep
+from synapse.application.shared.subject import StudentStep
 from synapse.infrastructure.subjects.physics import PhysicsPlugin
 from synapse.infrastructure.verification.physics_units import (
     dimension_of,

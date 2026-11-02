@@ -18,7 +18,7 @@ import hashlib
 
 from cryptography.fernet import Fernet, InvalidToken
 
-from synapse.application.credentials import CredentialDecryptionError
+from synapse.application.credentials.service import CredentialDecryptionError
 
 _FERNET_KEY_BYTES = 32
 

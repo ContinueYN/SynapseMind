@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { ReviewBoard } from "@/components/ReviewBoard";
+import { ReviewBoard } from "@/components/review/ReviewBoard";
 
 export const metadata: Metadata = {
   title: "内部复核 · SynapseMind 突触智学",

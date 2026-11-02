@@ -38,8 +38,8 @@ sys.path.insert(0, str(ROOT / "apps" / "api" / "src"))
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # Windows GBK consoles
 
 from synapse.api.deps import build_container
-from synapse.application.commands import StartSessionCommand, SubmitAnswerCommand
-from synapse.application.errors import ProblemNotSupported
+from synapse.application.sessions.commands import StartSessionCommand, SubmitAnswerCommand
+from synapse.application.shared.errors import ProblemNotSupported
 from synapse.infrastructure.llm.settings import LLMSettings, load_dotenv
 
 PASS_BAR = 0.80

@@ -15,8 +15,8 @@ from synapse.api.auth import session_auth_middleware
 from synapse.api.deps import Container, build_container
 from synapse.api.routes import router
 from synapse.api.settings import router as settings_router
-from synapse.application.auth import AuthStoreUnavailable
-from synapse.application.credentials import (
+from synapse.application.auth.service import AuthStoreUnavailable
+from synapse.application.credentials.service import (
     CredentialDecryptionError,
     CredentialMissing,
     CredentialStoreDisabled,

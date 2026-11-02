@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from synapse.application.verification import describe_claim
+from synapse.application.diagnosis.verification import describe_claim
 from synapse.domain.problem.models import (
     Interval,
     SolutionGraph,

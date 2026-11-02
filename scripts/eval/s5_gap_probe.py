@@ -42,8 +42,8 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # Windows GBK consol
 from s5_session import Case, _aligned_option, cell, load_cases, pct, percentile  # noqa: E402
 
 from synapse.api.deps import build_container  # noqa: E402
-from synapse.application.commands import StartSessionCommand, SubmitAnswerCommand  # noqa: E402
-from synapse.application.llm import LLMRequest  # noqa: E402
+from synapse.application.sessions.commands import StartSessionCommand, SubmitAnswerCommand  # noqa: E402
+from synapse.application.shared.llm import LLMRequest  # noqa: E402
 from synapse.infrastructure.llm.client import OpenAICompatibleClient  # noqa: E402
 from synapse.infrastructure.llm.settings import load_dotenv  # noqa: E402
 

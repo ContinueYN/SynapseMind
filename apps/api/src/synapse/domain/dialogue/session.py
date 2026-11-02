@@ -46,7 +46,7 @@ class DialogueSession:
     evidence: EvidenceChain = field(default_factory=EvidenceChain)
     diagnosis: DiagnosisCard | None = None
     # Filled at start, read when the card is built several turns later. Empty
-    # unless the equality-check flag is on (see application/work_check.py).
+    # unless the equality-check flag is on (see application/diagnosis/work_check.py).
     work_findings: tuple[WorkFinding, ...] = ()
     # Blank-attempt scaffolding: how many example steps have been shown (0
     # means the session never entered SCAFFOLD) and the work accumulated across

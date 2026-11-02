@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from synapse.api.deps import build_container
-from synapse.application.replay import GoldenCase, judge, load_cases, replay_case
+from synapse.application.diagnosis.replay import GoldenCase, judge, load_cases, replay_case
 
 GOLDEN_PATH = Path(__file__).resolve().parents[3] / "eval" / "golden" / "golden-v0.1.jsonl"
 

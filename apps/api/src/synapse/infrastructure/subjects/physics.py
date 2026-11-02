@@ -20,8 +20,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from synapse.application.graph import GraphBuildFailed, GraphGenerator
-from synapse.application.subject import (
+from synapse.application.diagnosis.graph import GraphBuildFailed, GraphGenerator
+from synapse.application.shared.subject import (
     EvidenceModel,
     ProblemRef,
     StudentStep,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from synapse.application.ports import AnswerStore
+from synapse.application.shared.ports import AnswerStore
 from synapse.domain.guard.leak import AnswerLeakGuard
 
 # A generated problem has no stored answer, so there is nothing to match. These

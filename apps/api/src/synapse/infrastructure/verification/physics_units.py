@@ -33,7 +33,7 @@ from dataclasses import dataclass
 from fractions import Fraction
 from typing import Final, cast
 
-from synapse.application.subject import StudentStep, Verdict
+from synapse.application.shared.subject import StudentStep, Verdict
 from synapse.domain.diagnosis.work import WorkFinding
 
 # Seven SI base dimensions, in this order: kg, m, s, A, K, mol, cd.

@@ -9,19 +9,21 @@ import {
   useState,
 } from "react";
 
-import { Plane } from "@/components/Plane";
-import { SignInRequired } from "@/components/SignInRequired";
-import { Surface } from "@/components/Surface";
+import { SignInRequired } from "@/components/auth/SignInRequired";
+import { Plane } from "@/components/ui/Plane";
+import { Surface } from "@/components/ui/Surface";
 import {
   ApiError,
-  deleteModelSettings,
-  getModelSettings,
   isAuthDisabled,
   isSessionReused,
   isUnauthorized,
+} from "@/src/lib/api/http";
+import {
+  deleteModelSettings,
+  getModelSettings,
   saveModelSettings,
   testModelSettings,
-} from "@/src/lib/api/client";
+} from "@/src/lib/api/settings";
 import type {
   ModelSettings,
   ModelSettingsTestResult,

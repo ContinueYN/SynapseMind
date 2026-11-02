@@ -30,24 +30,24 @@ from typing import cast
 from jsonschema import Draft202012Validator
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from synapse.application import trace
-from synapse.application.audit import AuditEntry, CallAuditor
-from synapse.application.graph import (
+from synapse.application.diagnosis import trace
+from synapse.application.diagnosis.graph import (
     GraphBuildFailed,
     GraphBuildResult,
     GraphFailureReason,
 )
-from synapse.application.llm import (
+from synapse.application.diagnosis.verification import (
+    GraphVerifier,
+    VerificationResult,
+    describe_claim,
+)
+from synapse.application.shared.audit import AuditEntry, CallAuditor
+from synapse.application.shared.llm import (
     LLMCallFailed,
     LLMClient,
     LLMRequest,
     LLMResponse,
     LLMTimeout,
-)
-from synapse.application.verification import (
-    GraphVerifier,
-    VerificationResult,
-    describe_claim,
 )
 from synapse.domain.diagnosis.hypotheses import HYPOTHESES
 from synapse.domain.problem.graph_structure import (

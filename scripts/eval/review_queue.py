@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "apps" / "api" / "src"))
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # Windows GBK consoles
 
-from synapse.application.review import ReviewItem  # noqa: E402
+from synapse.application.review.service import ReviewItem  # noqa: E402
 from synapse.infrastructure.review import SqliteReviewQueue  # noqa: E402
 
 

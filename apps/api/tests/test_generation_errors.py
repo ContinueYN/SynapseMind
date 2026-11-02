@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from synapse.application.errors import ProblemNotSupported
-from synapse.application.graph import GraphBuildFailed
-from synapse.application.problem_resolver import ProblemResolver
-from synapse.application.subject import SubjectRegistry
+from synapse.application.diagnosis.graph import GraphBuildFailed
+from synapse.application.diagnosis.problem_resolver import ProblemResolver
+from synapse.application.shared.errors import ProblemNotSupported
+from synapse.application.shared.subject import SubjectRegistry
 from synapse.domain.problem.models import ProblemDraft, SolutionGraph
 from synapse.infrastructure.in_memory import InMemoryProblemRepository
 

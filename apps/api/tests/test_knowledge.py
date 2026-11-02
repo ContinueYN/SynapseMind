@@ -10,7 +10,7 @@ from jsonschema import Draft202012Validator
 
 from synapse.api.deps import build_container
 from synapse.api.main import create_app
-from synapse.application.knowledge import KnowledgeService, KnowledgeUnavailable
+from synapse.application.knowledge.service import KnowledgeService, KnowledgeUnavailable
 from synapse.infrastructure.features import FeatureFlags
 from synapse.infrastructure.knowledge.corpus import load_corpus, parse_corpus
 from synapse.infrastructure.knowledge.embedding import HashingEmbedder

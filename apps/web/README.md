@@ -13,7 +13,7 @@ Next.js 15 App Router + TypeScript。只做“一次诊断”的界面，不做�
 | `/card/[sessionId]` | 独立卡点卡：证据、排除项、置信度、下一练；可打印 |
 | `/admin/review` | 内部复核：只读异议队列、逐条判断、导出 CSV |
 
-设计稿中还有 `/practice/[taskId]`、`/verify/[sessionId]`、`/q/[problemId]`，**M1 不建空页面**，等对应后端能力落地再加。`/admin/review` 先不加鉴权，是本机工具，不要对公网暴露。
+设计稿中还有 `/practice/[taskId]`、`/verify/[sessionId]`、`/q/[problemId]`，**M1 不建空页面**，等对应后端能力落地再加。鉴权开启时 `/admin/review` 和队列接口都要求登录；判断仍只存在本机浏览器里，不是面向学生的入口。
 
 ## 组件边界
 
@@ -29,29 +29,65 @@ apps/web/
 │  ├─ icon.svg                # 站点图标（突触标记）
 │  └─ styles/                 # tokens.css + surface.css
 ├─ components/
-│  ├─ AppShell.tsx            # 顶栏 + 页脚
-│  ├─ BrandOrb.tsx            # 顶部那颗球：图案 + 外圈阅读进度，悬停展开回首页
-│  ├─ Ground.tsx              # 底：白→浅蓝 + 水光 + 三团极慢呼吸的光斑（不跟指针）
-│  ├─ ScrollRule.tsx          # 写 --read-n（球的进度环）与 --scroll（景深）；开局强制回顶部
-│  ├─ Surface.tsx             # 琉璃面：唯一的玻璃，冷光 + 柔光 + 1° 倾斜
+│  ├─ ui/                     # 无业务含义的视觉原语
+│  │  ├─ BrandOrb.tsx         # 顶部那颗球：图案 + 外圈阅读进度，悬停展开回首页
+│  │  ├─ Dendrite.tsx         # 首页/追问页共用的进度语法
+│  │  ├─ Ground.tsx           # 底：白→浅蓝 + 水光 + 三团极慢呼吸的光斑（不跟指针）
+│  │  ├─ Plane.tsx            # 一块玻璃板：文字的家
+│  │  ├─ PointerField.tsx     # 页面级指针光场
+│  │  ├─ Reveal.tsx           # 滚动进入时的一次揭示
+│  │  ├─ ScrollRule.tsx       # 写 --read-n（球的进度环）与 --scroll（景深）；开局强制回顶部
+│  │  ├─ Surface.tsx          # 琉璃面：唯一的玻璃，冷光 + 柔光 + 1° 倾斜
+│  │  └─ Thread.tsx           # 已答轮次连成一条线
+│  ├─ layout/
+│  │  ├─ AppShell.tsx         # 顶栏 + 页脚
+│  │  └─ ScrollMemory.tsx     # 换页时记住/恢复滚动位置
+│  ├─ auth/
+│  │  ├─ AccountMenu.tsx      # 顶部账号入口：登录、退出、模型设置
+│  │  └─ SignInRequired.tsx   # 401 时的统一「请先登录」状态
+│  ├─ diagnosis/
+│  │  ├─ AgentTracePanel.tsx  # 只读工具轨迹；不包装成诊断
+│  │  ├─ CluePreview.tsx      # 首页左栏：手上有几条线索
+│  │  ├─ CoachPanel.tsx       # 过程反馈：我错在哪 / 怎么开始
+│  │  ├─ DiagnosisCardView.tsx # 卡点卡视图；「我不同意」写回会话
+│  │  ├─ GenericReviewView.tsx # 通用复盘 / 决策框 / 代码复现卡
+│  │  ├─ IntakeView.tsx       # 通用入口：结构清单 + 一次澄清
+│  │  ├─ KnowledgePanel.tsx   # 卡旁的出处知识卡
+│  │  ├─ PhysicsStepCheck.tsx # 物理单步检查（量纲 / 数值回代）
+│  │  ├─ ProbeCard.tsx        # 单问题 + 选项 + 我还是不懂 + 退出
+│  │  ├─ ProblemBrief.tsx     # 题面；追问时也能看到整道题
+│  │  ├─ ProblemForm.tsx      # 受控表单，提交交给父级
+│  │  ├─ ScaffoldView.tsx     # 空白起步的 1–2 步示例
+│  │  ├─ StepCheck.tsx        # 数学单步检查（只查等号）
+│  │  ├─ StepVerdictView.tsx  # 单步检查结果的共用视图
+│  │  └─ StructureHintView.tsx # NONE 档学科的结构提示
+│  └─ review/
+│     └─ ReviewBoard.tsx      # 内部复核：取队列、判断、导出
+├─ hooks/
 │  ├─ useGlass.ts             # 把指针写进 --mx/--my、--lx/--ly、--rx/--ry（rAF 节流）
-│  ├─ ProblemForm.tsx         # 受控表单，提交交给父级
-│  ├─ CluePreview.tsx         # 首页左栏：手上有几条线索
-│  ├─ ProblemBrief.tsx        # 题面：追问时也能看到整道题（滚动吸附、可收三行）
-│  ├─ Dendrite.tsx            # 首页/追问页共用的进度语法
-│  ├─ ProbeCard.tsx           # 单问题 + 选项 + 我还是不懂 + 退出
-│  ├─ Thread.tsx              # 已答轮次连成一条线
-│  ├─ DiagnosisCardView.tsx   # 卡点卡视图；“我不同意”写回会话
-│  ├─ KnowledgePanel.tsx      # 卡旁的出处知识卡；RAG 关闭/无命中/失败时隐藏
-│  ├─ ReviewBoard.tsx         # 内部复核：取队列、判断、导出
-│  └─ review-sheet.ts         # 复核纯逻辑：判断词表、CSV、本机草稿
-└─ src/lib/api/
-   ├─ generated.ts            # openapi-typescript 从 FastAPI 契约生成，勿手改
-   ├─ types.ts                # 对生成类型的窄别名 + 交题输入 DTO
-   └─ client.ts               # fetch 封装 + ApiError
+│  └─ useTilt.ts              # 一组玻璃砖共用的倾斜 / 高光委托
+└─ src/lib/
+   ├─ api/
+   │  ├─ http.ts              # API_BASE、ApiError、鉴权错误判断、登录票据队列、fetch 传输
+   │  ├─ auth.ts              # 账号：getMe / register / login / logout
+   │  ├─ settings.ts          # 账号自己的模型配置
+   │  ├─ sessions.ts          # 会话、追问、退出、异议
+   │  ├─ steps.ts             # 单步验证
+   │  ├─ agent.ts             # 工具轨迹
+   │  ├─ coach.ts             # 过程反馈
+   │  ├─ review.ts            # 复核卡与内部队列
+   │  ├─ knowledge.ts         # 知识卡检索
+   │  ├─ index.ts             # 公共 barrel（不导出 fetch 传输层）
+   │  ├─ generated.ts         # openapi-typescript 从 FastAPI 契约生成，勿手改
+   │  └─ types.ts             # 对生成类型的窄别名 + 交题输入 DTO
+   ├─ physics/physics-step.ts # 物理单步表单 → API data 载荷
+   ├─ review/review-sheet.ts  # 复核纯逻辑：判断词表、CSV、本机草稿
+   ├─ session-handoff.ts      # 交题页 → 诊断页的一次性会话交接
+   └─ research/papers.ts      # 首页引用的公开文献
 ```
 
 - 页面负责“取数 + 状态更新”，展示组件只收 props；不把 fetch 散落在组件里。
+- API 访问走窄模块（`@/src/lib/api/sessions`、`.../auth`、`.../settings` 等）或公共 barrel `@/src/lib/api`；`http.ts` 的传输层只给这些模块用，不直接进组件。
 - 所有 API 错误统一为 `ApiError(status, message)`；网络失败会给可操作的提示；`422` 会被翻译成“这一问要从选项里选一个”。
 - 卡点卡页不重新请求诊断逻辑，只读取同一会话的 `diagnosis`。
 - 契约变更流程：改 `apps/api` 的 Pydantic DTO → `python scripts/contracts/generate.py` → 重新 typecheck；不要手改 `generated.ts`。
@@ -107,6 +143,6 @@ NEXT_DIST_DIR=.next        # 可选：并行跑第二份产物时指向别的目
 
 - 只支持一道种子题；换题由 API 返回 422，前端显示错误，不做假成功。
 - 会话默认在 API 内存里；`run.py` 会启用本地 SQLite 快照（`SYNAPSE_SESSION_DB`），API 重启后 `/diagnose/[id]` 仍可恢复。账号、登录票据和加密的模型凭据在 PostgreSQL；诊断快照仍是 SQLite，没有自动 TTL。
-- 内部复核页没有鉴权，队列只含卡面结论、不含学生原文；CSV 导出按浏览器本地时间命名。
+- 内部复核页在开启账号鉴权时要求登录（401 显示「请先登录」）；队列只含卡面结论、不含学生原文；CSV 导出按浏览器本地时间命名。
 - 历史记录只展示问答原话，不做完整时间线/回放。
 - 不用 Tailwind/组件库：设计令牌 + 语义 class 更少依赖、更好审。

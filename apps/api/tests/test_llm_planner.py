@@ -9,13 +9,13 @@ from __future__ import annotations
 
 import pytest
 
-from synapse.application.agent_planner import (
+from synapse.application.diagnosis.agent_planner import (
     AgentPlanningTool,
     PlannerContext,
     PlannerRejected,
 )
-from synapse.application.audit import AuditEntry
-from synapse.application.llm import (
+from synapse.application.shared.audit import AuditEntry
+from synapse.application.shared.llm import (
     LLMCallFailed,
     LLMRequest,
     LLMResponse,

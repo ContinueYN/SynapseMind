@@ -20,8 +20,11 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-vi.mock("@/src/lib/api/client", () => ({
+vi.mock("@/src/lib/api/sessions", () => ({
   createSession: mocks.createSession,
+}));
+
+vi.mock("@/src/lib/api/http", () => ({
   isUnauthorized: (error: unknown) =>
     Boolean(
       error &&

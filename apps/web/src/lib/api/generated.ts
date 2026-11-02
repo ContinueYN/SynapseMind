@@ -39,6 +39,10 @@ export interface paths {
          *     ``SYNAPSE_EXEC=on``; when off it returns 403 instead of pretending a run
          *     happened. ``pass`` means the process exited 0 or the submitted tests passed,
          *     never that the answer is correct.
+         *
+         *     With ``SYNAPSE_AUTH=on`` the middleware rejects a missing cookie with 401
+         *     before this body runs, even when execution is enabled; with the flag off the
+         *     dependency is a no-op and the 403/execute behaviour is unchanged.
          */
         post: operations["run_code_api_v1_executions_post"];
         delete?: never;
@@ -58,9 +62,13 @@ export interface paths {
          * List Review Items
          * @description Read-only listing of disagreed cards for the internal review page.
          *
-         *     There is no write endpoint and no authentication yet: the queue is a local
-         *     SQLite file, and the page exports the reviewer's judgment as a CSV instead
-         *     of storing it. The response never contains the student's own work.
+         *     There is no write endpoint and no per-owner filtering: the queue is a local
+         *     SQLite file. With ``SYNAPSE_AUTH=on`` the middleware requires a session, so
+         *     an anonymous caller gets 401; any logged-in account can read the global
+         *     queue (this is the internal operator view, not a per-user resource). With
+         *     auth off the listing is the local baseline and answers 200. The page
+         *     exports the reviewer's judgment as a CSV instead of storing it, and the
+         *     response never contains the student's own work.
          */
         get: operations["list_review_items_api_v1_review_items_get"];
         put?: never;
@@ -365,7 +373,9 @@ export interface paths {
          *     ``SYNAPSE_AUTH_ALLOW_SIGNUP=on`` (multi-user mode). Without it the first
          *     account claims the instance and later registrations answer 409. A duplicate
          *     email is the same 409, so the endpoint does not tell a caller whether a
-         *     different account exists.
+         *     different account exists. A closed or duplicate attempt counts against the
+         *     brute-force budget; a successful registration clears this account's
+         *     (IP, email) counter.
          */
         post: operations["register_api_v1_auth_register_post"];
         delete?: never;
@@ -389,7 +399,8 @@ export interface paths {
          *
          *     A wrong password, an unknown email and a closed shop all answer 401 with the
          *     same message; the password check runs the KDF even for an unknown email so
-         *     timing does not become an account oracle.
+         *     timing does not become an account oracle. The failure budget is checked
+         *     first: a throttled attempt answers 429 and never reaches the KDF.
          */
         post: operations["login_api_v1_auth_login_post"];
         delete?: never;

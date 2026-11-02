@@ -26,8 +26,8 @@ from fastapi.testclient import TestClient
 from alembic import command
 from synapse.api.deps import Container
 from synapse.api.main import create_app
-from synapse.application.context import current_owner_id
-from synapse.application.service import SessionNotFound
+from synapse.application.sessions.service import SessionNotFound
+from synapse.application.shared.context import current_owner_id
 
 APPS_API = Path(__file__).resolve().parents[1]
 ALEMBIC_INI = APPS_API / "alembic.ini"

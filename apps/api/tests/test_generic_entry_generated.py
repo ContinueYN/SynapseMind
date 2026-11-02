@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 
 from synapse.api.deps import build_container
 from synapse.api.main import create_app
-from synapse.application.generic_graph import (
+from synapse.application.diagnosis.generic_graph import (
     GenericGraphBuildFailed,
     GenericGraphBuildResult,
     GenericGraphDraft,

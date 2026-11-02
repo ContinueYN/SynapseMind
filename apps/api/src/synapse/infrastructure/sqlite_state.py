@@ -28,8 +28,8 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
-from synapse.application.errors import SessionConflict
-from synapse.application.subject import SubjectRegistry
+from synapse.application.shared.errors import SessionConflict
+from synapse.application.shared.subject import SubjectRegistry
 from synapse.domain.dialogue.session import DialogueSession
 from synapse.domain.problem.models import Problem
 from synapse.infrastructure.in_memory import InMemoryProblemRepository

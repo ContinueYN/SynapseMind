@@ -29,7 +29,7 @@ from collections.abc import Mapping
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from synapse.application.coach import (
+from synapse.application.diagnosis.coach import (
     ALLOWED_POINT_KINDS,
     CoachContext,
     CoachFocus,
@@ -38,7 +38,7 @@ from synapse.application.coach import (
     CoachUnavailable,
     PointKind,
 )
-from synapse.application.llm import (
+from synapse.application.shared.llm import (
     LLMCallFailed,
     LLMClient,
     LLMRequest,

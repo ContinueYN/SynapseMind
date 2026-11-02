@@ -14,7 +14,7 @@ from __future__ import annotations
 import time
 import unittest
 
-from synapse.application.execution import (
+from synapse.application.execution.service import (
     ExecutionBusy,
     ExecutionFinding,
     ExecutionResult,

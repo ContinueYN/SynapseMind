@@ -31,7 +31,7 @@ from sqlalchemy import select
 from alembic import command
 from synapse.api.deps import Container, build_container
 from synapse.api.main import create_app
-from synapse.application.credentials import (
+from synapse.application.credentials.service import (
     KNOWN_PROVIDER_HOSTS,
     PROVIDER_PRESETS,
     CredentialDecryptionError,

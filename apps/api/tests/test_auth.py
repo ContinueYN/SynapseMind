@@ -29,14 +29,14 @@ from sqlalchemy import func, inspect, select
 from alembic import command
 from synapse.api.deps import Container, build_container
 from synapse.api.main import create_app
-from synapse.application.auth import (
+from synapse.application.auth.service import (
     LOGIN_TICKET_PREFIX,
     SESSION_PREFIX,
     AuthService,
     SessionReuseDetected,
     hash_session_token,
 )
-from synapse.application.execution import ExecutionResult, RunCodeCommand
+from synapse.application.execution.service import ExecutionResult, RunCodeCommand
 from synapse.infrastructure.auth.build import build_auth
 from synapse.infrastructure.auth.db import (
     AuthSessionRow,

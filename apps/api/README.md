@@ -24,20 +24,52 @@ apps/api/src/synapse/
 │  ├─ knowledge/models.py     # KnowledgeCard / KnowledgeSource / KnowledgeHit
 │  ├─ evidence/models.py      # Evidence + EvidenceChain（来源/主张/支持假设/轮次）
 │  └─ guard/leak.py           # 禁用词 + n-gram 出口防护
-├─ application/               # 用例编排 + ports（Protocol）
-│  ├─ ports.py                # SessionRepository / ProblemRepository / AnswerStore / Clock / IdGenerator
-│  ├─ llm.py                  # LLMClient 端口 + 请求/响应 DTO + 超时/失败异常
-│  ├─ audit.py                # AuditEntry + CallAuditor（一次调用、一次降级、一次 shadow 差异）
-│  ├─ trace.py                # 请求级上下文（session_id/turn），不拓宽 composer 签名
-│  ├─ factory.py              # SessionFactory：组装会话，不让 service new 聚合
-│  ├─ planner.py              # ProbePlanner 策略：优先区分 top 假设
-│  ├─ composer.py             # GraphProbeComposer + LeakSafe/Fallback/Shadow/Canary 装饰器
-│  ├─ card_builder.py         # 由收敛假设生成 DiagnosisCard
-│  ├─ knowledge.py            # KnowledgeRetriever 端口 + 只读检索服务
-│  ├─ replay.py               # golden 回放与退出判定（eval 与 pytest 共用）
-│  ├─ subject.py              # SubjectPlugin 端口：识别/建图/对齐策略/探针/证据/验证
-│  ├─ review.py               # ReviewItem + ReviewQueue 端口 + 只读 ReviewService
-│  └─ service.py              # SessionService（Facade）：start/get/submit/exit
+├─ application/               # 用例编排：按功能分包 + 共享契约
+│  ├─ auth/
+│  │  ├─ service.py           # AuthService：注册/登录/会话 token 家族
+│  │  └─ limits.py            # 登录失败固定窗口限流
+│  ├─ sessions/
+│  │  ├─ service.py           # SessionService（Facade）：start/get/submit/exit…
+│  │  ├─ commands.py          # StartSessionCommand / SubmitAnswerCommand / VerifyStepCommand
+│  │  ├─ factory.py           # SessionFactory：组装会话，不让 service new 聚合
+│  │  └─ limits.py            # 单步验证限流
+│  ├─ diagnosis/
+│  │  ├─ intake.py            # 通用入口：清单、observed/gaps、结构补充
+│  │  ├─ domains.py           # DomainRegistry / DomainResolver / VerificationMode
+│  │  ├─ domain_detection.py  # 规则 + 可选模型领域识别
+│  │  ├─ generic_slots.py     # 线索匹配（不是理解）
+│  │  ├─ generic_check.py     # 结构缺口规则
+│  │  ├─ generic_verify.py    # formal / empirical 通用验证器
+│  │  ├─ graph.py             # GraphGenerator 端口 + GraphBuildResult
+│  │  ├─ generic_graph.py     # 生成式通用图端口
+│  │  ├─ problem_resolver.py  # 题面 → 可服务 Problem / 通用入口
+│  │  ├─ card_builder.py      # 由收敛假设生成 DiagnosisCard
+│  │  ├─ hint_builder.py      # NONE 档结构提示
+│  │  ├─ scaffold.py          # 空白作答的两步示例
+│  │  ├─ coach.py             # 过程反馈（规则版 + 可选模型）
+│  │  ├─ composer.py          # GraphProbeComposer + LeakSafe/Fallback/Shadow/Canary 装饰器
+│  │  ├─ planner.py           # ProbePlanner 策略：优先区分 top 假设
+│  │  ├─ replay.py            # golden 回放与退出判定（eval 与 pytest 共用）
+│  │  ├─ work_check.py        # EqualityChecker 端口
+│  │  ├─ agent.py             # 只读有界工具轨迹
+│  │  ├─ agent_planner.py     # 中间一步的可选工具规划器
+│  │  ├─ trace.py             # 请求级上下文（session_id/turn），不拓宽 composer 签名
+│  │  └─ verification.py      # claim 验证端口与描述
+│  ├─ review/
+│  │  ├─ service.py           # ReviewItem + ReviewQueue 端口 + 只读 ReviewService
+│  │  ├─ generic.py           # structure / decision 复盘
+│  │  └─ execution.py         # 显式运行 → execution 复盘卡
+│  ├─ knowledge/service.py    # KnowledgeRetriever 端口 + 只读检索服务
+│  ├─ execution/service.py    # CodeExecutor 端口 + 运行命令/结果
+│  ├─ credentials/service.py  # BYOK 校验/加密/公开视图
+│  └─ shared/                 # 跨功能契约
+│     ├─ ports.py             # SessionRepository / ProblemRepository / AnswerStore / Clock / IdGenerator
+│     ├─ llm.py               # LLMClient 端口 + 请求/响应 DTO + 超时/失败异常
+│     ├─ audit.py             # AuditEntry + CallAuditor（一次调用、一次降级、一次 shadow 差异）
+│     ├─ context.py           # 当前 owner 的 ContextVar
+│     ├─ errors.py            # SessionConflict 等共享错误
+│     ├─ subject.py           # SubjectPlugin 端口：识别/建图/对齐策略/探针/证据/验证
+│     └─ commitment.py        # 能力表（STRONG/PARTIAL/NONE）
 ├─ infrastructure/            # 端口实现
 │  ├─ seed.py                 # M1 唯一种子题 + 4 个探针 + 标准答案
 │  ├─ in_memory.py            # 默认内存仓储（测试/评测）
@@ -59,10 +91,39 @@ apps/api/src/synapse/
 │     ├─ composer.py          # LLMProbeComposer：只改写措辞
 │     └─ audit.py             # JSONL / 内存审计落地
 └─ api/                       # FastAPI 协议层
-   ├─ schemas.py              # Pydantic DTO；学习模式无 solution 字段
-   ├─ mappers.py              # domain → DTO
+   ├─ routes/
+   │  ├─ health.py            # /health
+   │  ├─ sessions.py          # /sessions…（入口、探针、卡、coach、agent、review/run、exit）
+   │  ├─ executions.py        # /executions
+   │  ├─ review.py            # /review/items
+   │  └─ knowledge.py         # /knowledge/search
+   ├─ auth/
+   │  ├─ routes.py            # register/login/logout/me + 失败预算
+   │  ├─ middleware.py        # 登录票据交换、受保护前缀、require_authenticated
+   │  └─ cookies.py           # synapse_session cookie 读写
+   ├─ settings/routes.py      # /settings/model（BYOK）
+   ├─ schemas/                # Pydantic DTO，按资源拆分；学习模式无 solution 字段
+   │  ├─ common.py            # StrictModel
+   │  ├─ auth.py              # 注册/登录/登出/me
+   │  ├─ sessions.py          # 会话、入口、诊断、提示、单步
+   │  ├─ review.py            # 通用复盘 + 异议队列
+   │  ├─ agent.py             # 工具轨迹
+   │  ├─ execution.py         # 代码执行
+   │  ├─ knowledge.py         # 知识卡检索
+   │  ├─ health.py            # 健康检查
+   │  ├─ coach.py             # 过程反馈
+   │  └─ settings.py          # BYOK
+   ├─ mappers/                # domain → DTO，按功能拆分
+   │  ├─ common.py            # clip / clip_text
+   │  ├─ sessions.py          # 会话、入口、诊断、提示、单步
+   │  ├─ review.py            # 通用复盘 + 队列
+   │  ├─ agent.py             # 工具轨迹
+   │  ├─ execution.py         # 代码执行
+   │  ├─ knowledge.py         # 知识卡
+   │  ├─ coach.py             # 过程反馈
+   │  ├─ auth.py              # 账号
+   │  └─ settings.py          # BYOK
    ├─ deps.py                 # 组合根 Container + DI
-   ├─ routes.py               # /api/v1/* 薄路由
    └─ main.py                 # create_app、CORS、app 实例
 ```
 
@@ -82,13 +143,13 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 | 模式 | 位置 | 解决什么 |
 |---|---|---|
 | State（显式转移表） | `domain/dialogue/table.py` | 下一个状态由表决定，LLM 不能改流程 |
-| Strategy | `domain/problem/alignment.py`、`application/planner.py` | 对齐算法、探针选择可替换 |
-| Factory | `application/factory.py` | 会话组装集中一处，校验入口唯一 |
-| Decorator | `application/composer.py` | 泄漏防护、失败降级、shadow 双跑、canary 分流都在同一签名上叠加，被装饰者无感 |
+| Strategy | `domain/problem/alignment.py`、`application/diagnosis/planner.py` | 对齐算法、探针选择可替换 |
+| Factory | `application/sessions/factory.py` | 会话组装集中一处，校验入口唯一 |
+| Decorator | `application/diagnosis/composer.py` | 泄漏防护、失败降级、shadow 双跑、canary 分流都在同一签名上叠加，被装饰者无感 |
 | Adapter | `infrastructure/llm/` | `LLMClient` 端口 → DeepSeek / Qwen / GLM / 回放，换供应商只换配置 |
-| Repository / Ports | `application/ports.py` | 内存/SQLite 适配器可替换为 PostgreSQL，不碰领域 |
-| Facade | `application/service.py` | 路由只依赖一个用例入口 |
-| DTO / Mapper | `api/schemas.py`、`api/mappers.py` | HTTP 契约与领域对象解耦 |
+| Repository / Ports | `application/shared/ports.py` | 内存/SQLite 适配器可替换为 PostgreSQL，不碰领域 |
+| Facade | `application/sessions/service.py` | 路由只依赖一个用例入口 |
+| DTO / Mapper | `api/schemas/`、`api/mappers/` | HTTP 契约与领域对象解耦 |
 
 > 没有为了“用模式”而加抽象：仓储先内存，LLM 先不接，探针先规则版；每个抽象都对应一个真实的替换点。
 
@@ -126,7 +187,7 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 - `/knowledge/search` 只读（`specs/knowledge-search.schema.json` v0.2）：`q` 是概念标签，不是学生作答原文；`subject` 是开放标签（1–40 字符），可选 `verification` 过滤（formal/executable/empirical/argumentative）；返回卡片的五类 `kind`、`subject`、`verifications`、标题、摘录、出处（title/url/license）和余弦分数。`enabled=false` 表示 `SYNAPSE_RAG` 未开启；开启但模型不可用时返回 **503**，不会静默返回空结果。
 - `SessionOut.subject` 是插件键（内部路由用）；`SessionOut.domain` 才是展示用的开放领域标签与验证方式（`formal`/`executable`/`empirical`/`argumentative`）。入口澄清若点名了领域，只改 `domain`（展示/清单/检索），`subject` 仍是提交时的插件键。前端只在 `domain.name` 为数学/物理时显示单步检查入口。
 - 没有参考结构的问题（开放领域、未知领域，或本环境没有生成器）返回 `SessionOut.intake`（`specs/` 未单列 schema，字段见 `DomainIntakeOut`）；它不是卡点卡的简化版：不定位卡点、不估把握、不给唯一答案。
-- `intake` v0.4 会读学生自己那段话（随会话保存的 `initial_answer`）：`observed` 列出被认出的结构项（目标/约束/选项/风险…），`gaps` 列出该验证方式要求但没提到的项（最多 3 条）。两者都只是“有没有写到”，不是对错判断；选项只列出、不排序，决策问题也不会被推荐其中一个。没有作答时两段都为空。识别是确定性线索匹配（`application/generic_slots.py`），不调用模型，因此离线模式同样可用。
+- `intake` v0.4 会读学生自己那段话（随会话保存的 `initial_answer`）：`observed` 列出被认出的结构项（目标/约束/选项/风险…），`gaps` 列出该验证方式要求但没提到的项（最多 3 条）。两者都只是“有没有写到”，不是对错判断；选项只列出、不排序，决策问题也不会被推荐其中一个。没有作答时两段都为空。识别是确定性线索匹配（`application/diagnosis/generic_slots.py`），不调用模型，因此离线模式同样可用。
 
 ## 多账号与鉴权（可选）
 
@@ -227,9 +288,9 @@ python -c "from synapse.infrastructure.knowledge import build_knowledge_service;
 
 ## 学科插件（M2.5）
 
-`SubjectPlugin` 是「对话内核不认识学科」的接缝：插件只提供**内容**（识别、图、对齐策略、探针、证据权重、验证结论），状态机仍决定状态。契约见第 13 章，端口在 [`application/subject.py`](src/synapse/application/subject.py)；实现在 [`infrastructure/subjects/`](src/synapse/infrastructure/subjects/)：`math.py`（STRONG）、`physics.py`（PARTIAL）、`chinese.py`（NONE）。S8 起 `aligner_for(problem)` 也由插件给出：数学在标注题/生成题之间切规则/类型线索，语文用分句级匹配，物理保持两态匹配。
+`SubjectPlugin` 是「对话内核不认识学科」的接缝：插件只提供**内容**（识别、图、对齐策略、探针、证据权重、验证结论），状态机仍决定状态。契约见第 13 章，端口在 [`application/shared/subject.py`](src/synapse/application/shared/subject.py)；实现在 [`infrastructure/subjects/`](src/synapse/infrastructure/subjects/)：`math.py`（STRONG）、`physics.py`（PARTIAL）、`chinese.py`（NONE）。S8 起 `aligner_for(problem)` 也由插件给出：数学在标注题/生成题之间切规则/类型线索，语文用分句级匹配，物理保持两态匹配。
 
-**对外承诺由 `application/commitment.py` 的能力表决定**（这是唯一开关，别处不再判断）：
+**对外承诺由 `application/shared/commitment.py` 的能力表决定**（这是唯一开关，别处不再判断）：
 
 | `level` | 学科 | 探针 | 卡点卡 | 结构提示 |
 |---|---|---|---|---|
@@ -248,7 +309,7 @@ NONE 档会话在 `ALIGN` 之后直接收束到 `STOP → CLOSED`：不追问、
 | `evidence_model()` | 生成图读图内 `probe.evidence`；只有已标注种子图回退手写 `EVIDENCE` | 只读图内权重，不回退数学 `EVIDENCE` | 恒空 |
 | `verify()` | 单步等式链：读 `text`，可证伪时 `fail`（带反例），否则 `unknown`；从不 `pass`，`data` 忽略。图顶层 `claim` 另由反例搜索核对（`pass`/`fail`/`unknown`） | `StudentStep.data` 的量纲与数值回代；纯文本 `unknown` | 恒 `unknown`（NONE 档没有可自动验证的真值） |
 
-`subject` 是**开放标签**，不是白名单：显式声明优先（未知标签也接受，按通用模式处理）；未声明时 `application/domain_detection.py` 先用各领域术语与公式打分，≥0.6 直接路由，否则才调用模型分类器（`off`/`shadow` 不调用）；仍不确定就落到 `GenericProfile`，**不再返回 422**。真正决定承诺的是验证方式（`application/domains.py` 的 `VerificationMode`）：`FORMAL → STRONG`、`EMPIRICAL → PARTIAL`、`EXECUTABLE`/`ARGUMENTATIVE → NONE`。已知领域但本环境没有生成器时仍是显式 **422**，不会被静默降级成通用模式。标注题匹配优先于这一切：题面确实包含已标注题时永远用自带图，客户端标签只当提示。
+`subject` 是**开放标签**，不是白名单：显式声明优先（未知标签也接受，按通用模式处理）；未声明时 `application/diagnosis/domain_detection.py` 先用各领域术语与公式打分，≥0.6 直接路由，否则才调用模型分类器（`off`/`shadow` 不调用）；仍不确定就落到 `GenericProfile`，**不再返回 422**。真正决定承诺的是验证方式（`application/diagnosis/domains.py` 的 `VerificationMode`）：`FORMAL → STRONG`、`EMPIRICAL → PARTIAL`、`EXECUTABLE`/`ARGUMENTATIVE → NONE`。已知领域但本环境没有生成器时仍是显式 **422**，不会被静默降级成通用模式。标注题匹配优先于这一切：题面确实包含已标注题时永远用自带图，客户端标签只当提示。
 
 识别是**严格**的：只接受确实包含已标注题原文的提交（比较前忽略空白、标点、全半角与 LaTeX 转义），其余走生成或 422。关键字匹配会把「同一知识点、另一道题」也当成种子题，用错的解法图解释学生的错误——那比拒绝更糟。
 

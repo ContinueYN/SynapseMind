@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import pytest
 
-from synapse.application.composer import (
+from synapse.application.diagnosis.composer import (
     CanaryProbeComposer,
     CompositionFailed,
     FallbackProbeComposer,
     GraphProbeComposer,
     LeakSafeProbeComposer,
 )
-from synapse.application.llm import LLMRequest, LLMResponse, LLMTimeout
-from synapse.application.trace import tracing
+from synapse.application.diagnosis.trace import tracing
+from synapse.application.shared.llm import LLMRequest, LLMResponse, LLMTimeout
 from synapse.domain.guard.leak import AnswerLeakGuard
 from synapse.infrastructure.guards import AnswerStoreLeakGuardFactory
 from synapse.infrastructure.in_memory import InMemoryAnswerStore
@@ -174,7 +174,7 @@ def test_three_failure_classes_fall_back(
 
 
 def test_shadow_returns_baseline_and_records_diff() -> None:
-    from synapse.application.composer import ShadowProbeComposer
+    from synapse.application.diagnosis.composer import ShadowProbeComposer
 
     auditor = InMemoryCallAuditor()
     shadow = ShadowProbeComposer(
@@ -194,7 +194,7 @@ def test_shadow_returns_baseline_and_records_diff() -> None:
 
 
 def test_shadow_survives_an_experiment_failure() -> None:
-    from synapse.application.composer import ShadowProbeComposer
+    from synapse.application.diagnosis.composer import ShadowProbeComposer
 
     auditor = InMemoryCallAuditor()
     shadow = ShadowProbeComposer(

@@ -17,15 +17,15 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping, Sequence
 
-from synapse.application import trace
-from synapse.application.agent_planner import (
+from synapse.application.diagnosis import trace
+from synapse.application.diagnosis.agent_planner import (
     PLANNER_TOOLS,
     AgentPlanningTool,
     PlannerContext,
     PlannerRejected,
 )
-from synapse.application.audit import AuditEntry, CallAuditor
-from synapse.application.llm import (
+from synapse.application.shared.audit import AuditEntry, CallAuditor
+from synapse.application.shared.llm import (
     LLMCallFailed,
     LLMClient,
     LLMRequest,

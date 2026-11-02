@@ -16,8 +16,8 @@ from jsonschema import Draft202012Validator
 
 from synapse.api.deps import build_container
 from synapse.api.main import create_app
-from synapse.api.mappers import step_verdict_out
-from synapse.application.commands import StartSessionCommand, SubmitAnswerCommand
+from synapse.api.mappers.sessions import step_verdict_out
+from synapse.application.sessions.commands import StartSessionCommand, SubmitAnswerCommand
 from synapse.infrastructure.features import FeatureFlags
 from synapse.infrastructure.llm.audit import InMemoryCallAuditor
 from synapse.infrastructure.seed import SAMPLE_PROBLEM

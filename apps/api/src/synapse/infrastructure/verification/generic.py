@@ -16,8 +16,8 @@ Neither adapter may invent a verdict:
 
 from __future__ import annotations
 
-from synapse.application.subject import StudentStep
-from synapse.application.verification import GraphVerifier, VerificationResult
+from synapse.application.diagnosis.verification import GraphVerifier, VerificationResult
+from synapse.application.shared.subject import StudentStep
 from synapse.domain.problem.claims import VerificationClaim
 from synapse.domain.problem.generic import ClaimCheck, EmpiricalClaim
 from synapse.domain.problem.models import SolutionGraph

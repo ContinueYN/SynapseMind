@@ -43,7 +43,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "apps" / "api" / "src"))
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # Windows GBK consoles
 
-from synapse.application.verification import describe_claim  # noqa: E402
+from synapse.application.diagnosis.verification import describe_claim  # noqa: E402
 from synapse.domain.problem.models import (  # noqa: E402
     Interval,
     ProblemDraft,

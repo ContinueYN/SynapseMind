@@ -17,13 +17,13 @@ from typing import Any
 
 import httpx
 
-from synapse.application.context import current_owner_id
-from synapse.application.credentials import (
+from synapse.application.credentials.service import (
     CredentialError,
     CredentialService,
     SecretCredential,
 )
-from synapse.application.llm import LLMCallFailed, LLMRequest, LLMResponse, LLMTimeout
+from synapse.application.shared.context import current_owner_id
+from synapse.application.shared.llm import LLMCallFailed, LLMRequest, LLMResponse, LLMTimeout
 from synapse.infrastructure.llm.settings import LLMSettings
 
 MAX_TOKENS = 300

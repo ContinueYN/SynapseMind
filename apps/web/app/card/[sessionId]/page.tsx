@@ -4,14 +4,15 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { CoachPanel } from "@/components/CoachPanel";
-import { DiagnosisCardView } from "@/components/DiagnosisCardView";
-import { KnowledgePanel } from "@/components/KnowledgePanel";
-import { Plane } from "@/components/Plane";
-import { ProblemBrief } from "@/components/ProblemBrief";
-import { SignInRequired } from "@/components/SignInRequired";
-import { Surface } from "@/components/Surface";
-import { exitSession, getSession, isUnauthorized } from "@/src/lib/api/client";
+import { SignInRequired } from "@/components/auth/SignInRequired";
+import { CoachPanel } from "@/components/diagnosis/CoachPanel";
+import { DiagnosisCardView } from "@/components/diagnosis/DiagnosisCardView";
+import { KnowledgePanel } from "@/components/diagnosis/KnowledgePanel";
+import { ProblemBrief } from "@/components/diagnosis/ProblemBrief";
+import { Plane } from "@/components/ui/Plane";
+import { Surface } from "@/components/ui/Surface";
+import { isUnauthorized } from "@/src/lib/api/http";
+import { exitSession, getSession } from "@/src/lib/api/sessions";
 import type { SessionResponse } from "@/src/lib/api/types";
 
 export default function CardPage() {

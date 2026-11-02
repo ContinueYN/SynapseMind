@@ -24,7 +24,7 @@ from jsonschema import Draft202012Validator
 
 from synapse.api.deps import build_container
 from synapse.api.main import create_app
-from synapse.application.execution import (
+from synapse.application.execution.service import (
     ExecutionBusy,
     ExecutionFinding,
     ExecutionResult,

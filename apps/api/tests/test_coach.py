@@ -22,14 +22,14 @@ from fastapi.testclient import TestClient
 
 from synapse.api.deps import build_container
 from synapse.api.main import create_app
-from synapse.application.auth import AuthService
-from synapse.application.coach import (
+from synapse.application.auth.service import AuthService
+from synapse.application.diagnosis.coach import (
     CoachUnavailable,
     build_coach_context,
 )
-from synapse.application.domains import DomainRegistry
-from synapse.application.generic_graph import GenericGraphBuildFailed
-from synapse.application.llm import LLMRequest, LLMResponse, LLMTimeout
+from synapse.application.diagnosis.domains import DomainRegistry
+from synapse.application.diagnosis.generic_graph import GenericGraphBuildFailed
+from synapse.application.shared.llm import LLMRequest, LLMResponse, LLMTimeout
 from synapse.infrastructure.auth.build import AuthRuntime
 from synapse.infrastructure.auth.settings import AuthSettings
 from synapse.infrastructure.llm.coach import parse_narrative

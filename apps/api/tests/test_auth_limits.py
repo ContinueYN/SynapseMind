@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from synapse.application.auth_limits import FixedWindowAuthFailureLimiter
+from synapse.application.auth.limits import FixedWindowAuthFailureLimiter
 
 
 class _Clock:

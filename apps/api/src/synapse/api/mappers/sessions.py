@@ -1,0 +1,269 @@
+"""Session, intake, diagnosis, hint, scaffold and step-check mappers.
+
+Routes and response validation only see these DTOs. The answer store is not
+reachable from here.
+"""
+
+from __future__ import annotations
+
+from synapse.api.mappers.common import clip
+from synapse.api.mappers.review import generic_review_out
+from synapse.api.schemas.sessions import (
+    AttributionDimensionOut,
+    AttributionOut,
+    CardOut,
+    DiagnosisOut,
+    DomainIntakeOut,
+    DomainOut,
+    HintOut,
+    HintStepOut,
+    HistoryItemOut,
+    IntakeNodeOut,
+    IntakeProbeOut,
+    IntakeVerificationOut,
+    NextActionOut,
+    ProbeOut,
+    ProgressOut,
+    ScaffoldOut,
+    ScaffoldStepOut,
+    SessionOut,
+    StepFindingOut,
+    StepVerdictOut,
+    VerifyOut,
+)
+from synapse.application.diagnosis.composer import ProbePrompt
+from synapse.application.diagnosis.domains import DomainDescriptor
+from synapse.application.diagnosis.intake import DomainIntake
+from synapse.application.diagnosis.scaffold import Scaffold
+from synapse.application.sessions.service import SessionView
+from synapse.application.shared.subject import Verdict
+from synapse.domain.diagnosis.hint import StructureHint
+from synapse.domain.diagnosis.models import DiagnosisCard
+from synapse.domain.dialogue.session import DialogueSession, TurnRecord
+
+
+def probe_out(prompt: ProbePrompt) -> ProbeOut:
+    return ProbeOut(
+        action=prompt.action,
+        question=prompt.question,
+        options=list(prompt.options),
+        hint_level=prompt.hint_level,
+        reason_code=prompt.reason_code,
+        confidence=prompt.confidence,
+    )
+
+
+def progress_out(session: DialogueSession) -> ProgressOut:
+    top_id, confidence = session.hypotheses.top()
+    return ProgressOut(
+        turn=session.turn,
+        max_turns=session.max_turns,
+        confidence=round(confidence, 2),
+        top_hypothesis=top_id,
+    )
+
+
+def history_out(record: TurnRecord) -> HistoryItemOut:
+    return HistoryItemOut(
+        turn=record.turn,
+        question=record.question,
+        answer=record.answer,
+        option_id=record.option_id,
+        action=record.action,
+        is_unknown=record.is_unknown,
+    )
+
+
+def diagnosis_out(card: DiagnosisCard) -> DiagnosisOut:
+    return DiagnosisOut(
+        version=card.version,
+        session_id=card.session_id,
+        problem_id=card.problem_id,
+        card=CardOut(
+            layer=card.layer,
+            label=card.label,
+            node_id=card.node_id,
+            one_line=card.one_line,
+            evidence=list(card.evidence),
+            excluded=list(card.excluded),
+            confidence=card.confidence,
+            confidence_label=card.confidence_label,
+            next_action=NextActionOut.model_validate(card.next_action),
+            verify=VerifyOut.model_validate(card.verify),
+            disagree=card.disagree,
+            attribution=(
+                AttributionOut(
+                    dimensions=[
+                        AttributionDimensionOut(
+                            key=dimension.key,
+                            label=dimension.label,
+                            weight=dimension.weight,
+                        )
+                        for dimension in card.attribution.dimensions
+                    ],
+                    all_dimensions=[
+                        AttributionDimensionOut(
+                            key=dimension.key,
+                            label=dimension.label,
+                            weight=dimension.weight,
+                        )
+                        for dimension in card.attribution.all_dimensions
+                    ],
+                    note=card.attribution.note,
+                )
+                if card.attribution is not None
+                else None
+            ),
+        ),
+    )
+
+
+def hint_out(hint: StructureHint) -> HintOut:
+    """Map the NONE-tier hint; it never carries card fields."""
+
+    return HintOut(
+        version=hint.version,
+        session_id=hint.session_id,
+        problem_id=hint.problem_id,
+        subject=hint.subject,
+        level="none",
+        one_line=hint.one_line,
+        steps=[
+            HintStepOut(node_id=step.node_id, text=step.text, status=step.status)
+            for step in hint.steps
+        ],
+        focus_node_id=hint.focus_node_id,
+        next_step=hint.next_step,
+        disclaimer=hint.disclaimer,
+    )
+
+
+def scaffold_out(scaffold: Scaffold) -> ScaffoldOut:
+    return ScaffoldOut(
+        steps=[
+            ScaffoldStepOut(label=step.label, text=step.text, node_id=step.node_id)
+            for step in scaffold.steps
+        ],
+        focus_node_id=scaffold.focus_node_id,
+        next_step=scaffold.next_step,
+        disclaimer=scaffold.disclaimer,
+    )
+
+
+def step_verdict_out(verdict: Verdict) -> StepVerdictOut:
+    """Map one verification result; ``findings`` is empty unless it failed.
+
+    The formulas come from the student's own text, so they are clipped to the
+    DTO limit here rather than letting a pathological chain fail response
+    validation.
+    """
+
+    return StepVerdictOut(
+        version="0.3",
+        status=verdict.status,
+        detail=clip(verdict.detail, 1000),
+        findings=[
+            StepFindingOut(
+                kind=finding.kind,
+                left=clip(finding.left, 500),
+                right=clip(finding.right, 500),
+                summary=clip(
+                    finding.summary or finding.counterexample or finding.detail or "这处等号不成立",
+                    300,
+                ),
+                counterexample=clip(finding.counterexample, 300),
+            )
+            for finding in verdict.findings[:3]
+        ],
+    )
+
+
+def domain_out(descriptor: DomainDescriptor) -> DomainOut:
+    return DomainOut(
+        name=clip(descriptor.name, 40),
+        label=clip(descriptor.label, 40),
+        verification=descriptor.verification.value,
+        generic=descriptor.generic,
+        confidence=round(descriptor.confidence, 3),
+    )
+
+
+def intake_out(intake: DomainIntake) -> DomainIntakeOut:
+    """Map the generic entry; it carries no answer and no diagnosis."""
+
+    return DomainIntakeOut(
+        version=intake.version,
+        domain=domain_out(
+            intake.profile.describe(intake.confidence),
+        ),
+        one_line=clip(intake.one_line, 200),
+        checklist=[clip(item, 80) for item in intake.checklist[:6]],
+        observed=[clip(item, 20) for item in intake.observed[:12]],
+        gaps=[clip(item, 120) for item in intake.gaps[:3]],
+        origin=intake.origin,
+        graph=[
+            IntakeNodeOut(
+                kind=node.kind.value,
+                label=clip(node.label, 20),
+                text=clip(node.text, 120),
+                source=node.source,
+            )
+            for node in intake.graph[:12]
+        ],
+        verifications=[
+            IntakeVerificationOut(
+                kind=check.kind,
+                status=check.status,
+                detail=clip(check.detail, 400),
+            )
+            for check in intake.verifications[:2]
+        ],
+        clarifier=clip(intake.clarifier, 200) if intake.clarifier else None,
+        probe=(
+            IntakeProbeOut(
+                kind=intake.probe.kind.value,
+                question=clip(intake.probe.question, 200),
+                answered=intake.probe.answered,
+                limit=intake.probe.limit,
+            )
+            if intake.probe is not None
+            else None
+        ),
+        next_step=clip(intake.next_step, 300),
+        disclaimer=clip(intake.disclaimer, 300),
+        review=generic_review_out(intake.review) if intake.review is not None else None,
+    )
+
+
+def session_out(
+    view: SessionView,
+    problem_title: str,
+    problem_text: str,
+    subject: str,
+    domain: DomainDescriptor,
+) -> SessionOut:
+    session = view.session
+    return SessionOut(
+        session_id=session.session_id,
+        state=session.state.value,
+        problem_id=session.problem_id,
+        problem_title=problem_title,
+        problem_text=problem_text,
+        subject=subject,
+        domain=domain_out(domain),
+        mode=session.mode,
+        turn=session.turn,
+        max_turns=session.max_turns,
+        prompt=probe_out(view.prompt) if view.prompt else None,
+        diagnosis=diagnosis_out(view.diagnosis) if view.diagnosis else None,
+        hint=hint_out(view.hint) if view.hint else None,
+        scaffold=scaffold_out(view.scaffold) if view.scaffold else None,
+        intake=intake_out(view.intake) if view.intake else None,
+        notice=(
+            view.reveal.notice if view.reveal is not None and view.reveal.notice else view.notice
+        ),
+        answer=view.reveal.answer if view.reveal else None,
+        solution=view.reveal.solution if view.reveal else None,
+        progress=progress_out(session),
+        history=[history_out(record) for record in session.history],
+    )

@@ -19,9 +19,9 @@ import logging
 import pytest
 from fastapi.testclient import TestClient
 
-from synapse.application import intake as intake_module
-from synapse.application.domains import DomainRegistry
-from synapse.application.intake import build_domain_intake
+from synapse.application.diagnosis import intake as intake_module
+from synapse.application.diagnosis.domains import DomainRegistry
+from synapse.application.diagnosis.intake import build_domain_intake
 from synapse.domain.problem.models import Problem, SolutionGraph
 
 REGISTRY = DomainRegistry()

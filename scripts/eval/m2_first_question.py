@@ -31,8 +31,8 @@ sys.path.insert(0, str(ROOT / "apps" / "api" / "src"))
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # Windows GBK consoles
 
 from synapse.api.deps import build_container  # noqa: E402
-from synapse.application.commands import StartSessionCommand  # noqa: E402
-from synapse.application.errors import ProblemNotSupported  # noqa: E402
+from synapse.application.sessions.commands import StartSessionCommand  # noqa: E402
+from synapse.application.shared.errors import ProblemNotSupported  # noqa: E402
 from synapse.infrastructure.llm.settings import LLMSettings, load_dotenv  # noqa: E402
 
 DEFAULT_BUDGET_MS = 8000

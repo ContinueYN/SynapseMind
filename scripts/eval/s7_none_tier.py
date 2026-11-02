@@ -36,9 +36,9 @@ from jsonschema import Draft202012Validator  # noqa: E402
 from s5_session import PASS_BAR, cell, pct, percentile  # noqa: E402
 
 from synapse.api.deps import build_container  # noqa: E402
-from synapse.api.mappers import hint_out  # noqa: E402
-from synapse.application.commands import StartSessionCommand  # noqa: E402
-from synapse.application.errors import ProblemNotSupported  # noqa: E402
+from synapse.api.mappers.sessions import hint_out  # noqa: E402
+from synapse.application.sessions.commands import StartSessionCommand  # noqa: E402
+from synapse.application.shared.errors import ProblemNotSupported  # noqa: E402
 from synapse.domain.dialogue.states import DialogueState  # noqa: E402
 from synapse.infrastructure.llm.settings import LLMSettings, load_dotenv  # noqa: E402
 

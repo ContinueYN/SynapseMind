@@ -30,7 +30,7 @@ import socket
 from collections.abc import Iterable
 from urllib.parse import urlsplit
 
-from synapse.application.credentials import (
+from synapse.application.credentials.service import (
     KNOWN_PROVIDER_HOSTS,
     CredentialValidationError,
 )

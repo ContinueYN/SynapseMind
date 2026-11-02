@@ -14,10 +14,10 @@ from __future__ import annotations
 
 import pytest
 
-from synapse.application.domains import DomainRegistry, IntakeFramework
-from synapse.application.generic_check import structure_gaps
-from synapse.application.generic_slots import CueSlotExtractor
-from synapse.application.intake import build_domain_intake
+from synapse.application.diagnosis.domains import DomainRegistry, IntakeFramework
+from synapse.application.diagnosis.generic_check import structure_gaps
+from synapse.application.diagnosis.generic_slots import CueSlotExtractor
+from synapse.application.diagnosis.intake import build_domain_intake
 from synapse.domain.problem.claims import Interval, VerificationClaim
 from synapse.domain.problem.generic import (
     ClaimCheck,

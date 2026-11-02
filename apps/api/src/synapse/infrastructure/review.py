@@ -10,7 +10,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from synapse.application.review import ReviewItem
+from synapse.application.review.service import ReviewItem
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS card_disagreements (

@@ -17,7 +17,7 @@ from time import perf_counter
 
 import httpx
 
-from synapse.application.credentials import CredentialTestResult, SecretCredential
+from synapse.application.credentials.service import CredentialTestResult, SecretCredential
 
 TEST_TIMEOUT_S = 8.0
 TEST_MAX_TOKENS = 1

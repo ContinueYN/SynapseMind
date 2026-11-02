@@ -11,7 +11,7 @@ confidence. A node records that the text *mentions* a goal/constraint/option —
 never records that the goal is the right one. Every check downstream can
 therefore only say "没看到" or "看到了", the same epistemic level as the NONE
 tier's structure hint (chapter 13 §13.3). Anything stronger needs a verifier
-(``application/verification.py`` for claims, the code sandbox for executable
+(``application/diagnosis/verification.py`` for claims, the code sandbox for executable
 work), not a bigger graph.
 
 ``NodeKind`` follows plan §4.1. ``DECISION`` means *one candidate option*, not

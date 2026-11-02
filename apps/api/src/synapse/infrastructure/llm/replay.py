@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Mapping
 
-from synapse.application.llm import LLMCallFailed, LLMRequest, LLMResponse
+from synapse.application.shared.llm import LLMCallFailed, LLMRequest, LLMResponse
 
 
 def request_key(request: LLMRequest) -> str:

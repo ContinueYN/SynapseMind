@@ -42,7 +42,7 @@ from sympy.parsing.sympy_parser import (
     standard_transformations,
 )
 
-from synapse.application.verification import (
+from synapse.application.diagnosis.verification import (
     CounterExample,
     VerificationResult,
     describe_claim,

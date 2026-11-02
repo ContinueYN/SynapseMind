@@ -35,7 +35,7 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # Windows GBK consol
 sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 import synapse.infrastructure.knowledge as knowledge_package  # noqa: E402
-from synapse.application.knowledge import KnowledgeUnavailable  # noqa: E402
+from synapse.application.knowledge.service import KnowledgeUnavailable  # noqa: E402
 from synapse.infrastructure.knowledge.builder import (  # noqa: E402
     DEFAULT_MIN_SCORE,
     KnowledgeSettings,

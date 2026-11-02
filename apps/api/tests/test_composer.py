@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from synapse.application.composer import (
+from synapse.application.diagnosis.composer import (
     GraphProbeComposer,
     LeakSafeProbeComposer,
     ProbePrompt,

@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from synapse.application.card_builder import build_diagnosis_card
+from synapse.application.diagnosis.card_builder import build_diagnosis_card
 from synapse.domain.diagnosis.hypotheses import HypothesisSet
 from synapse.domain.dialogue.session import DialogueSession, TurnRecord
 from synapse.domain.problem.models import (

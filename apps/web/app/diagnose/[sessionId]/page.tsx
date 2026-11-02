@@ -4,33 +4,35 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-import { AgentTracePanel } from "@/components/AgentTracePanel";
-import { CoachPanel } from "@/components/CoachPanel";
-import { Dendrite, type DendriteStop } from "@/components/Dendrite";
-import { DiagnosisCardView } from "@/components/DiagnosisCardView";
-import { IntakeView } from "@/components/IntakeView";
-import { KnowledgePanel } from "@/components/KnowledgePanel";
-import { Plane } from "@/components/Plane";
-import { PhysicsStepCheck } from "@/components/PhysicsStepCheck";
-import { ProblemBrief } from "@/components/ProblemBrief";
-import { ScaffoldView } from "@/components/ScaffoldView";
-import { SignInRequired } from "@/components/SignInRequired";
-import { StepCheck } from "@/components/StepCheck";
-import { StructureHintView } from "@/components/StructureHintView";
-import { Surface } from "@/components/Surface";
-import { ProbeCard } from "@/components/ProbeCard";
-import { Thread } from "@/components/Thread";
+import { SignInRequired } from "@/components/auth/SignInRequired";
+import { AgentTracePanel } from "@/components/diagnosis/AgentTracePanel";
+import { CoachPanel } from "@/components/diagnosis/CoachPanel";
+import { DiagnosisCardView } from "@/components/diagnosis/DiagnosisCardView";
+import { IntakeView } from "@/components/diagnosis/IntakeView";
+import { KnowledgePanel } from "@/components/diagnosis/KnowledgePanel";
+import { PhysicsStepCheck } from "@/components/diagnosis/PhysicsStepCheck";
+import { ProbeCard } from "@/components/diagnosis/ProbeCard";
+import { ProblemBrief } from "@/components/diagnosis/ProblemBrief";
+import { ScaffoldView } from "@/components/diagnosis/ScaffoldView";
+import { StepCheck } from "@/components/diagnosis/StepCheck";
+import { StructureHintView } from "@/components/diagnosis/StructureHintView";
+import { Dendrite, type DendriteStop } from "@/components/ui/Dendrite";
+import { Plane } from "@/components/ui/Plane";
+import { Surface } from "@/components/ui/Surface";
+import { Thread } from "@/components/ui/Thread";
+import {
+  ApiError,
+  API_BASE,
+  isSessionConflict,
+  isUnauthorized,
+} from "@/src/lib/api/http";
 import {
   answerClarifier,
   answerProbe,
-  ApiError,
-  API_BASE,
   exitSession,
   getSession,
-  isSessionConflict,
-  isUnauthorized,
   submitTurn,
-} from "@/src/lib/api/client";
+} from "@/src/lib/api/sessions";
 import type { SessionResponse } from "@/src/lib/api/types";
 import { adoptSession } from "@/src/lib/session-handoff";
 

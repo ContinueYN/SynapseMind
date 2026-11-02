@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { Plane } from "@/components/Plane";
-import { Reveal } from "@/components/Reveal";
+import { Plane } from "@/components/ui/Plane";
+import { Reveal } from "@/components/ui/Reveal";
 
 export const metadata: Metadata = {
   title: "演示记录 · SynapseMind 突触智学",

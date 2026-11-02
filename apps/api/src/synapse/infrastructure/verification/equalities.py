@@ -16,7 +16,7 @@
 **宁可漏判，不误判**——把学生正确的一步判成错，比不判更伤。
 
 ``SympyEqualityChecker`` 是这个模块对外的端口适配器；产品链路只认
-``application.work_check.EqualityChecker``，不直接 import 这个模块。
+``application.diagnosis.work_check.EqualityChecker``，不直接 import 这个模块。
 """
 
 from __future__ import annotations

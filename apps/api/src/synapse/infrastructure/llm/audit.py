@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from threading import Lock
 
-from synapse.application.audit import AuditEntry
+from synapse.application.shared.audit import AuditEntry
 
 
 class InMemoryCallAuditor:

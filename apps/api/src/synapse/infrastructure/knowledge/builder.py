@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from synapse.application.knowledge import KnowledgeService
+from synapse.application.knowledge.service import KnowledgeService
 from synapse.infrastructure.knowledge.corpus import load_corpus
 from synapse.infrastructure.knowledge.embedding import DEFAULT_MODEL, FastEmbedEmbedder
 from synapse.infrastructure.knowledge.index import InMemoryKnowledgeIndex

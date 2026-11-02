@@ -27,7 +27,7 @@ sys.path.insert(0, str(ROOT / "apps" / "api" / "src"))
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # Windows GBK consoles
 
 from synapse.api.deps import build_container  # noqa: E402
-from synapse.application.replay import (  # noqa: E402
+from synapse.application.diagnosis.replay import (  # noqa: E402
     GoldenCase,
     ReplayResult,
     judge,
