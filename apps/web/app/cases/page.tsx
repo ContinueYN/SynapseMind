@@ -7,7 +7,7 @@ import { Reveal } from "@/components/Reveal";
 export const metadata: Metadata = {
   title: "演示记录 · SynapseMind 突触智学",
   description:
-    "六段实跑记录：数学错步、空白入口、物理弃权、语文结构提示，以及通用入口的决策与代码问题。是链路记录，不是效果研究。",
+    "七段实跑记录：数学错步、空白入口、物理弃权、语文结构提示，通用入口的决策与代码问题，以及写作问题的结构复盘。是链路记录，不是效果研究。",
 };
 
 interface Turn {
@@ -20,7 +20,7 @@ interface CaseStudy {
   no: string;
   subject: string;
   verdict: string;
-  state: "card" | "scaffold" | "stop" | "hint" | "intake";
+  state: "card" | "scaffold" | "stop" | "hint" | "intake" | "review";
   title: string;
   problem: string;
   student: string;
@@ -33,7 +33,8 @@ interface CaseStudy {
 /*
  * 前四段抄自 2026-10-31 22:35 的 walkthrough 实跑记录，第五段是 2026-11-01
  * 新增的通用入口实跑（离线规则路径），第六段是同日的代码问题实跑
- * （显式提交，SYNAPSE_EXEC=off）。都来自 var/demo/walkthrough.md
+ * （显式提交，SYNAPSE_EXEC=off），第七段是 2026-11-02 的写作问题实跑
+ * （--no-live --case review，RAG 关闭）。都来自 var/demo/walkthrough.md
  * （本机生成、不入库）。只做了截断，没有改措辞；想核对原文就重跑一遍脚本。
  */
 const CASES: CaseStudy[] = [
@@ -229,6 +230,63 @@ const CASES: CaseStudy[] = [
     boundary:
       "它没有说 return a - b 就是 bug，也没有自动执行；skipped 不是 pass，跑出 fail 也只表示提交的测试没过。",
   },
+  {
+    id: "writing",
+    no: "07",
+    subject: "写作 · 通用入口",
+    verdict: "结构复盘：2 处缺口",
+    state: "review",
+    title: "看到了部分结构，但还有 2 处没有写到",
+    problem:
+      "学校是否应该禁止中学生带手机进校园？请写一段议论，说明你的立场和理由。",
+    student:
+      "我想论证的是：中学生不该被禁止带手机进校园。手机能查资料，也方便联系家长。学校禁止手机，是担心课堂被打断。",
+    turns: [
+      {
+        ask: "入口：显式标注写作，不探针",
+        answer:
+          "状态 CLOSED；框架 `argumentative`；验证方式 `argumentative`；不探针、不出卡、不给答案。",
+      },
+      {
+        ask: "结构复盘（kind = structure）",
+        answer:
+          "headline：看到了部分结构，但还有 2 处没有写到；逐条列在下面。",
+      },
+      {
+        ask: "两条 finding",
+        answer:
+          "f1 缺证据（blocking）：没看到证据：哪些事实或引文在支撑它。f2 推理未写出（notable）：没看到推理：从证据到结论之间那一步。",
+      },
+      {
+        ask: "证据：学生摘录 + 结构图",
+        answer:
+          "ev1 来源 student：整段作答。ev2 来源 graph（GN1）：「我想论证的是：中学生不该被禁止带手机进校园」。",
+      },
+      {
+        ask: "来源",
+        answer: "RAG 关闭，没有引用卡片。",
+      },
+      {
+        ask: "这次没有检查",
+        answer:
+          "没有判断内容对错；这里只检查这次提交里有没有写到这些结构。没有核对证据来源是否真实，也没有评价语言、篇幅和段落安排。",
+      },
+      {
+        ask: "下一步",
+        answer: "哪些事实或引文在支撑它？",
+      },
+    ],
+    notes: [
+      "写作标签是显式写的，不是自动识别；入口只把题面与作答当文本，不调用模型。",
+      "线索表只认关键词：「手机能查资料」是理由，不含「因为 / 证据 / 数据」这类词，所以仍报「缺证据」；它不判断论证质量。",
+      "ev1 是学生原话摘录，ev2 是线索表抽出的目标节点；没有相似度分数，也没有排序。",
+      "RAG 关闭，复盘不附知识卡，也不会因此编一个出处。",
+    ],
+    outcome:
+      "状态 CLOSED；review.kind = structure；2 条 finding（1 条 blocking、1 条 notable）；没有卡点卡，也没有分数。",
+    boundary:
+      "它是诊断或效果研究：它只是结构复盘，不是诊断，也不是效果研究；RAG 关闭时没有来源，也没有评分。",
+  },
 ];
 
 export default function CasesPage() {
@@ -238,18 +296,19 @@ export default function CasesPage() {
         <Plane>
           <p className="sm-eyebrow">
             <span aria-hidden="true" className="sm-dot" />
-            演示记录 · 六段 transcript
+            演示记录 · 七段 transcript
           </p>
 
           <h1 className="sm-display">
-            六段记录，
-            <span className="sm-display-2">六种收束。</span>
+            七段记录，
+            <span className="sm-display-2">七种收束。</span>
           </h1>
 
           <p className="sm-lede">
-            下面六段来自三次实跑：2026-10-31 的四段诊断记录（数学错步出卡、空白入口给示例、
+            下面七段来自四次实跑：2026-10-31 的四段诊断记录（数学错步出卡、空白入口给示例、
             物理五轮后弃权、语文只给结构提示），2026-11-01 新增的通用入口记录
-            （决策问题，离线规则路径），以及同日的代码问题记录（显式提交、执行开关默认关闭）。
+            （决策问题，离线规则路径），同日的代码问题记录（显式提交、执行开关默认关闭），
+            以及 2026-11-02 的写作问题记录（显式标注、RAG 关闭，只做结构复盘）。
             文字按 transcript 抄录，只做截断。
           </p>
 
@@ -263,7 +322,7 @@ export default function CasesPage() {
         <Plane>
           <h2 className="sm-label">
             <em>01</em>
-            六段记录
+            七段记录
           </h2>
 
           <p className="sm-statement">每段都标了它不能证明什么。</p>
@@ -332,10 +391,11 @@ export default function CasesPage() {
             <div className="sm-tile sm-about-card">
               <b>怎么复跑</b>
               <p>
-                <code>python scripts/demo/walkthrough.py</code> 走六段并写{" "}
+                <code>python scripts/demo/walkthrough.py</code> 走七段并写{" "}
                 <code>var/demo/walkthrough.md</code>；<code>--no-live</code>{" "}
-                只跑标注题、空白、通用入口与代码，物理 / 语文显式跳过；
-                <code>--case decision</code> 或 <code>--case code</code> 可单跑。
+                只跑标注题、空白、通用入口、代码与写作复盘，物理 / 语文显式跳过；
+                <code>--case decision</code>、<code>--case code</code> 或{" "}
+                <code>--case review</code> 可单跑。
                 代码默认不执行，<code>SYNAPSE_EXEC=on</code> 才会真的跑。
               </p>
             </div>
@@ -344,14 +404,15 @@ export default function CasesPage() {
               <b>重跑会变吗</b>
               <p>
                 数学、空白与通用入口走规则路径，记录稳定；代码也走规则路径，
-                但执行状态取决于 <code>SYNAPSE_EXEC</code>；物理与语文依赖实时建图，
+                但执行状态取决于 <code>SYNAPSE_EXEC</code>；写作复盘同样走规则路径，
+                只列结构与证据，RAG 关闭时没有来源；物理与语文依赖实时建图，
                 换模型或断网会变。变的是链路，不是准确率。
               </p>
             </div>
           </div>
 
           <p className="sm-fine">
-            这些记录能证明六件事：入口能识别并收束、证据不足时会停、示例不含答案、结构提示不冒充诊断、通用入口不替你做选择、代码不猜也不自动跑。
+            这些记录能证明七件事：入口能识别并收束、证据不足时会停、示例不含答案、结构提示不冒充诊断、通用入口不替你做选择、代码不猜也不自动跑、写作复盘只标结构缺口且不编来源。
             不能证明「说得准」——那需要真实学生作答与双人标注，目前还没有。
           </p>
 

@@ -4775,6 +4775,11 @@ html[data-read="done"] .sm-orb-fill {
   color: #8a5d0a;
 }
 
+.sm-case[data-state="review"] .sm-case-verdict {
+  background: rgba(38, 132, 124, 0.12);
+  color: #1f6a63;
+}
+
 .sm-case-title {
   margin: 12px 0 0;
   color: var(--ink);

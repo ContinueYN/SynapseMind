@@ -288,9 +288,12 @@ def test_research_uses_the_source_tool_and_cites_a_source_card() -> None:
     assert source["status"] == "ok"
     assert source["citations"][0]["card_id"] == "K_SOURCE_TEST"
     assert "来源" in source["output_summary"]
-    assert retriever.kinds == ["source"]
+    # The intake's review may also query retrieval (kind=None) before the agent
+    # runs, so assert on the source-tool call rather than the whole list.
+    assert retriever.kinds.count("source") == 1
+    source_index = retriever.kinds.index("source")
+    assert "来源" in retriever.queries[source_index]
     assert any(item["source"] == "knowledge" for item in body["suggestions"])
-    assert "来源" in retriever.queries[0]
 
 
 def test_source_tool_skips_when_no_source_card_was_found() -> None:

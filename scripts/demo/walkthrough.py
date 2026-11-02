@@ -67,8 +67,14 @@ CODE_TESTS = (
     "    def test_add(self):\n"
     "        self.assertEqual(add(2, 3), 5)\n"
 )
+WRITING_TEXT = "学校是否应该禁止中学生带手机进校园？请写一段议论，说明你的立场和理由。"
+WRITING_WORK = (
+    "我想论证的是：中学生不该被禁止带手机进校园。"
+    "手机能查资料，也方便联系家长。"
+    "学校禁止手机，是担心课堂被打断。"
+)
 
-CASES = ("wrong", "blank", "physics", "chinese", "decision", "code")
+CASES = ("wrong", "blank", "physics", "chinese", "decision", "code", "review")
 
 
 class Transcript:
@@ -383,6 +389,114 @@ def _run_code(service: SessionService, transcript: Transcript) -> bool:
     )
 
 
+def _run_review(
+    service: SessionService,
+    transcript: Transcript,
+    *,
+    knowledge_enabled: bool,
+) -> bool:
+    """A writing submission: intake -> structure review -> evidence and gaps.
+
+    Offline by construction: the review is composed from the cue graph and the
+    rule gaps, never from a model. It prints the profile, the review kind, the
+    findings, the evidence (student excerpt; knowledge card id/title only when
+    retrieval actually returned one), what was not checked, and the next step.
+    With RAG off it says so explicitly instead of inventing a source.
+    """
+
+    transcript.heading("7. 通用入口：写作问题 → 结构复盘 → 证据与缺口（规则路径）")
+    started = perf_counter()
+    view = service.start(
+        StartSessionCommand(
+            problem_text=WRITING_TEXT,
+            answer=WRITING_WORK,
+            subject="writing",
+        )
+    )
+    if view.intake is None:
+        transcript.add("没有进入通用入口：这道题被路由到了别的路径。")
+        return False
+
+    intake = view.intake
+    transcript.bullets(
+        [
+            f"题目：{WRITING_TEXT}",
+            f"学生写了：{WRITING_WORK}",
+            (
+                f"领域标签（profile）：`{intake.profile.name}`"
+                f"（{intake.profile.label}，显式标注，可修改）；"
+                f"框架 `{intake.profile.framework.value}`；"
+                f"验证方式 `{intake.profile.verification.value}`"
+            ),
+            f"入口状态：`{view.session.state.value}`；不探针、不出卡、不给答案。",
+            f"已看到：{'、'.join(intake.observed) or '（暂无）'}",
+            f"还缺：{'；'.join(intake.gaps) or '（暂无）'}",
+        ]
+    )
+
+    review = intake.review
+    if review is None:
+        transcript.add("没有结构复盘：这次没有可比较的作答文本，或复盘合成失败。")
+        return False
+
+    transcript.bullets(
+        [
+            (
+                f"复盘：`{review.kind.value}`；domain `{review.domain.name}`"
+                f"（{review.domain.label}，{review.domain.verification.value}）"
+            ),
+            f"headline：{review.headline}",
+        ]
+    )
+
+    transcript.add("| finding | 标签 | 严重度 | 摘要 |")
+    transcript.add("|---|---|---|---|")
+    for finding in review.findings:
+        transcript.add(
+            f"| `{finding.id}` | {finding.label} | `{finding.severity.value}` | {finding.summary} |"
+        )
+    transcript.add()
+
+    transcript.add("| 证据 | 来源 | ref | 摘录 |")
+    transcript.add("|---|---|---|---|")
+    for item in review.evidence:
+        transcript.add(
+            f"| `{item.id}` | `{item.source.value}` | `{item.ref}` | {item.excerpt or ''} |"
+        )
+    transcript.add()
+
+    cards = tuple(item for item in review.evidence if item.source.value == "knowledge")
+    if cards:
+        transcript.bullets(
+            [
+                "知识卡来源："
+                + "；".join(
+                    f"`{item.ref}` {item.excerpt or '（标题未提供）'}" for item in cards
+                )
+                + "（只列 id 与标题，不排序、不评分）。"
+            ]
+        )
+    elif not knowledge_enabled:
+        transcript.bullets(["来源：RAG 关闭，没有引用卡片。"])
+    else:
+        transcript.bullets(["来源：RAG 开启，但这次没有检索到卡片。"])
+
+    transcript.bullets(
+        [
+            f"这次没有检查：{'；'.join(review.not_checked)}",
+            f"下一步：{review.next_step}",
+            f"边界：{review.disclaimer}",
+            f"耗时：{perf_counter() - started:.2f}s",
+        ]
+    )
+    return (
+        review.kind.value == "structure"
+        and bool(review.findings)
+        and bool(review.evidence)
+        and bool(review.next_step)
+    )
+
+
 def _run_live(
     service: SessionService,
     transcript: Transcript,
@@ -454,7 +568,10 @@ def main() -> int:
     parser.add_argument(
         "--no-live",
         action="store_true",
-        help="never call the model; decision/code still run on rules, physics/chinese are skipped",
+        help=(
+            "never call the model; decision/code/review still run on rules, "
+            "physics/chinese are skipped"
+        ),
     )
     parser.add_argument(
         "--out",
@@ -536,6 +653,14 @@ def main() -> int:
         results.append(_run_decision(service, transcript))
     if "code" in selected:
         results.append(_run_code(service, transcript))
+    if "review" in selected:
+        results.append(
+            _run_review(
+                service,
+                transcript,
+                knowledge_enabled=container.knowledge.enabled,
+            )
+        )
 
     transcript.add("## 结果")
     transcript.add()
