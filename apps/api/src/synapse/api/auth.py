@@ -1,44 +1,73 @@
-"""Account endpoints and the diagnostic-session auth gate.
+"""Account endpoints and the one-time session gate.
 
-Scope is deliberately narrow: one owner account on a self-hosted deployment, no
-roles and no tenants. The endpoints are:
+The cookie is the whole session: **every authenticated request consumes the
+current ``synapse_session`` value and the response sets a new one**. A consumed
+value can never authenticate again. If one is presented twice the server treats
+it as theft: it revokes the whole token family, clears the cookie and answers
+401 with a detail containing ``会话被复用`` so the client can tell the user to log
+in again.
 
-``POST /api/v1/auth/register``  201 + HttpOnly cookie (first owner only by default)
-``POST /api/v1/auth/login``     200 + HttpOnly cookie
-``POST /api/v1/auth/logout``    200, revokes the server-side session
-``GET  /api/v1/auth/me``        200 with the public account view, else 401
+Where rotation happens:
+
+* ``/api/v1/sessions…`` and ``/api/v1/settings…`` — the async
+  ``session_auth_middleware``. It must be async because the model runtime reads
+  the current user from a ``ContextVar``, and a ``ContextVar`` set inside a sync
+  FastAPI dependency is not guaranteed to reach the sync route in another
+  worker thread. ``anyio`` copies the async context into the threadpool, so a
+  value set before dispatch is visible downstream.
+* ``GET /auth/me`` — the endpoint itself, because it is not under a protected
+  prefix. ``POST /auth/login|register`` start a new family; ``POST /auth/logout``
+  revokes the family and clears the cookie.
+
+Endpoints: ``POST /api/v1/auth/register`` 201 (open only when signup is on),
+``POST /api/v1/auth/login`` 200, ``POST /api/v1/auth/logout`` 200,
+``GET /api/v1/auth/me`` 200.
 
 The cookie is ``synapse_session``: HttpOnly, SameSite=Lax, path=/, Secure only
 when ``SYNAPSE_COOKIE_SECURE=on``, max-age = ``SYNAPSE_AUTH_SESSION_TTL_S``.
 
-With ``SYNAPSE_AUTH=off`` the account endpoints answer 403 (``logout`` still
-clears a stale cookie), and ``require_authenticated`` is a no-op so the existing
-local single-user flow is unchanged.
+With ``SYNAPSE_AUTH=off`` the account endpoints answer 403, ``logout`` still
+clears a stale cookie, and ``require_authenticated`` is a no-op so the local
+single-user flow is unchanged.
 """
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from typing import cast
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse
 
 from synapse.api.deps import Container
 from synapse.api.mappers import auth_user_out
 from synapse.api.schemas import AuthUserOut, LoginRequest, LogoutOut, RegisterRequest
 from synapse.application.auth import (
     AuthService,
+    AuthStoreUnavailable,
     AuthUser,
     EmailAlreadyRegistered,
     InvalidCredentials,
     IssuedSession,
     RegistrationClosed,
+    RotatedSession,
+    SessionReuseDetected,
 )
+from synapse.application.context import bind_owner, reset_owner
 from synapse.infrastructure.auth.settings import COOKIE_NAME
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 _LOGIN_REQUIRED = "需要先登录。"
 _AUTH_DISABLED = "认证未启用；设置 SYNAPSE_AUTH=on 后才能使用账号接口。"
+_REUSE_DETAIL = "检测到会话被复用，已强制下线，请重新登录。"
+_STORE_UNAVAILABLE = "账号服务暂不可用："
+
+# Only these resources rotate the cookie. Public routes (health, docs, knowledge
+# search, executions, the local review queue, the account endpoints) must never
+# consume it: a public page load would otherwise invalidate the session the
+# diagnostic page is using.
+_PROTECTED_PREFIXES = ("/api/v1/sessions", "/api/v1/settings")
 
 
 def _container(request: Request) -> Container:
@@ -55,11 +84,11 @@ def _enabled_service(request: Request) -> AuthService:
     return service
 
 
-def _set_cookie(response: Response, container: Container, issued: IssuedSession) -> None:
+def _set_cookie(response: Response, container: Container, token: str) -> None:
     settings = container.auth_settings
     response.set_cookie(
         key=COOKIE_NAME,
-        value=issued.token,
+        value=token,
         max_age=settings.session_ttl_s,
         path="/",
         httponly=True,
@@ -79,20 +108,127 @@ def _delete_cookie(response: Response, container: Container) -> None:
     )
 
 
+def _clearing_cookie_header(container: Container) -> str:
+    """A ``Set-Cookie`` value that clears the cookie, for an HTTPException.
+
+    FastAPI's exception handler builds a fresh response, so headers set on the
+    injected ``Response`` would be dropped. Generating the header from a scratch
+    ``Response`` keeps path/Secure/SameSite identical to the one we set.
+    """
+
+    scratch = Response()
+    _delete_cookie(scratch, container)
+    return scratch.headers["set-cookie"]
+
+
+def _unauthorized(container: Container, detail: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=detail,
+        headers={
+            "WWW-Authenticate": "Cookie",
+            "Set-Cookie": _clearing_cookie_header(container),
+        },
+    )
+
+
+def _issued_cookie(response: Response, container: Container, issued: IssuedSession) -> None:
+    _set_cookie(response, container, issued.token)
+
+
+def _rotated_cookie(
+    response: Response,
+    container: Container,
+    rotated: RotatedSession,
+) -> None:
+    _set_cookie(response, container, rotated.token)
+
+
+def _is_protected(path: str) -> bool:
+    return any(path == prefix or path.startswith(prefix + "/") for prefix in _PROTECTED_PREFIXES)
+
+
+async def session_auth_middleware(
+    request: Request,
+    call_next: Callable[[Request], Awaitable[Response]],
+    container: Container,
+) -> Response:
+    """Rotate the cookie for protected resources, then bind the current owner.
+
+    Returns early (without calling the route) for a missing, expired, unknown,
+    revoked or replayed cookie. The replacement value is set on the way out, once
+    the route has produced a response.
+    """
+
+    if not container.auth_settings.enabled or not _is_protected(request.url.path):
+        return await call_next(request)
+
+    service = container.auth
+    if service is None:  # pragma: no cover - composition always builds both
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"detail": "认证已启用但账号服务未初始化。"},
+        )
+
+    token = request.cookies.get(COOKIE_NAME)
+    try:
+        rotated = service.rotate(token)
+    except SessionReuseDetected:
+        reuse_response: Response = JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={"detail": _REUSE_DETAIL},
+            headers={"WWW-Authenticate": "Cookie"},
+        )
+        _delete_cookie(reuse_response, container)
+        return reuse_response
+    except AuthStoreUnavailable as exc:
+        # Middleware runs outside FastAPI's exception handlers, so the 503 is
+        # built here with the same shape the handler would produce.
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"detail": f"{_STORE_UNAVAILABLE}{exc}"},
+        )
+
+    if rotated is None:
+        denied: Response = JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={"detail": _LOGIN_REQUIRED},
+            headers={"WWW-Authenticate": "Cookie"},
+        )
+        if token:
+            # A presented-but-unusable cookie is stale; clear it so the browser
+            # does not keep replaying it.
+            _delete_cookie(denied, container)
+        return denied
+
+    request.state.auth_user = rotated.user
+    request.state.session_token = rotated.token
+    owner_token = bind_owner(rotated.user.id)
+    try:
+        forwarded: Response = await call_next(request)
+    finally:
+        reset_owner(owner_token)
+    _rotated_cookie(forwarded, container, rotated)
+    return forwarded
+
+
 @router.post(
     "/register",
     response_model=AuthUserOut,
     status_code=status.HTTP_201_CREATED,
 )
 def register(payload: RegisterRequest, request: Request, response: Response) -> AuthUserOut:
-    """Create the first owner account and sign it in.
+    """Create an account and sign it in.
 
-    A deployment that already has an owner answers 409 unless the operator set
-    ``SYNAPSE_AUTH_ALLOW_SIGNUP=on``. The same 409 covers a duplicate email, so
-    the endpoint does not tell a caller whether a different account exists.
+    Open to every registration when
+    ``SYNAPSE_AUTH_ALLOW_SIGNUP=on`` (multi-user mode). Without it the first
+    account claims the instance and later registrations answer 409. A duplicate
+    email is the same 409, so the endpoint does not tell a caller whether a
+    different account exists.
     """
 
     service = _enabled_service(request)
+    container = _container(request)
     try:
         issued = service.register(
             email=payload.email,
@@ -104,13 +240,13 @@ def register(payload: RegisterRequest, request: Request, response: Response) -> 
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc
-    _set_cookie(response, _container(request), issued)
+    _issued_cookie(response, container, issued)
     return auth_user_out(issued.user)
 
 
 @router.post("/login", response_model=AuthUserOut)
 def login(payload: LoginRequest, request: Request, response: Response) -> AuthUserOut:
-    """Exchange email/password for a new server-side session.
+    """Exchange email/password for a new session family.
 
     A wrong password, an unknown email and a closed shop all answer 401 with the
     same message; the password check runs the KDF even for an unknown email so
@@ -118,6 +254,7 @@ def login(payload: LoginRequest, request: Request, response: Response) -> AuthUs
     """
 
     service = _enabled_service(request)
+    container = _container(request)
     try:
         issued = service.login(email=payload.email, password=payload.password)
     except InvalidCredentials as exc:
@@ -126,13 +263,13 @@ def login(payload: LoginRequest, request: Request, response: Response) -> AuthUs
             detail=str(exc),
             headers={"WWW-Authenticate": "Cookie"},
         ) from exc
-    _set_cookie(response, _container(request), issued)
+    _issued_cookie(response, container, issued)
     return auth_user_out(issued.user)
 
 
 @router.post("/logout", response_model=LogoutOut)
 def logout(request: Request, response: Response) -> LogoutOut:
-    """Revoke the current session server-side and clear the cookie.
+    """Revoke the current session family and clear the cookie.
 
     Idempotent: calling it without a cookie succeeds. It also works when auth is
     off, so a client that was pointed at a gated server can clean up its jar.
@@ -146,47 +283,42 @@ def logout(request: Request, response: Response) -> LogoutOut:
 
 
 @router.get("/me", response_model=AuthUserOut)
-def me(request: Request) -> AuthUserOut:
-    """The account behind the cookie, or 401 for missing/expired/revoked."""
+def me(request: Request, response: Response) -> AuthUserOut:
+    """The account behind the cookie; rotates the cookie on success."""
 
     service = _enabled_service(request)
-    principal = service.principal(request.cookies.get(COOKIE_NAME))
-    if principal is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=_LOGIN_REQUIRED,
-            headers={"WWW-Authenticate": "Cookie"},
-        )
-    return auth_user_out(principal)
+    container = _container(request)
+    try:
+        rotated = service.rotate(request.cookies.get(COOKIE_NAME))
+    except SessionReuseDetected as exc:
+        raise _unauthorized(container, _REUSE_DETAIL) from exc
+    if rotated is None:
+        raise _unauthorized(container, _LOGIN_REQUIRED)
+    _rotated_cookie(response, container, rotated)
+    return auth_user_out(rotated.user)
 
 
 def require_authenticated(request: Request) -> AuthUser | None:
-    """Gate for the diagnostic session routes.
+    """Gate for the protected routers.
 
     Off means "no gate at all": the dependency returns immediately, which is why
     every existing unauthenticated test and local workflow keeps working. On
-    means a missing, unknown, revoked or expired cookie is a 401 before the route
-    body runs.
+    means the middleware already rotated the cookie and stored the account on
+    ``request.state``; a missing value here means the route is not covered by the
+    middleware, so it fails closed with 401 instead of running unauthenticated.
 
     Health, ``/auth/*``, docs/openapi, executions, knowledge search and the
-    local review queue stay public on purpose; only ``/api/v1/sessions...`` is
-    gated in this slice.
+    local review queue stay public on purpose.
     """
 
     container = _container(request)
     if not container.auth_settings.enabled:
         return None
-    service = container.auth
-    if service is None:  # pragma: no cover - composition always builds both
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="认证已启用但账号服务未初始化。",
-        )
-    principal = service.principal(request.cookies.get(COOKIE_NAME))
-    if principal is None:
+    user = cast(AuthUser | None, getattr(request.state, "auth_user", None))
+    if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=_LOGIN_REQUIRED,
             headers={"WWW-Authenticate": "Cookie"},
         )
-    return principal
+    return user

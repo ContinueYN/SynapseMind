@@ -19,11 +19,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from fastapi import Request
+from fastapi import HTTPException, Request, status
+from httpx import BaseTransport
 
 from synapse.application.agent_planner import ToolPlanner
 from synapse.application.audit import CallAuditor
-from synapse.application.auth import AuthService
+from synapse.application.auth import AuthService, AuthUser
 from synapse.application.coach import CoachNarrator, CoachService
 from synapse.application.composer import (
     CanaryProbeComposer,
@@ -32,6 +33,11 @@ from synapse.application.composer import (
     LeakSafeProbeComposer,
     ProbeComposer,
     ShadowProbeComposer,
+)
+from synapse.application.credentials import (
+    CredentialService,
+    ModelTester,
+    RemoteUrlGuard,
 )
 from synapse.application.domain_detection import (
     CascadeDomainDetector,
@@ -56,6 +62,7 @@ from synapse.application.work_check import EqualityChecker
 from synapse.domain.problem.alignment import RuleBasedAligner
 from synapse.infrastructure.auth.build import AuthRuntime, build_auth
 from synapse.infrastructure.auth.settings import AuthSettings
+from synapse.infrastructure.credentials.settings import CredentialSettings
 from synapse.infrastructure.execution import ExecutionLimits, LocalPythonExecutor
 from synapse.infrastructure.features import FeatureFlags
 from synapse.infrastructure.guards import AnswerStoreLeakGuardFactory
@@ -67,7 +74,7 @@ from synapse.infrastructure.in_memory import (
 from synapse.infrastructure.knowledge import build_knowledge_service
 from synapse.infrastructure.llm.agent_planner import LLMToolPlanner
 from synapse.infrastructure.llm.audit import JsonlCallAuditor
-from synapse.infrastructure.llm.client import OpenAICompatibleClient
+from synapse.infrastructure.llm.client import CredentialAwareLLMClient, OpenAICompatibleClient
 from synapse.infrastructure.llm.coach import LLMCoachNarrator
 from synapse.infrastructure.llm.composer import LLMProbeComposer
 from synapse.infrastructure.llm.domain_detector import LLMDomainDetector
@@ -103,6 +110,9 @@ class Container:
     # the session gate knows it must not run.
     auth: AuthService | None
     auth_settings: AuthSettings
+    # Per-user encrypted model credentials (BYOK). None when auth is off or a
+    # gate-only runtime was injected without a database.
+    credentials: CredentialService | None = None
     # Releases the engine/Redis connection opened for auth (None when off).
     auth_dispose: Callable[[], None] | None = None
 
@@ -112,6 +122,7 @@ def build_container(
     *,
     features: FeatureFlags | None = None,
     llm_client: LLMClient | None = None,
+    llm_transport_factory: Callable[[], BaseTransport | None] | None = None,
     auditor: CallAuditor | None = None,
     generator: GraphGenerator | None = None,
     generic_generator: GenericGraphGenerator | None = None,
@@ -122,13 +133,38 @@ def build_container(
     coach_narrator: CoachNarrator | None = None,
     auth_settings: AuthSettings | None = None,
     auth_runtime: AuthRuntime | None = None,
+    credential_settings: CredentialSettings | None = None,
+    credential_guard: RemoteUrlGuard | None = None,
+    credential_tester: ModelTester | None = None,
 ) -> Container:
     resolved = settings or LLMSettings.from_env()
     flags = features or FeatureFlags.from_env()
     # Accounts are opt-in: ``SYNAPSE_AUTH=off`` builds no engine and touches no
     # database, so the baseline single-user checkout keeps its behaviour.
     auth_cfg = auth_settings if auth_settings is not None else AuthSettings.from_env()
-    auth = auth_runtime if auth_runtime is not None else build_auth(auth_cfg)
+    auth = (
+        auth_runtime
+        if auth_runtime is not None
+        else build_auth(
+            auth_cfg,
+            credential_settings=credential_settings,
+            credential_guard=credential_guard,
+            credential_tester=credential_tester,
+        )
+    )
+    credentials = auth.credentials if auth is not None else None
+    # One model client for every path. It resolves the request's own credential
+    # on each call; an injected client (tests) still wins.
+    if llm_client is not None:
+        model_client: LLMClient | None = llm_client
+    elif resolved.llm_enabled:
+        model_client = CredentialAwareLLMClient(
+            resolved,
+            credentials=credentials,
+            transport_factory=llm_transport_factory,
+        )
+    else:
+        model_client = None
     # Persistence is opt-in: tests and evaluation scripts keep the in-memory
     # adapters, while the local launcher points this at var/synapse.sqlite3.
     # Sessions and generated problems share one file so a restored session can
@@ -144,7 +180,9 @@ def build_container(
         problems = InMemoryProblemRepository()
     answers = InMemoryAnswerStore()
     sink = auditor or JsonlCallAuditor(Path(resolved.audit_path))
-    graph_generator = generator or build_graph_generator(resolved, client=llm_client, auditor=sink)
+    graph_generator = generator or build_graph_generator(
+        resolved, client=model_client, auditor=sink
+    )
     # SymPy's import (~1.7s) is paid here, once, instead of inside the first
     # request that happens to carry a verifiable claim (chapter 12 §12.8).
     # Optional: a fake generator in the tests has no ``warm``.
@@ -156,7 +194,7 @@ def build_container(
     # still leave the generic intake available, never a 422.
     generic_graph_generator = generic_generator or build_generic_graph_generator(
         resolved,
-        client=llm_client,
+        client=model_client,
         auditor=sink,
     )
     generic_warm = getattr(generic_graph_generator, "warm", None)
@@ -194,7 +232,7 @@ def build_container(
     if resolved.llm_enabled and resolved.mode != "shadow":
         detector = CascadeDomainDetector(
             detector,
-            LLMDomainDetector(llm_client or OpenAICompatibleClient(resolved)),
+            LLMDomainDetector(model_client or OpenAICompatibleClient(resolved)),
         )
     domain_resolver = DomainResolver(domains, detector)
     factory = SessionFactory(
@@ -214,7 +252,7 @@ def build_container(
     planner = HypothesisTargetedPlanner()
     guards = AnswerStoreLeakGuardFactory(answers)
     composer = LeakSafeProbeComposer(
-        inner=build_composer(resolved, client=llm_client, auditor=auditor),
+        inner=build_composer(resolved, client=model_client, auditor=auditor),
         guards=guards,
     )
     # Same guard, same renderer, no model call: the first question of a
@@ -235,7 +273,7 @@ def build_container(
     tool_planner_adapter = build_tool_planner(
         resolved,
         candidate=tool_planner,
-        client=llm_client,
+        client=model_client,
         auditor=sink,
     )
     planner_reason = "" if tool_planner_adapter is not None else tool_planner_off_reason(resolved)
@@ -245,7 +283,7 @@ def build_container(
     coach_adapter = build_coach_narrator(
         resolved,
         candidate=coach_narrator,
-        client=llm_client,
+        client=model_client,
     )
     service = SessionService(
         sessions=sessions,
@@ -281,6 +319,7 @@ def build_container(
         executor=code_executor,
         auth=auth.service if auth is not None else None,
         auth_settings=auth_cfg,
+        credentials=credentials,
         auth_dispose=auth.close if auth is not None else None,
     )
 
@@ -432,8 +471,26 @@ def build_composer(
 
 
 def get_service(request: Request) -> SessionService:
+    """The session facade, bound to the current owner.
+
+    The async auth middleware rotated the cookie and stored the account on
+    ``request.state`` before dispatch; binding the owner here is what makes
+    another user's session a 404 instead of a readable object. With auth off the
+    owner is ``None`` and no filtering happens (the local baseline).
+
+    A protected route that somehow reaches this without the middleware fails
+    closed: silently serving an unbound service would leak every workspace.
+    """
+
     container = cast(Container, request.app.state.container)
-    return container.service
+    user = cast(AuthUser | None, getattr(request.state, "auth_user", None))
+    if container.auth_settings.enabled and user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="需要先登录。",
+            headers={"WWW-Authenticate": "Cookie"},
+        )
+    return container.service.with_owner(user.id if user is not None else None)
 
 
 def get_review_service(request: Request) -> ReviewService:

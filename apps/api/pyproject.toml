@@ -20,6 +20,9 @@ dependencies = [
   "alembic>=1.13,<2",
   "argon2-cffi>=23,<26",
   "redis>=5,<7",
+  # AES-GCM/Fernet for per-user model keys (SYNAPSE_CREDENTIAL_KEY). Imported
+  # only by the BYOK layer; an empty master key keeps it unused at runtime.
+  "cryptography>=42,<47",
   # PostgreSQL driver, kept in the default set so the documented compose URL
   # (postgresql+psycopg://...) works without a second install step.
   "psycopg[binary]>=3.2,<4",

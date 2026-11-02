@@ -1,9 +1,10 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AccountMenu } from "./AccountMenu";
+import { SESSION_REUSED_EVENT } from "@/src/lib/api/client";
 import type { AuthUser } from "@/src/lib/api/types";
 
 const mocks = vi.hoisted(() => ({
@@ -95,6 +96,42 @@ describe("AccountMenu", () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toContain("/api/v1/auth/me");
     expect(init).toMatchObject({ credentials: "include" });
+  });
+
+  it("links signed-in users to their model settings", async () => {
+    fetchReturning(reply(OWNER));
+    render(<AccountMenu />);
+
+    const link = await screen.findByRole("link", { name: "模型设置" });
+    expect(link).toHaveAttribute("href", "/settings/model");
+  });
+
+  it("clears the account UI when another request reports a replayed session", async () => {
+    fetchReturning(reply(OWNER));
+    render(<AccountMenu />);
+    expect(await screen.findByText("小林")).toBeInTheDocument();
+
+    act(() => {
+      window.dispatchEvent(new Event(SESSION_REUSED_EVENT));
+    });
+
+    expect(screen.queryByText("小林")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "模型设置" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /登录/ })).toHaveAttribute(
+      "href",
+      "/login?reason=session_reused&next=%2Fdiagnose%2FS_1",
+    );
+  });
+
+  it("points a replayed-session 401 at the login notice", async () => {
+    fetchReturning(reply({ detail: "会话被复用，已强制退出。" }, 401));
+    render(<AccountMenu />);
+
+    const link = await screen.findByRole("link", { name: /登录/ });
+    expect(link).toHaveAttribute(
+      "href",
+      "/login?reason=session_reused&next=%2Fdiagnose%2FS_1",
+    );
   });
 
   it("falls back to the email when there is no display name", async () => {

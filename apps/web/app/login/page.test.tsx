@@ -8,12 +8,18 @@ import type { AuthUser } from "@/src/lib/api/types";
 
 const mocks = vi.hoisted(() => ({
   next: "/",
+  reason: "",
   replace: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: mocks.replace }),
-  useSearchParams: () => new URLSearchParams(`next=${encodeURIComponent(mocks.next)}`),
+  useSearchParams: () => {
+    const params = new URLSearchParams();
+    params.set("next", mocks.next);
+    if (mocks.reason) params.set("reason", mocks.reason);
+    return params;
+  },
 }));
 
 vi.mock("next/link", () => ({
@@ -53,6 +59,7 @@ async function fillLogin(email = "owner@example.com", password = "password123") 
 describe("LoginPage", () => {
   beforeEach(() => {
     mocks.next = "/";
+    mocks.reason = "";
     mocks.replace.mockReset();
   });
 
@@ -60,7 +67,7 @@ describe("LoginPage", () => {
     vi.unstubAllGlobals();
   });
 
-  it("starts on login and exposes the first-owner register copy", async () => {
+  it("starts on login and exposes multi-user register copy", async () => {
     fetchReturning(reply(OWNER));
     const user = userEvent.setup();
     render(<LoginPage />);
@@ -70,15 +77,21 @@ describe("LoginPage", () => {
       "true",
     );
     expect(screen.queryByLabelText(/显示名/)).not.toBeInTheDocument();
+    expect(screen.getByText(/会话 cookie 都会轮换/)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: "创建第一个账号" }));
+    await user.click(screen.getByRole("tab", { name: "创建账号" }));
 
-    expect(screen.getByRole("tab", { name: "创建第一个账号" })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: "创建账号" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
     expect(screen.getByLabelText(/显示名/)).toBeInTheDocument();
-    expect(screen.getByText(/第一个账号是拥有者账号/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "创建一个账号。" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/第一个账号|拥有者账号|第一个部署/),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /创建账号/ }),
     ).toBeInTheDocument();
@@ -125,7 +138,7 @@ describe("LoginPage", () => {
     const user = userEvent.setup();
     render(<LoginPage />);
 
-    await user.click(screen.getByRole("tab", { name: "创建第一个账号" }));
+    await user.click(screen.getByRole("tab", { name: "创建账号" }));
     await user.type(screen.getByLabelText("邮箱"), "owner@example.com");
     await user.type(screen.getByLabelText(/密码/), "password123");
     await user.type(screen.getByLabelText(/显示名/), "小林");
@@ -139,6 +152,35 @@ describe("LoginPage", () => {
       password: "password123",
       display_name: "小林",
     });
+  });
+
+  it("explains a duplicate email without an owner-limit story", async () => {
+    fetchReturning(reply({ detail: "这个邮箱已经存在。" }, 409));
+    const user = userEvent.setup();
+    render(<LoginPage />);
+
+    await user.click(screen.getByRole("tab", { name: "创建账号" }));
+    await user.type(screen.getByLabelText("邮箱"), "owner@example.com");
+    await user.type(screen.getByLabelText(/密码/), "password123");
+    await user.click(screen.getByRole("button", { name: /创建账号/ }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "这个邮箱已经注册过了，请直接登录。",
+    );
+    expect(
+      screen.queryByText(/第一个账号|拥有者账号|注册默认关闭/),
+    ).not.toBeInTheDocument();
+    expect(mocks.replace).not.toHaveBeenCalled();
+  });
+
+  it("shows the forced-logout notice after a replayed session", async () => {
+    mocks.reason = "session_reused";
+    fetchReturning(reply(OWNER));
+    render(<LoginPage />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "检测到会话被复用，已强制退出，请重新登录。",
+    );
   });
 
   it("does not turn a 401 into an account-existence hint", async () => {

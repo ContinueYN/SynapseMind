@@ -1,9 +1,10 @@
-"""SQLAlchemy 2.x tables and engine setup for the auth layer.
+"""SQLAlchemy 2.x tables and engine setup for the account layer.
 
-Two tables only, because this is a single-owner deployment:
+Three tables, because a self-hosted instance is multi-user without roles:
 
-``users``          one row per account (first registration wins by policy)
-``auth_sessions``  opaque session-token digests with expiry and revocation
+``users``                   one row per account (signup policy decides who joins)
+``auth_sessions``           one-time session-token digests, grouped into families
+``user_model_credentials``  each user's own encrypted model key (BYOK)
 
 Tables are **not** created at import time or on first request. Schema belongs to
 Alembic (``alembic upgrade head``), which keeps production PostgreSQL honest and
@@ -29,11 +30,11 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sess
 
 
 class Base(DeclarativeBase):
-    """Declarative base shared by the models and the Alembic migration."""
+    """Declarative base shared by the models and the Alembic migrations."""
 
 
 class UserRow(Base):
-    """One owner account (plus any account the operator explicitly allows)."""
+    """One account; each account owns an isolated diagnostic workspace."""
 
     __tablename__ = "users"
 
@@ -46,7 +47,13 @@ class UserRow(Base):
 
 
 class AuthSessionRow(Base):
-    """Server-side half of the cookie, stored as a SHA-256 token digest."""
+    """Server-side half of the cookie, stored as a SHA-256 token digest.
+
+    ``family_id`` groups every token produced by one login's rotation chain;
+    revoking it (logout or reuse detection) logs that browser out everywhere.
+    ``used_at`` is the one-time marker: a non-null value means the digest was
+    already spent and presenting it again is treated as session theft.
+    """
 
     __tablename__ = "auth_sessions"
 
@@ -57,6 +64,7 @@ class AuthSessionRow(Base):
         nullable=False,
         index=True,
     )
+    family_id: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     token_hash: Mapped[str] = mapped_column(
         String(64),
         nullable=False,
@@ -69,6 +77,7 @@ class AuthSessionRow(Base):
         nullable=False,
         index=True,
     )
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 

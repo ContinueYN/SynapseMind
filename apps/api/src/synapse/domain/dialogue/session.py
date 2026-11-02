@@ -36,6 +36,10 @@ class DialogueSession:
     max_turns: int
     created_at: datetime
     mode: str = "learning"
+    # The account that owns this workspace, or ``None`` for the local
+    # auth-off baseline. Snapshots must preserve it: a reload that lost the
+    # owner would either hide the session from its user or expose it to another.
+    owner_id: str | None = None
     turn: int = 0
     asked_probe_ids: list[str] = field(default_factory=list)
     history: list[TurnRecord] = field(default_factory=list)

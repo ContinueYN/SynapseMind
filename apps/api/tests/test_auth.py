@@ -28,7 +28,7 @@ from sqlalchemy import func, inspect, select
 from alembic import command
 from synapse.api.deps import Container
 from synapse.api.main import create_app
-from synapse.application.auth import AuthService
+from synapse.application.auth import AuthService, SessionReuseDetected
 from synapse.infrastructure.auth.build import build_auth
 from synapse.infrastructure.auth.db import (
     AuthSessionRow,
@@ -48,6 +48,7 @@ from synapse.infrastructure.auth.stores import (
     SqlSessionTokenStore,
     SqlUserStore,
 )
+from synapse.infrastructure.credentials.db import UserModelCredentialRow
 
 APPS_API = Path(__file__).resolve().parents[1]
 ALEMBIC_INI = APPS_API / "alembic.ini"
@@ -526,7 +527,7 @@ def test_password_uses_argon2_and_tokens_are_digested(
 
 
 class FakeRedis:
-    """Just the four calls the adapter uses; no server, no TTL clock."""
+    """Just the calls the adapter uses; no server, no TTL clock."""
 
     def __init__(self) -> None:
         self.values: dict[str, str] = {}
@@ -540,6 +541,11 @@ class FakeRedis:
     def get(self, name: str) -> str | None:
         return self.values.get(name)
 
+    def getdel(self, name: str) -> str | None:
+        value = self.values.pop(name, None)
+        self.expiries.pop(name, None)
+        return value
+
     def delete(self, *names: str) -> int:
         for name in names:
             self.values.pop(name, None)
@@ -551,26 +557,57 @@ def test_redis_store_roundtrip_uses_the_configured_ttl() -> None:
     fake = FakeRedis()
     store = RedisSessionTokenStore(fake, ttl_s=120)
     token_hash = "a" * 64
-    expires_at = datetime.now(UTC) + timedelta(seconds=120)
+    now = datetime.now(UTC)
+    expires_at = now + timedelta(seconds=120)
 
-    store.create(token_hash=token_hash, user_id="U_1", expires_at=expires_at)
+    store.issue(
+        token_hash=token_hash,
+        user_id="U_1",
+        family_id="F_1",
+        created_at=now,
+        expires_at=expires_at,
+    )
     key = f"synapse:auth:sess:{token_hash}"
     assert fake.expiries[key] == 120
 
-    resolved = store.resolve(token_hash)
-    assert resolved is not None
-    assert resolved.user_id == "U_1"
-    assert resolved.expires_at == expires_at
+    state = store.consume(token_hash, now=now)
+    assert state.status == "active"
+    assert state.user_id == "U_1"
+    assert state.family_id == "F_1"
+    assert state.expires_at == expires_at
+    # GETDEL removed the live key; a tombstone keeps the replay signal.
+    assert key not in fake.values
+    assert f"synapse:auth:used:{token_hash}" in fake.values
 
-    store.revoke(token_hash)
-    assert store.resolve(token_hash) is None
+    # The second consume is "used", not "unknown": that is the theft signal.
+    replay = store.consume(token_hash, now=now)
+    assert replay.status == "used"
+    assert replay.family_id == "F_1"
+
+
+def test_redis_store_revokes_a_whole_family() -> None:
+    fake = FakeRedis()
+    store = RedisSessionTokenStore(fake, ttl_s=60)
+    now = datetime.now(UTC)
+    for index in range(2):
+        store.issue(
+            token_hash=str(index) * 64,
+            user_id="U_1",
+            family_id="F_1",
+            created_at=now,
+            expires_at=now + timedelta(seconds=60),
+        )
+    store.revoke_family("F_1", now=now)
+    assert fake.expiries["synapse:auth:fam:F_1"] == 60
+    state = store.consume("0" * 64, now=now)
+    assert state.status == "revoked"
 
 
 def test_redis_store_rejects_a_corrupt_value() -> None:
     fake = FakeRedis()
     store = RedisSessionTokenStore(fake, ttl_s=60)
     fake.values[f"synapse:auth:sess:{'b' * 64}"] = "{not json"
-    assert store.resolve("b" * 64) is None
+    assert store.consume("b" * 64, now=datetime.now(UTC)).status == "unknown"
 
 
 def test_redis_backed_sessions_skip_the_sql_session_table(
@@ -592,17 +629,20 @@ def test_redis_backed_sessions_skip_the_sql_session_table(
     assert runtime is not None
     try:
         issued = runtime.service.register(email=OWNER_EMAIL, password=OWNER_PASSWORD)
-        principal = runtime.service.principal(issued.token)
-        assert principal is not None
-        assert principal.email == OWNER_EMAIL
+        rotated = runtime.service.rotate(issued.token)
+        assert rotated is not None
+        assert rotated.user.email == OWNER_EMAIL
         assert any(key.startswith("synapse:auth:sess:") for key in fake.values)
 
         factory = build_session_factory(engine)
         with factory() as session:
             assert session.scalar(select(func.count()).select_from(AuthSessionRow)) == 0
 
-        runtime.service.logout(issued.token)
-        assert runtime.service.principal(issued.token) is None
+        runtime.service.logout(rotated.token)
+        # Logout already consumed the value; presenting it again is the same
+        # theft signal as any other replay of a consumed digest.
+        with pytest.raises(SessionReuseDetected):
+            runtime.service.rotate(rotated.token)
     finally:
         runtime.close()
 
@@ -621,7 +661,7 @@ def test_sessions_fall_back_to_sql_without_redis(
         factory = build_session_factory(engine)
         with factory() as session:
             assert session.scalar(select(func.count()).select_from(AuthSessionRow)) == 1
-        assert runtime.service.principal(issued.token) is not None
+        assert runtime.service.rotate(issued.token) is not None
     finally:
         runtime.close()
 
@@ -650,12 +690,178 @@ def test_service_rejects_expired_tokens_with_an_injected_clock(tmp_path: Path) -
     )
     try:
         issued = service.register(email=OWNER_EMAIL, password=OWNER_PASSWORD)
-        assert service.principal(issued.token) is not None
+        assert service.rotate(issued.token) is not None
+        issued = service.login(email=OWNER_EMAIL, password=OWNER_PASSWORD)
         clock_values[0] = now + timedelta(seconds=61)
-        # The row is still unrevoked, but the hard expiry wins.
-        assert service.principal(issued.token) is None
+        # The row is still unconsumed, but the hard expiry wins.
+        assert service.rotate(issued.token) is None
     finally:
         engine.dispose()
+
+
+# --------------------------------------------------------------------------
+# One-time cookies: rotation and reuse detection
+# --------------------------------------------------------------------------
+
+
+def test_every_protected_request_rotates_the_cookie(
+    make_auth_app: Callable[..., AuthHarness],
+    sample_payload: dict[str, object],
+) -> None:
+    harness = make_auth_app()
+    assert _register(harness.client).status_code == 201
+    first = _cookie_token(harness.client)
+
+    created = harness.client.post("/api/v1/sessions", json=sample_payload)
+    assert created.status_code == 201, created.text
+    second = _cookie_token(harness.client)
+    assert second != first
+    assert "set-cookie" in created.headers
+
+    session_id = created.json()["session_id"]
+    # The rotated value still works and rotates again.
+    assert harness.client.get(f"/api/v1/sessions/{session_id}").status_code == 200
+    third = _cookie_token(harness.client)
+    assert third not in {first, second}
+
+
+def test_replaying_a_consumed_cookie_revokes_the_family(
+    make_auth_app: Callable[..., AuthHarness],
+    sample_payload: dict[str, object],
+) -> None:
+    harness = make_auth_app(allow_signup=True)
+    assert _register(harness.client).status_code == 201
+    first = _cookie_token(harness.client)
+    created = harness.client.post("/api/v1/sessions", json=sample_payload)
+    assert created.status_code == 201, created.text
+    session_id = created.json()["session_id"]
+    current = _cookie_token(harness.client)
+    assert current != first
+
+    replay = harness.anonymous()
+    replay.cookies.set(COOKIE_NAME, first)
+    reused = replay.get(f"/api/v1/sessions/{session_id}")
+
+    assert reused.status_code == 401
+    assert "会话被复用" in reused.json()["detail"]
+    assert reused.headers.get("www-authenticate") == "Cookie"
+    cleared = reused.headers["set-cookie"].lower()
+    assert f"{COOKIE_NAME}=" in cleared
+    assert "max-age=0" in cleared
+
+    # The alarm revoked the whole chain, not only the replayed value.
+    assert harness.client.get(f"/api/v1/sessions/{session_id}").status_code == 401
+
+
+def test_me_also_rotates_and_detects_reuse(
+    make_auth_app: Callable[..., AuthHarness],
+) -> None:
+    harness = make_auth_app()
+    assert _register(harness.client).status_code == 201
+    first = _cookie_token(harness.client)
+
+    assert harness.client.get("/api/v1/auth/me").status_code == 200
+    second = _cookie_token(harness.client)
+    assert second != first
+
+    replay = harness.anonymous()
+    replay.cookies.set(COOKIE_NAME, first)
+    reused = replay.get("/api/v1/auth/me")
+    assert reused.status_code == 401
+    assert "会话被复用" in reused.json()["detail"]
+
+    # Current value is now revoked as well.
+    assert harness.client.get("/api/v1/auth/me").status_code == 401
+
+
+def test_logout_revokes_every_token_in_the_family(
+    make_auth_app: Callable[..., AuthHarness],
+) -> None:
+    harness = make_auth_app()
+    assert _register(harness.client).status_code == 201
+    oldest = _cookie_token(harness.client)
+    assert harness.client.get("/api/v1/auth/me").status_code == 200
+    newest = _cookie_token(harness.client)
+    assert newest != oldest
+
+    assert harness.client.post("/api/v1/auth/logout").status_code == 200
+
+    for token in (oldest, newest):
+        replay = harness.anonymous()
+        replay.cookies.set(COOKIE_NAME, token)
+        assert replay.get("/api/v1/auth/me").status_code == 401
+
+
+def test_two_consumes_cannot_both_succeed(tmp_path: Path) -> None:
+    """The store, not the caller, decides who wins a race for one digest."""
+
+    database = tmp_path / "race-auth.sqlite3"
+    url = _sqlite_url(database)
+    _upgrade(url)
+    engine = create_auth_engine(url)
+    try:
+        store = SqlSessionTokenStore(build_session_factory(engine))
+        now = datetime.now(UTC)
+        token_hash = "c" * 64
+        store.issue(
+            token_hash=token_hash,
+            user_id="U_1",
+            family_id="F_1",
+            created_at=now,
+            expires_at=now + timedelta(seconds=60),
+        )
+
+        winner = store.consume(token_hash, now=now)
+        loser = store.consume(token_hash, now=now)
+
+        assert winner.status == "active"
+        assert loser.status == "used"
+        assert loser.family_id == "F_1"
+    finally:
+        engine.dispose()
+
+
+def test_multi_user_signup_keeps_families_independent(
+    make_auth_app: Callable[..., AuthHarness],
+) -> None:
+    harness = make_auth_app(allow_signup=True)
+    assert _register(harness.client, email="a@example.com").status_code == 201
+    a_stale = _cookie_token(harness.client)
+    a_identity = harness.client.get("/api/v1/auth/me").json()
+
+    second = harness.anonymous()
+    assert _register(second, email="b@example.com").status_code == 201
+    b_identity = second.get("/api/v1/auth/me").json()
+
+    assert a_identity["id"] != b_identity["id"]
+
+    # A replay alarm on A's chain must not touch B's session.
+    replay = harness.anonymous()
+    replay.cookies.set(COOKIE_NAME, a_stale)
+    reused = replay.get("/api/v1/auth/me")
+    assert reused.status_code == 401
+    assert "会话被复用" in reused.json()["detail"]
+    assert harness.client.get("/api/v1/auth/me").status_code == 401
+    assert second.get("/api/v1/auth/me").status_code == 200
+
+
+# --------------------------------------------------------------------------
+# The gate sits inside CORS, so a browser can read its 401
+# --------------------------------------------------------------------------
+
+
+def test_a_401_still_carries_cors_headers(
+    make_auth_app: Callable[..., AuthHarness],
+) -> None:
+    harness = make_auth_app()
+    response = harness.anonymous().get(
+        "/api/v1/sessions/S_missing",
+        headers={"Origin": "http://localhost:3000"},
+    )
+
+    assert response.status_code == 401
+    assert response.headers.get("access-control-allow-origin") == "http://localhost:3000"
+    assert response.headers.get("access-control-allow-credentials") == "true"
 
 
 # --------------------------------------------------------------------------
@@ -672,7 +878,8 @@ def test_migration_upgrade_downgrade_and_model_parity(tmp_path: Path) -> None:
     engine = create_auth_engine(url)
     try:
         tables = set(inspect(engine).get_table_names())
-        assert {"users", "auth_sessions", "alembic_version"} <= tables
+        assert {"users", "auth_sessions", "user_model_credentials"} <= tables
+        assert UserModelCredentialRow.__tablename__ == "user_model_credentials"
         with engine.connect() as connection:
             context = MigrationContext.configure(connection)
             assert compare_metadata(context, Base.metadata) == []
@@ -682,8 +889,10 @@ def test_migration_upgrade_downgrade_and_model_parity(tmp_path: Path) -> None:
     command.downgrade(config, "base")
     engine = create_auth_engine(url)
     try:
-        assert "users" not in inspect(engine).get_table_names()
-        assert "auth_sessions" not in inspect(engine).get_table_names()
+        tables = set(inspect(engine).get_table_names())
+        assert "users" not in tables
+        assert "auth_sessions" not in tables
+        assert "user_model_credentials" not in tables
     finally:
         engine.dispose()
 
@@ -701,9 +910,14 @@ def test_migration_compiles_for_postgres_offline() -> None:
     sql = buffer.getvalue()
     assert "CREATE TABLE users" in sql
     assert "CREATE TABLE auth_sessions" in sql
+    assert "CREATE TABLE user_model_credentials" in sql
     assert "TIMESTAMP WITH TIME ZONE" in sql
     assert "FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE" in sql
     assert "CREATE UNIQUE INDEX ix_users_email ON users (email)" in sql
+    assert "ALTER TABLE auth_sessions ADD COLUMN family_id VARCHAR(40)" in sql
+    assert "ALTER TABLE auth_sessions ADD COLUMN used_at TIMESTAMP WITH TIME ZONE" in sql
+    assert "ALTER TABLE auth_sessions ALTER COLUMN family_id SET NOT NULL" in sql
+    assert "CREATE INDEX ix_auth_sessions_family_id ON auth_sessions (family_id)" in sql
 
 
 def test_postgres_spelling_is_normalized() -> None:

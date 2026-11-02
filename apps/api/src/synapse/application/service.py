@@ -6,6 +6,7 @@ imports and no SQL/LLM calls.
 
 from __future__ import annotations
 
+from copy import copy
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from time import perf_counter
@@ -215,6 +216,28 @@ class SessionService:
         # narrator is injected by the composition root. It is read-only and
         # never receives the answer store.
         self._coach = coach_service or CoachService()
+        # Owner binding. ``None`` means "no filter" (auth off, local baseline);
+        # the composition root binds a user id per request via ``with_owner``.
+        self._owner_id: str | None = None
+
+    def with_owner(self, owner_id: str | None) -> SessionService:
+        """Return a shallow copy bound to one account's workspace.
+
+        The copy shares every adapter with the original, so it is cheap and
+        thread-safe: binding is per request, not mutable global state. Every
+        path that loads a session goes through ``_get``, which refuses a session
+        whose owner differs.
+        """
+
+        bound = copy(self)
+        bound._owner_id = owner_id
+        return bound
+
+    @property
+    def owner_id(self) -> str | None:
+        """The account this instance is bound to (``None`` when auth is off)."""
+
+        return self._owner_id
 
     def start(self, command: StartSessionCommand) -> SessionView:
         # Check the student's own equals signs before alignment: a provable
@@ -222,6 +245,9 @@ class SessionService:
         # it must survive until the card is built (see ``work_findings``).
         findings = self._check_work(command.work)
         session = self._factory.create(command)
+        # Ownership is set at creation, not at read time: a session with no
+        # owner (old snapshot) is inaccessible while auth is on.
+        session.owner_id = self._owner_id
         session.work_findings = findings
         # The reference-free path reads the attempt back on every reload to
         # derive what it does and does not mention (application/intake.py). Same
@@ -1045,6 +1071,10 @@ class SessionService:
     def _get(self, session_id: str) -> DialogueSession:
         session = self._sessions.get(session_id)
         if session is None:
+            raise SessionNotFound(session_id)
+        if self._owner_id is not None and session.owner_id != self._owner_id:
+            # Same error as "no such session": a 404 must not confirm that
+            # another account owns this id.
             raise SessionNotFound(session_id)
         return session
 

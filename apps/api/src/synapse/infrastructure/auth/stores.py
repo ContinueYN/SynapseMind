@@ -1,34 +1,42 @@
-"""Adapters for the two auth ports: user records and session tokens.
+"""Adapters for the two auth ports: user records and one-time session tokens.
 
-``SqlUserStore``      accounts live in ``users`` (SQLite or PostgreSQL).
+``SqlUserStore``          accounts live in ``users`` (SQLite or PostgreSQL).
 ``SqlSessionTokenStore``  default token store: rows in ``auth_sessions``.
 ``RedisSessionTokenStore`` optional token store: keys with a native TTL, used
-                          when ``SYNAPSE_REDIS_URL`` is configured.
+                           when ``SYNAPSE_REDIS_URL`` is configured.
 
 Both SQL adapters translate ``SQLAlchemyError`` into ``AuthStoreUnavailable`` so
 a missing migration (or an unreachable database) becomes a 503 with a migration
 hint instead of an opaque 500. Redis failures do the same.
 
 Only digests are stored: a leaked ``auth_sessions`` table cannot be replayed as
-a cookie, and logout sets ``revoked_at`` instead of pretending the row is gone.
+a cookie. Consumption is atomic in both adapters, because the cookie is a
+one-time credential:
+
+* SQL: a conditional ``UPDATE ... WHERE used_at IS NULL``; a losing racer sees
+  ``rowcount == 0`` and is told the token was already used.
+* Redis: ``GETDEL`` removes the live key and the adapter writes a ``used:<sha>``
+  tombstone, so a replay is distinguishable from a token that never existed.
+  A family-revocation key closes every token of a chain at once.
 """
 
 from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from typing import Protocol
+from typing import Any, Protocol, cast
 from uuid import uuid4
 
 from redis.exceptions import RedisError
-from sqlalchemy import func, select
+from sqlalchemy import CursorResult, func, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
 from synapse.application.auth import (
     AuthStoreUnavailable,
     EmailAlreadyRegistered,
-    SessionToken,
+    TokenState,
+    TokenStatus,
     UserRecord,
 )
 from synapse.infrastructure.auth.db import AuthSessionRow, UserRow, as_utc
@@ -106,17 +114,26 @@ class SqlUserStore:
 
 
 class SqlSessionTokenStore:
-    """Default token store: a row per login, revocable and expiring in SQL."""
+    """Default token store: one row per issued cookie, consumed exactly once."""
 
     def __init__(self, sessions: sessionmaker[Session]) -> None:
         self._sessions = sessions
 
-    def create(self, *, token_hash: str, user_id: str, expires_at: datetime) -> None:
+    def issue(
+        self,
+        *,
+        token_hash: str,
+        user_id: str,
+        family_id: str,
+        created_at: datetime,
+        expires_at: datetime,
+    ) -> None:
         row = AuthSessionRow(
             id=f"AS_{uuid4().hex}",
             user_id=user_id,
+            family_id=family_id,
             token_hash=token_hash,
-            created_at=datetime.now(UTC),
+            created_at=created_at,
             expires_at=expires_at,
         )
         try:
@@ -126,29 +143,82 @@ class SqlSessionTokenStore:
         except SQLAlchemyError as exc:
             raise AuthStoreUnavailable(_STORE_HINT) from exc
 
-    def resolve(self, token_hash: str) -> SessionToken | None:
-        try:
-            with self._sessions() as session:
-                row: AuthSessionRow | None = session.scalar(
-                    select(AuthSessionRow).where(AuthSessionRow.token_hash == token_hash)
-                )
-        except SQLAlchemyError as exc:
-            raise AuthStoreUnavailable(_STORE_HINT) from exc
-        if row is None or row.revoked_at is not None:
-            return None
-        return SessionToken(user_id=row.user_id, expires_at=as_utc(row.expires_at))
+    def consume(self, token_hash: str, *, now: datetime) -> TokenState:
+        """Atomically spend one digest.
 
-    def revoke(self, token_hash: str) -> None:
+        The read is only used to describe the outcome; the authoritative step is
+        the conditional update. Two concurrent requests cannot both see
+        ``rowcount == 1``: the loser is told ``used`` and the use case then
+        revokes the family.
+        """
+
         try:
             with self._sessions() as session:
                 row: AuthSessionRow | None = session.scalar(
                     select(AuthSessionRow).where(AuthSessionRow.token_hash == token_hash)
                 )
-                if row is not None:
-                    row.revoked_at = datetime.now(UTC)
-                    session.commit()
+                if row is None:
+                    return TokenState.unknown()
+                state = _state_for(row)
+                if state.status != "active":
+                    return state
+                result = cast(
+                    "CursorResult[Any]",
+                    session.execute(
+                        update(AuthSessionRow)
+                        .where(
+                            AuthSessionRow.token_hash == token_hash,
+                            AuthSessionRow.used_at.is_(None),
+                        )
+                        .values(used_at=now)
+                        .execution_options(synchronize_session=False)
+                    ),
+                )
+                if result.rowcount != 1:
+                    session.rollback()
+                    return TokenState(
+                        status="used",
+                        user_id=row.user_id,
+                        family_id=row.family_id,
+                        expires_at=as_utc(row.expires_at),
+                    )
+                session.commit()
+                return state
         except SQLAlchemyError as exc:
             raise AuthStoreUnavailable(_STORE_HINT) from exc
+
+    def revoke_family(self, family_id: str, *, now: datetime) -> None:
+        try:
+            with self._sessions() as session:
+                session.execute(
+                    update(AuthSessionRow)
+                    .where(
+                        AuthSessionRow.family_id == family_id,
+                        AuthSessionRow.revoked_at.is_(None),
+                    )
+                    .values(revoked_at=now)
+                    .execution_options(synchronize_session=False)
+                )
+                session.commit()
+        except SQLAlchemyError as exc:
+            raise AuthStoreUnavailable(_STORE_HINT) from exc
+
+
+def _state_for(row: AuthSessionRow) -> TokenState:
+    expires_at = as_utc(row.expires_at)
+    status: TokenStatus
+    if row.revoked_at is not None:
+        status = "revoked"
+    elif row.used_at is not None:
+        status = "used"
+    else:
+        status = "active"
+    return TokenState(
+        status=status,
+        user_id=row.user_id,
+        family_id=row.family_id,
+        expires_at=expires_at,
+    )
 
 
 class RedisClient(Protocol):
@@ -158,6 +228,8 @@ class RedisClient(Protocol):
 
     def get(self, name: str) -> str | bytes | None: ...
 
+    def getdel(self, name: str) -> str | bytes | None: ...
+
     def delete(self, *names: str) -> object: ...
 
 
@@ -166,48 +238,125 @@ class RedisSessionTokenStore:
 
     Accounts stay in SQL: Redis is the fast, expiring half of the session, which
     is exactly the part that benefits from a TTL. The payload repeats the
-    expiry so a client that lost its TTL configuration still fails closed.
+    family and expiry so a client that lost its TTL configuration still fails
+    closed. ``GETDEL`` makes consumption atomic on Redis 7; the tombstone keeps
+    the difference between "already used" (theft signal) and "never issued".
     """
 
     KEY_PREFIX = "synapse:auth:sess:"
+    USED_PREFIX = "synapse:auth:used:"
+    FAMILY_PREFIX = "synapse:auth:fam:"
 
     def __init__(self, client: RedisClient, *, ttl_s: int) -> None:
         self._client = client
         self._ttl_s = ttl_s
 
-    def create(self, *, token_hash: str, user_id: str, expires_at: datetime) -> None:
+    def issue(
+        self,
+        *,
+        token_hash: str,
+        user_id: str,
+        family_id: str,
+        created_at: datetime,
+        expires_at: datetime,
+    ) -> None:
         payload = json.dumps(
-            {"user_id": user_id, "expires_at": expires_at.astimezone(UTC).isoformat()}
+            {
+                "user_id": user_id,
+                "family_id": family_id,
+                "created_at": created_at.astimezone(UTC).isoformat(),
+                "expires_at": expires_at.astimezone(UTC).isoformat(),
+            }
         )
         try:
             self._client.set(self._key(token_hash), payload, ex=self._ttl_s)
         except RedisError as exc:
             raise AuthStoreUnavailable(_REDIS_HINT) from exc
 
-    def resolve(self, token_hash: str) -> SessionToken | None:
+    def consume(self, token_hash: str, *, now: datetime) -> TokenState:
         try:
-            raw = self._client.get(self._key(token_hash))
+            raw = self._client.getdel(self._key(token_hash))
+            if raw is None:
+                tombstone = self._client.get(self._used_key(token_hash))
+                if tombstone is None:
+                    return TokenState.unknown()
+                state = _parse(tombstone)
+                if state is None:
+                    return TokenState.unknown()
+                return TokenState(
+                    status="used",
+                    user_id=state.user_id,
+                    family_id=state.family_id,
+                    expires_at=state.expires_at,
+                )
+            state = _parse(raw)
+            if state is None:
+                return TokenState.unknown()
+            if self._family_revoked(state.family_id):
+                return TokenState(
+                    status="revoked",
+                    user_id=state.user_id,
+                    family_id=state.family_id,
+                    expires_at=state.expires_at,
+                )
+            # Write the tombstone before reporting active: a second request then
+            # sees ``used`` instead of ``unknown``. Both outcomes are a 401, but
+            # only the tombstone can raise the theft alarm.
+            self._client.set(self._used_key(token_hash), _raw_text(raw), ex=self._ttl_s)
+            return TokenState(
+                status="active",
+                user_id=state.user_id,
+                family_id=state.family_id,
+                expires_at=state.expires_at,
+            )
         except RedisError as exc:
             raise AuthStoreUnavailable(_REDIS_HINT) from exc
-        if raw is None:
-            return None
-        text = raw.decode("utf-8") if isinstance(raw, bytes) else raw
-        try:
-            payload = json.loads(text)
-            user_id = payload["user_id"]
-            expires_at = datetime.fromisoformat(payload["expires_at"])
-        except (ValueError, KeyError, TypeError):
-            # A corrupt value must not authenticate anybody.
-            return None
-        if not isinstance(user_id, str):
-            return None
-        return SessionToken(user_id=user_id, expires_at=as_utc(expires_at))
 
-    def revoke(self, token_hash: str) -> None:
+    def revoke_family(self, family_id: str, *, now: datetime) -> None:
+        del now  # the family key expires with the longest-lived token it covers
         try:
-            self._client.delete(self._key(token_hash))
+            self._client.set(self._family_key(family_id), "1", ex=self._ttl_s)
         except RedisError as exc:
             raise AuthStoreUnavailable(_REDIS_HINT) from exc
+
+    def _family_revoked(self, family_id: str | None) -> bool:
+        if family_id is None:
+            return False
+        return self._client.get(self._family_key(family_id)) is not None
 
     def _key(self, token_hash: str) -> str:
         return f"{self.KEY_PREFIX}{token_hash}"
+
+    def _used_key(self, token_hash: str) -> str:
+        return f"{self.USED_PREFIX}{token_hash}"
+
+    def _family_key(self, family_id: str) -> str:
+        return f"{self.FAMILY_PREFIX}{family_id}"
+
+
+class _Payload:
+    __slots__ = ("user_id", "family_id", "expires_at")
+
+    def __init__(self, user_id: str, family_id: str, expires_at: datetime) -> None:
+        self.user_id = user_id
+        self.family_id = family_id
+        self.expires_at = expires_at
+
+
+def _raw_text(raw: str | bytes) -> str:
+    return raw.decode("utf-8") if isinstance(raw, bytes) else raw
+
+
+def _parse(raw: str | bytes) -> _Payload | None:
+    text = _raw_text(raw)
+    try:
+        payload = json.loads(text)
+        user_id = payload["user_id"]
+        family_id = payload["family_id"]
+        expires_at = datetime.fromisoformat(payload["expires_at"])
+    except (ValueError, KeyError, TypeError):
+        # A corrupt value must not authenticate anybody.
+        return None
+    if not isinstance(user_id, str) or not isinstance(family_id, str):
+        return None
+    return _Payload(user_id=user_id, family_id=family_id, expires_at=as_utc(expires_at))

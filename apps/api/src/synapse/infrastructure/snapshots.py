@@ -553,6 +553,10 @@ def encode_session(
             # Additive in v0.2: bounded structural follow-up counter; the answer
             # text itself is already in ``initial_answer``.
             "intake_probe_count": session.intake_probe_count,
+            # Additive in v0.2: the account that owns this workspace. Old rows
+            # decode as ``None``, which under auth is deliberately inaccessible
+            # rather than shared (see ``SessionService._get``).
+            "owner_id": session.owner_id,
         },
     }
 
@@ -603,6 +607,10 @@ def decode_session(snapshot: object) -> DialogueSession:
             0,
             _integer(data.get("intake_probe_count", 0), "session.intake_probe_count"),
         ),
+        # Additive in v0.2: absent means a session created before ownership
+        # existed. With auth on such a row is invisible to every account; with
+        # auth off it stays reachable exactly as before.
+        owner_id=_optional_text(data.get("owner_id"), "session.owner_id"),
         revision=_revision(data.get("revision"), "session.revision"),
     )
 

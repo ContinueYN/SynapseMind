@@ -7,8 +7,10 @@ import { useEffect, useState } from "react";
 import {
   getMe,
   isAuthDisabled,
+  isSessionReused,
   isUnauthorized,
   logoutAccount,
+  SESSION_REUSED_EVENT,
 } from "@/src/lib/api/client";
 import type { AuthUser } from "@/src/lib/api/types";
 
@@ -25,7 +27,7 @@ import type { AuthUser } from "@/src/lib/api/types";
 type AccountState =
   | { kind: "loading" }
   | { kind: "hidden" }
-  | { kind: "signed_out" }
+  | { kind: "signed_out"; reason?: "session_reused" }
   | { kind: "signed_in"; user: AuthUser };
 
 function identity(user: AuthUser): string {
@@ -42,9 +44,12 @@ function initial(user: AuthUser): string {
   return first ? first.toUpperCase() : "?";
 }
 
-function loginHref(pathname: string | null): string {
+function loginHref(pathname: string | null, reason?: "session_reused"): string {
   const next = pathname && pathname !== "/" ? pathname : "/";
-  return `/login?next=${encodeURIComponent(next)}`;
+  const query = reason
+    ? `reason=${reason}&next=${encodeURIComponent(next)}`
+    : `next=${encodeURIComponent(next)}`;
+  return `/login?${query}`;
 }
 
 export function AccountMenu() {
@@ -70,6 +75,8 @@ export function AccountMenu() {
         if (cancelled) return;
         if (isAuthDisabled(caught)) {
           setState({ kind: "hidden" });
+        } else if (isSessionReused(caught)) {
+          setState({ kind: "signed_out", reason: "session_reused" });
         } else if (isUnauthorized(caught)) {
           setState({ kind: "signed_out" });
         } else {
@@ -82,6 +89,20 @@ export function AccountMenu() {
     return () => {
       cancelled = true;
     };
+  }, [pathname]);
+
+  useEffect(() => {
+    // A rotated cookie was replayed somewhere else in the app. Drop the
+    // identity immediately instead of waiting for the next /auth/me.
+    function clearAccount() {
+      if (!pathname || pathname === "/login" || pathname.startsWith("/login/")) {
+        return;
+      }
+      setState({ kind: "signed_out", reason: "session_reused" });
+    }
+
+    window.addEventListener(SESSION_REUSED_EVENT, clearAccount);
+    return () => window.removeEventListener(SESSION_REUSED_EVENT, clearAccount);
   }, [pathname]);
 
   async function signOut() {
@@ -105,7 +126,10 @@ export function AccountMenu() {
   if (state.kind === "signed_out") {
     return (
       <div className="sm-account">
-        <Link className="sm-account-login" href={loginHref(pathname)}>
+        <Link
+          className="sm-account-login"
+          href={loginHref(pathname, state.reason)}
+        >
           <span aria-hidden="true" className="sm-account-key">
             ↪
           </span>
@@ -131,6 +155,9 @@ export function AccountMenu() {
             <span className="sm-account-mail">{user.email}</span>
           ) : null}
         </span>
+        <Link className="sm-account-settings" href="/settings/model">
+          模型设置
+        </Link>
         <button
           className="sm-account-out"
           disabled={leaving}

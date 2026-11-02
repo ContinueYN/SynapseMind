@@ -30,6 +30,9 @@ from synapse.infrastructure.auth.db import (  # noqa: E402
     normalize_database_url,
 )
 from synapse.infrastructure.auth.settings import DEFAULT_DATABASE_URL  # noqa: E402
+from synapse.infrastructure.credentials.db import (  # noqa: E402, F401
+    UserModelCredentialRow,
+)
 
 config = context.config
 

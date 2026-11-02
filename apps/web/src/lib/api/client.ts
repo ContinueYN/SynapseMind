@@ -9,12 +9,16 @@ import type {
   GenericReview,
   KnowledgeSearch,
   LoginAccountInput,
+  ModelSettings,
+  ModelSettingsTestResult,
   RegisterAccountInput,
   ReviewListing,
   ReviewRunInput,
+  SaveModelSettingsInput,
   SessionResponse,
   StepInput,
   StepVerdict,
+  TestModelSettingsInput,
   TurnInput,
 } from "./types";
 
@@ -54,6 +58,31 @@ export function isUnauthorized(error: unknown): error is ApiError {
 }
 
 /**
+ * The server rotates `synapse_session` on every authenticated request and
+ * rejects a cookie it has already seen: that is the session-theft signal, not
+ * an ordinary expired login. The caller must drop account state and send the
+ * user back through `/login?reason=session_reused`.
+ */
+export const SESSION_REUSED_EVENT = "synapse:session-reused";
+
+const SESSION_REUSED_DETAIL = "会话被复用";
+
+export function isSessionReused(error: unknown): error is ApiError {
+  return (
+    error instanceof ApiError &&
+    error.status === 401 &&
+    error.message.includes(SESSION_REUSED_DETAIL)
+  );
+}
+
+function notifySessionReused() {
+  // The event lets the account chip clear itself immediately. Login and
+  // settings pages render their own notice; this is only a UI hint.
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(SESSION_REUSED_EVENT));
+}
+
+/**
  * `/auth/me` answers 403 only when this deployment runs with `SYNAPSE_AUTH=off`.
  * That is not a failed login: there is no account layer at all, so the UI must
  * render no prompt and leave the local single-user flow untouched.
@@ -62,7 +91,30 @@ export function isAuthDisabled(error: unknown): error is ApiError {
   return error instanceof ApiError && error.status === 403;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+/**
+ * The session cookie rotates on every authenticated response. If two browser
+ * requests leave at the same time, the second one still carries the cookie the
+ * first response is about to invalidate; the server then reads that as a
+ * replayed cookie and signs the user out. Keeping one module-level chain means
+ * a request only starts after the previous response (and its Set-Cookie) has
+ * been fully handled.
+ *
+ * The rejection handler is the same task on purpose: a failed request must not
+ * reject the chain and silently skip every later call. `current` still rejects
+ * for the caller, so error values are preserved.
+ */
+let credentialQueue: Promise<unknown> = Promise.resolve();
+
+function serializeAuthenticated<T>(task: () => Promise<T>): Promise<T> {
+  const current = credentialQueue.then(task, task);
+  credentialQueue = current.then(
+    () => undefined,
+    () => undefined,
+  );
+  return current;
+}
+
+async function performRequest<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`${API_BASE}${path}`, {
@@ -105,9 +157,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       typeof body.detail === "string"
         ? body.detail
         : `请求失败（HTTP ${response.status}）`;
+    if (response.status === 401 && detail.includes(SESSION_REUSED_DETAIL)) {
+      notifySessionReused();
+    }
     throw new ApiError(response.status, detail);
   }
   return body as T;
+}
+
+function request<T>(path: string, init?: RequestInit): Promise<T> {
+  return serializeAuthenticated(() => performRequest<T>(path, init));
 }
 
 /** The account behind the session cookie; 401 logged out, 403 auth disabled. */
@@ -115,7 +174,7 @@ export function getMe(): Promise<AuthUser> {
   return request<AuthUser>("/api/v1/auth/me");
 }
 
-/** Create the first owner account; 409 when registration is closed. */
+/** Create an account; 409 means this email already has one. */
 export function registerAccount(input: RegisterAccountInput): Promise<AuthUser> {
   return request<AuthUser>("/api/v1/auth/register", {
     method: "POST",
@@ -137,6 +196,47 @@ export function loginAccount(input: LoginAccountInput): Promise<AuthUser> {
  */
 export async function logoutAccount(): Promise<void> {
   await request<null>("/api/v1/auth/logout", { method: "POST" });
+}
+
+/**
+ * The signed-in user's own model config. Never carries the key: only
+ * `key_last4` and a masked status line. 401 means the cookie is gone (or was
+ * replayed); 403 means this deployment has no account layer.
+ */
+export function getModelSettings(): Promise<ModelSettings> {
+  return request<ModelSettings>("/api/v1/settings/model");
+}
+
+/**
+ * Replace this user's provider/base URL/model/key. The API requires the key on
+ * every save, so the page must ask for it again rather than reuse a hidden one.
+ */
+export function saveModelSettings(
+  input: SaveModelSettingsInput,
+): Promise<ModelSettings> {
+  return request<ModelSettings>("/api/v1/settings/model", {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+/**
+ * Try a provider call. Omit `api_key` to test the key already stored for this
+ * account. A provider/network rejection is HTTP 200 with `ok:false`; only a
+ * malformed body (422) or a missing server master key (503) reject.
+ */
+export function testModelSettings(
+  input: TestModelSettingsInput = {},
+): Promise<ModelSettingsTestResult> {
+  return request<ModelSettingsTestResult>("/api/v1/settings/model/test", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+/** Remove this user's saved key and provider config (204). */
+export function deleteModelSettings(): Promise<void> {
+  return request<void>("/api/v1/settings/model", { method: "DELETE" });
 }
 
 export function createSession(input: CreateSessionInput): Promise<SessionResponse> {

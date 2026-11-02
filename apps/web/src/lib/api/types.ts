@@ -65,6 +65,52 @@ export interface LoginAccountInput {
   password: string;
 }
 
+/**
+ * One user's model configuration. The API never returns the key itself: only
+ * the last four characters are echoed back for the masked status line.
+ */
+export interface ModelSettings {
+  configured: boolean;
+  provider: string;
+  base_url: string;
+  model: string;
+  key_last4: string | null;
+  last_verified_at: string | null;
+  /** False when the server has no `SYNAPSE_CREDENTIAL_KEY`; saving a key 503s. */
+  encryption_ready: boolean;
+  warning: string | null;
+}
+
+/** A replace, not a patch: the API requires the key on every save. */
+export interface SaveModelSettingsInput {
+  provider: string;
+  base_url: string;
+  model: string;
+  api_key: string;
+}
+
+/**
+ * Test either the values in the form or the saved key. Every field is
+ * optional: an omitted `api_key` tells the server to use the stored one.
+ */
+export interface TestModelSettingsInput {
+  provider?: string;
+  base_url?: string;
+  model?: string;
+  api_key?: string;
+}
+
+/**
+ * A provider/network rejection is still HTTP 200 with `ok:false`; only a bad
+ * request (422) or a missing server master key (503) reject the call.
+ */
+export interface ModelSettingsTestResult {
+  ok: boolean;
+  latency_ms: number | null;
+  model: string | null;
+  message: string;
+}
+
 export interface AgentRunInput {
   code: string;
   tests?: string;

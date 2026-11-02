@@ -352,7 +352,9 @@ def test_model_parser_rejects_a_final_answer_claim() -> None:
 
 
 class _AnonymousAuth:
-    def principal(self, token: str | None) -> None:
+    """A gate-only runtime: every presented token is treated as absent."""
+
+    def rotate(self, token: str | None) -> None:
         del token
         return None
 

@@ -85,6 +85,11 @@ class LLMSettings:
     agent_planner: bool = False
     agent_planner_prompt_version: str = "agent-plan-v1"
     agent_planner_timeout_s: float = 2.0
+    # Bring-your-own-key: when on, a logged-in user's saved model credential is
+    # used for that user's requests instead of the server-wide key. It never
+    # enables the model on its own — ``mode`` still has to ask for it — and a
+    # public/unauthenticated request still uses only the server key.
+    byok: bool = False
     # The whole build is one request inside the 8s first-question budget
     # (chapter 12 §12.8). A counterexample retry is optional — the graph is
     # usable without its claim — so it only runs when it still fits here.
@@ -126,14 +131,22 @@ class LLMSettings:
             agent_planner_timeout_s=_parse_planner_timeout(
                 source.get("SYNAPSE_AGENT_PLANNER_TIMEOUT_S", "2.0")
             ),
+            byok=_parse_switch("SYNAPSE_BYOK", source.get("SYNAPSE_BYOK", "off")),
             canary_percent=canary,
             audit_path=source.get("SYNAPSE_LLM_AUDIT_PATH", "var/audit/llm.jsonl").strip(),
         )
 
     @property
     def llm_enabled(self) -> bool:
-        """A model is only used when the mode asks for it *and* a key exists."""
-        return self.mode != "off" and bool(self.api_key)
+        """A model path is live when the mode asks for it and *some* key exists.
+
+        Without BYOK that means the server-wide key; with BYOK on, a user may
+        supply their own key, so the process does not need one to build the
+        adapters. A request from a user without a credential still falls back to
+        the server key, and fails closed when neither exists.
+        """
+
+        return self.mode != "off" and (bool(self.api_key) or self.byok)
 
     def use_for(self, session_id: str) -> bool:
         """Canary routing: ``hash(session_id) % 100 < canary_percent``.

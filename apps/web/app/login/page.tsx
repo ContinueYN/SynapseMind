@@ -8,6 +8,7 @@ import { Plane } from "@/components/Plane";
 import {
   ApiError,
   isAuthDisabled,
+  isSessionReused,
   isUnauthorized,
   loginAccount,
   registerAccount,
@@ -41,6 +42,11 @@ function LoginPanel() {
   const [error, setError] = useState<string | null>(null);
 
   const target = safeNext(searchParams.get("next"));
+  // AccountMenu and the 401 handler send `reason=session_reused`; accept a
+  // bare `session` marker as well so an older link still explains itself.
+  const sessionReused =
+    searchParams.get("reason") === "session_reused" ||
+    Boolean(searchParams.get("session"));
 
   function switchMode(next: Mode) {
     if (next === mode) return;
@@ -60,10 +66,16 @@ function LoginPanel() {
     if (isAuthDisabled(caught)) {
       return "这个部署没有开启账号功能，不需要登录。";
     }
+    if (isSessionReused(caught)) {
+      return "检测到会话被复用，已强制退出，请重新登录。";
+    }
     if (isUnauthorized(caught)) {
       // The API uses one message for an unknown email and a wrong password;
       // do not add a guess about which one it was.
       return "邮箱或密码不对。";
+    }
+    if (caught instanceof ApiError && caught.status === 409) {
+      return "这个邮箱已经注册过了，请直接登录。";
     }
     if (caught instanceof ApiError && caught.status === 422) {
       return "邮箱或密码格式不符合要求。";
@@ -108,19 +120,25 @@ function LoginPanel() {
       <header className="sm-auth-head">
         <p className="sm-eyebrow">
           <span aria-hidden="true" className="sm-dot" />
-          本机账号 · HttpOnly cookie
+          账号 · HttpOnly cookie
         </p>
         <h1 className="sm-h1 sm-auth-title">
-          {mode === "login" ? "回到你上次停下的地方。" : "创建这个部署的第一个账号。"}
+          {mode === "login" ? "回到你上次停下的地方。" : "创建一个账号。"}
         </h1>
         <p className="sm-lede sm-auth-lede">
           {mode === "login"
-            ? "账号只在这台机器上；登录后才能继续未完成的诊断。密码不保存在浏览器里，会话由服务端写入 HttpOnly cookie。"
-            : "这是自托管部署的拥有者账号。创建后注册默认关闭，只有运维显式打开时才允许继续注册。"}
+            ? "登录后可以继续未完成的诊断，并读取这个账号自己的模型设置。密码不保存在浏览器里，会话由服务端写入 HttpOnly cookie。"
+            : "每个账号保存自己的诊断记录与模型设置。注册是否开放由这个部署的运维决定；同一个邮箱只能注册一次。"}
         </p>
       </header>
 
       <Plane className="sm-auth-panel">
+        {sessionReused ? (
+          <p className="sm-auth-notice" role="alert">
+            检测到会话被复用，已强制退出，请重新登录。
+          </p>
+        ) : null}
+
         <div aria-label="登录或创建账号" className="sm-auth-tabs" role="tablist">
           <button
             aria-selected={mode === "login"}
@@ -138,7 +156,7 @@ function LoginPanel() {
             role="tab"
             type="button"
           >
-            创建第一个账号
+            创建账号
           </button>
         </div>
 
@@ -174,28 +192,20 @@ function LoginPanel() {
           </label>
 
           {mode === "register" ? (
-            <>
-              <label className="sm-f">
-                <span className="sm-f-label">
-                  显示名 <em>可选</em>
-                </span>
-                <input
-                  autoComplete="nickname"
-                  id="auth-display-name"
-                  name="display_name"
-                  onChange={(event) => setDisplayName(event.target.value)}
-                  placeholder="例如：小林"
-                  type="text"
-                  value={displayName}
-                />
-              </label>
-
-              <p className="sm-auth-owner">
-                <b>第一个账号是拥有者账号。</b>
-                这个部署默认只允许创建它一次；之后再注册会被服务端拒绝（除非运维打开
-                <code>SYNAPSE_AUTH_ALLOW_SIGNUP</code>）。
-              </p>
-            </>
+            <label className="sm-f">
+              <span className="sm-f-label">
+                显示名 <em>可选</em>
+              </span>
+              <input
+                autoComplete="nickname"
+                id="auth-display-name"
+                name="display_name"
+                onChange={(event) => setDisplayName(event.target.value)}
+                placeholder="例如：小林"
+                type="text"
+                value={displayName}
+              />
+            </label>
           ) : null}
 
           {error ? (
@@ -216,8 +226,12 @@ function LoginPanel() {
 
         <p className="sm-fine sm-auth-note">
           {mode === "login"
-            ? "第一次部署还没有账号？切到「创建第一个账号」。"
-            : "已经创建过账号？切回「登录」。"}
+            ? "还没有账号？切到「创建账号」。"
+            : "已经有账号？切回「登录」。"}
+        </p>
+
+        <p className="sm-fine sm-auth-session">
+          每次请求后会话 cookie 都会轮换；同一份凭据被重复使用时，会自动退出以保护账号。
         </p>
 
         <p className="sm-fine sm-auth-back">

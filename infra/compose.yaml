@@ -84,6 +84,17 @@ services:
       SYNAPSE_REDIS_URL: ${SYNAPSE_REDIS_URL:-redis://redis:6379/0}
       SYNAPSE_AUTH: ${SYNAPSE_AUTH:-on}
       SYNAPSE_COOKIE_SECURE: ${SYNAPSE_COOKIE_SECURE:-off}
+      # Multi-user mode: every registration is open when this is on, and each
+      # account gets an isolated workspace. Set it off for the old
+      # "first registration claims the instance" policy.
+      SYNAPSE_AUTH_ALLOW_SIGNUP: ${SYNAPSE_AUTH_ALLOW_SIGNUP:-on}
+      # Bring-your-own-key: a logged-in user's saved model credential is used for
+      # that user's requests. Needs SYNAPSE_LLM_MODE != off to be active.
+      SYNAPSE_BYOK: ${SYNAPSE_BYOK:-on}
+      # Master key for encrypting per-user model keys. Empty = credential storage
+      # disabled (settings writes answer 503). Generate one with:
+      #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+      SYNAPSE_CREDENTIAL_KEY: ${SYNAPSE_CREDENTIAL_KEY:-}
       # The diagnostic store and the review queue are still SQLite in this
       # slice; both files live on the persistent `appdata` volume.
       SYNAPSE_SESSION_DB: ${SYNAPSE_SESSION_DB:-/data/synapse.sqlite3}
@@ -91,13 +102,17 @@ services:
       # Same-origin browser calls through nginx send Origin: http://localhost;
       # add your own origin here if you expose the stack differently.
       SYNAPSE_WEB_ORIGINS: ${SYNAPSE_WEB_ORIGINS:-http://localhost,http://127.0.0.1}
-      # Optional features stay off unless explicitly enabled.
-      SYNAPSE_LLM_MODE: ${SYNAPSE_LLM_MODE:-off}
+      # BYOK is on by default, so the model path must be live for a saved user
+      # key to be used. A call without a usable key falls back to the rule path;
+      # the global key and RAG/execution remain opt-in.
+      SYNAPSE_LLM_MODE: ${SYNAPSE_LLM_MODE:-on}
       SYNAPSE_EXEC: ${SYNAPSE_EXEC:-off}
       SYNAPSE_RAG: ${SYNAPSE_RAG:-off}
       # Show the seven problem-side CHC demand tags on the card. This is a
       # description of what the task asks for, never an ability score.
       SYNAPSE_CHC_ATTRIBUTION: ${SYNAPSE_CHC_ATTRIBUTION:-on}
+      # Optional server-wide fallback key. A user's own saved key (BYOK) takes
+      # precedence; this one covers anonymous/local use and users without a key.
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
     volumes:
       - appdata:/data

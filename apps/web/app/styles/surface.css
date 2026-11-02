@@ -4028,6 +4028,28 @@ html[data-read="done"] .sm-orb-fill {
   white-space: nowrap;
 }
 
+.sm-account-settings {
+  flex: none;
+  padding: 3px 4px;
+  color: var(--azure-ink);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color var(--t-fast) linear;
+}
+
+.sm-account-settings:hover {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.sm-account-settings:focus-visible {
+  outline: 2px solid var(--azure-line);
+  outline-offset: 2px;
+}
+
 .sm-account-out {
   flex: none;
   padding: 3px 4px;
@@ -4075,7 +4097,8 @@ html[data-read="done"] .sm-orb-fill {
   padding: 0 4px;
 }
 
-.sm-auth-title {
+.sm-auth-title,
+.sm-settings-title {
   margin: 0;
   color: var(--ink);
   font-size: clamp(30px, 3.4vw, 42px);
@@ -4085,7 +4108,8 @@ html[data-read="done"] .sm-orb-fill {
   text-wrap: balance;
 }
 
-.sm-auth-lede {
+.sm-auth-lede,
+.sm-settings-lede {
   max-width: 34em;
 }
 
@@ -4140,29 +4164,20 @@ html[data-read="done"] .sm-orb-fill {
   outline-offset: 2px;
 }
 
-.sm-auth-owner {
-  margin: 0;
+.sm-auth-notice {
+  margin: 0 0 var(--s5);
   padding: 10px 14px;
-  border: 1px solid rgba(63, 134, 224, 0.18);
+  border: 1px solid rgba(168, 99, 42, 0.24);
   border-radius: var(--r-1);
-  background: rgba(236, 246, 255, 0.62);
-  color: var(--ink-2);
+  background: rgba(255, 246, 236, 0.82);
+  color: var(--warn);
   font-size: var(--fs-small);
   line-height: 1.7;
 }
 
-.sm-auth-owner b {
-  color: var(--ink);
-  font-weight: 600;
-}
-
-.sm-auth-owner code {
-  margin-left: 4px;
-  padding: 1px 5px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.75);
-  color: var(--azure-ink);
-  font-size: 11px;
+.sm-auth-session {
+  margin-top: var(--s2);
+  margin-bottom: 0;
 }
 
 .sm-auth-actions {
@@ -4179,6 +4194,205 @@ html[data-read="done"] .sm-orb-fill {
 
 .sm-auth-back {
   margin-top: var(--s2);
+}
+
+/* ───────────────────────── 模型设置 ───────────────────────── */
+
+.sm-settings {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: var(--s7) 0 var(--s8);
+}
+
+.sm-settings-head {
+  padding: 0 4px;
+}
+
+.sm-settings-panel {
+  margin-top: var(--s6);
+}
+
+.sm-settings-form {
+  margin-top: var(--s4);
+}
+
+.sm-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--s4);
+}
+
+.sm-f select {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: var(--fs-body);
+  line-height: 1.7;
+  cursor: pointer;
+  outline: none;
+}
+
+.sm-settings-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  margin: var(--s4) 0 0;
+  border-top: 1px solid var(--line);
+}
+
+.sm-settings-facts > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 12px 14px 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.sm-settings-facts dt {
+  color: var(--ink-3);
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+}
+
+.sm-settings-facts dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--fs-small);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.sm-settings-hint,
+.sm-settings-ok,
+.sm-settings-result {
+  margin: 0;
+  padding: 9px 13px;
+  border: 1px solid rgba(63, 134, 224, 0.22);
+  border-radius: var(--r-1);
+  background: rgba(236, 246, 255, 0.7);
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+  line-height: 1.7;
+}
+
+.sm-settings-hint {
+  margin-top: var(--s3);
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.5);
+  color: var(--ink-3);
+}
+
+.sm-settings-ok {
+  color: var(--azure-ink);
+}
+
+.sm-settings-result b {
+  color: var(--azure-ink);
+  font-weight: 600;
+}
+
+.sm-settings-result-fail {
+  border-color: rgba(168, 99, 42, 0.24);
+  background: rgba(255, 246, 236, 0.82);
+}
+
+.sm-settings-result-fail b {
+  color: var(--warn);
+}
+
+.sm-settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.sm-settings-actions .sm-cta {
+  padding: 11px 22px;
+  font-size: var(--fs-small);
+}
+
+.sm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 11px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.96);
+  border-bottom-color: var(--glass-edge-cool);
+  border-radius: var(--r-pill);
+  background: var(--glass-chip);
+  box-shadow:
+    var(--lift-chip),
+    var(--glass-rim),
+    var(--glass-rim-lo);
+  color: var(--azure-ink);
+  font-family: inherit;
+  font-size: var(--fs-small);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition:
+    color var(--t-base) linear,
+    border-color var(--t-base) linear,
+    box-shadow var(--t-base) var(--ease-glide);
+}
+
+.sm-btn:hover:not(:disabled) {
+  border-color: var(--azure-line);
+  box-shadow:
+    var(--lift-tile),
+    var(--glass-rim),
+    var(--glass-rim-lo);
+  color: var(--ink);
+}
+
+.sm-btn:disabled {
+  color: var(--ink-4);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.sm-btn:focus-visible,
+.sm-cta:focus-visible {
+  outline: 2px solid var(--azure-line);
+  outline-offset: 3px;
+}
+
+.sm-btn-danger {
+  border-bottom-color: rgba(168, 99, 42, 0.24);
+  color: var(--warn);
+}
+
+.sm-btn-danger:hover:not(:disabled) {
+  border-color: rgba(168, 99, 42, 0.4);
+  color: var(--warn);
+}
+
+@media (max-width: 620px) {
+  .sm-settings {
+    padding: var(--s6) 0 var(--s7);
+  }
+
+  .sm-settings-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sm-account-settings {
+    font-size: 10.5px;
+  }
+}
+
+@media (max-width: 420px) {
+  .sm-settings-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sm-settings-actions .sm-cta {
+    width: 100%;
+  }
 }
 
 @media (max-width: 620px) {

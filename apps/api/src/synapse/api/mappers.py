@@ -35,6 +35,8 @@ from synapse.api.schemas import (
     KnowledgeHitOut,
     KnowledgeSearchOut,
     KnowledgeSourceOut,
+    ModelCredentialOut,
+    ModelTestOut,
     NextActionOut,
     ProbeOut,
     ProgressOut,
@@ -51,6 +53,7 @@ from synapse.application.agent import AgentTrace
 from synapse.application.auth import AuthUser
 from synapse.application.coach import CoachOut as CoachResult
 from synapse.application.composer import ProbePrompt
+from synapse.application.credentials import CredentialTestResult, PublicCredential
 from synapse.application.domains import DomainDescriptor
 from synapse.application.execution import ExecutionResult
 from synapse.application.intake import DomainIntake
@@ -476,4 +479,30 @@ def auth_user_out(user: AuthUser) -> AuthUserOut:
         email=user.email,
         display_name=user.display_name,
         created_at=user.created_at,
+    )
+
+
+def model_credential_out(public: PublicCredential) -> ModelCredentialOut:
+    """The masked view: last four characters only, never the stored key."""
+
+    return ModelCredentialOut(
+        configured=public.configured,
+        provider=public.provider,
+        base_url=public.base_url,
+        model=public.model,
+        key_last4=public.key_last4,
+        last_verified_at=public.last_verified_at,
+        encryption_ready=public.encryption_ready,
+        warning=public.warning,
+    )
+
+
+def model_test_out(result: CredentialTestResult) -> ModelTestOut:
+    """Map a probe result; the message is already key-free by construction."""
+
+    return ModelTestOut(
+        ok=result.ok,
+        latency_ms=result.latency_ms,
+        model=_clip_text(result.model, 120),
+        message=_clip_text(result.message, 300),
     )
