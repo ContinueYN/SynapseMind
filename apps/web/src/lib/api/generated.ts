@@ -129,6 +129,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sessions/{session_id}/coach": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Coach Session
+         * @description Process feedback for "where am I wrong" / "how do I start".
+         *
+         *     Read-only: no state change, no probe budget, no answer store. With no model
+         *     configured this is the deterministic rule coach (``mode="rules"``); when the
+         *     model path is live the response may be ``mode="llm"``, and any model failure
+         *     is already converted into the rule result by the service instead of a 500.
+         */
+        post: operations["coach_session_api_v1_sessions__session_id__coach_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sessions/{session_id}/agent": {
         parameters: {
             query?: never;
@@ -323,6 +348,97 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register
+         * @description Create the first owner account and sign it in.
+         *
+         *     A deployment that already has an owner answers 409 unless the operator set
+         *     ``SYNAPSE_AUTH_ALLOW_SIGNUP=on``. The same 409 covers a duplicate email, so
+         *     the endpoint does not tell a caller whether a different account exists.
+         */
+        post: operations["register_api_v1_auth_register_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Login
+         * @description Exchange email/password for a new server-side session.
+         *
+         *     A wrong password, an unknown email and a closed shop all answer 401 with the
+         *     same message; the password check runs the KDF even for an unknown email so
+         *     timing does not become an account oracle.
+         */
+        post: operations["login_api_v1_auth_login_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Logout
+         * @description Revoke the current session server-side and clear the cookie.
+         *
+         *     Idempotent: calling it without a cookie succeeds. It also works when auth is
+         *     off, so a client that was pointed at a gated server can clean up its jar.
+         */
+        post: operations["logout_api_v1_auth_logout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Me
+         * @description The account behind the cookie, or 401 for missing/expired/revoked.
+         */
+        get: operations["me_api_v1_auth_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -492,6 +608,23 @@ export interface components {
             /** Note */
             note: string;
         };
+        /**
+         * AuthUserOut
+         * @description The public account view; no digest, no session token.
+         */
+        AuthUserOut: {
+            /** Id */
+            id: string;
+            /** Email */
+            email: string;
+            /** Display Name */
+            display_name?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** CardOut */
         CardOut: {
             /**
@@ -532,6 +665,67 @@ export interface components {
         ClarifierRequest: {
             /** Answer */
             answer: string;
+        };
+        /**
+         * CoachOut
+         * @description Process feedback with its uncertainty made explicit.
+         *
+         *     ``not_claimed`` must be non-empty: the coach has no correctness check, no
+         *     answer store and no score, and the client renders that list rather than
+         *     letting the result read like a verdict.
+         */
+        CoachOut: {
+            /**
+             * Version
+             * @constant
+             */
+            version: "0.1";
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "rules" | "llm";
+            /**
+             * Focus
+             * @enum {string}
+             */
+            focus: "where_wrong" | "how_to_start";
+            /** Headline */
+            headline: string;
+            /** Points */
+            points: components["schemas"]["CoachPointOut"][];
+            /** Next Question */
+            next_question: string;
+            /** Not Claimed */
+            not_claimed: string[];
+            /** Disclaimer */
+            disclaimer: string;
+        };
+        /**
+         * CoachPointOut
+         * @description One process observation; ``basis`` names where it came from.
+         */
+        CoachPointOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "missing_evidence" | "missing_reasoning" | "missing_constraint" | "no_attempt" | "next_step" | "process_note";
+            /** Text */
+            text: string;
+            /** Basis */
+            basis: string;
+        };
+        /**
+         * CoachRequest
+         * @description The only two things a student can ask the coach for.
+         */
+        CoachRequest: {
+            /**
+             * Focus
+             * @enum {string}
+             */
+            focus: "where_wrong" | "how_to_start";
         };
         /** CreateSessionRequest */
         CreateSessionRequest: {
@@ -993,6 +1187,28 @@ export interface components {
             /** License */
             license: string;
         };
+        /**
+         * LoginRequest
+         * @description Credentials for an existing account.
+         *
+         *     The password has no real minimum here beyond being non-empty: rejecting a
+         *     short password at login would tell a caller something about the account.
+         */
+        LoginRequest: {
+            /** Email */
+            email: string;
+            /** Password */
+            password: string;
+        };
+        /** LogoutOut */
+        LogoutOut: {
+            /**
+             * Status
+             * @default ok
+             * @constant
+             */
+            status: "ok";
+        };
         /** NextActionOut */
         NextActionOut: {
             /**
@@ -1053,6 +1269,22 @@ export interface components {
             confidence: number;
             /** Top Hypothesis */
             top_hypothesis: string;
+        };
+        /**
+         * RegisterRequest
+         * @description Account creation for a self-hosted owner.
+         *
+         *     Only the first registration succeeds unless ``SYNAPSE_AUTH_ALLOW_SIGNUP=on``.
+         *     The password is length-checked here and hashed with Argon2id before it
+         *     reaches any store; it is never logged or echoed back.
+         */
+        RegisterRequest: {
+            /** Email */
+            email: string;
+            /** Password */
+            password: string;
+            /** Display Name */
+            display_name?: string | null;
         };
         /**
          * ReviewExecutionOut
@@ -1478,6 +1710,41 @@ export interface operations {
             };
         };
     };
+    coach_session_api_v1_sessions__session_id__coach_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CoachRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoachOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_agent_trace_api_v1_sessions__session_id__agent_get: {
         parameters: {
             query?: never;
@@ -1781,6 +2048,112 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    register_api_v1_auth_register_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthUserOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    login_api_v1_auth_login_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthUserOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    logout_api_v1_auth_logout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LogoutOut"];
+                };
+            };
+        };
+    };
+    me_api_v1_auth_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthUserOut"];
                 };
             };
         };

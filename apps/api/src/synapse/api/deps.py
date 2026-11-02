@@ -14,6 +14,7 @@ The composer chain is chosen here and nowhere else (chapter 12 §12.7):
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
@@ -22,6 +23,8 @@ from fastapi import Request
 
 from synapse.application.agent_planner import ToolPlanner
 from synapse.application.audit import CallAuditor
+from synapse.application.auth import AuthService
+from synapse.application.coach import CoachNarrator, CoachService
 from synapse.application.composer import (
     CanaryProbeComposer,
     FallbackProbeComposer,
@@ -51,6 +54,8 @@ from synapse.application.service import SessionService
 from synapse.application.subject import SubjectRegistry
 from synapse.application.work_check import EqualityChecker
 from synapse.domain.problem.alignment import RuleBasedAligner
+from synapse.infrastructure.auth.build import AuthRuntime, build_auth
+from synapse.infrastructure.auth.settings import AuthSettings
 from synapse.infrastructure.execution import ExecutionLimits, LocalPythonExecutor
 from synapse.infrastructure.features import FeatureFlags
 from synapse.infrastructure.guards import AnswerStoreLeakGuardFactory
@@ -63,6 +68,7 @@ from synapse.infrastructure.knowledge import build_knowledge_service
 from synapse.infrastructure.llm.agent_planner import LLMToolPlanner
 from synapse.infrastructure.llm.audit import JsonlCallAuditor
 from synapse.infrastructure.llm.client import OpenAICompatibleClient
+from synapse.infrastructure.llm.coach import LLMCoachNarrator
 from synapse.infrastructure.llm.composer import LLMProbeComposer
 from synapse.infrastructure.llm.domain_detector import LLMDomainDetector
 from synapse.infrastructure.llm.generic_graph import LLMGenericGraphGenerator
@@ -93,6 +99,12 @@ class Container:
     features: FeatureFlags
     knowledge: KnowledgeService
     executor: CodeExecutor | None
+    # Account layer. ``auth`` is None when SYNAPSE_AUTH=off, which is also how
+    # the session gate knows it must not run.
+    auth: AuthService | None
+    auth_settings: AuthSettings
+    # Releases the engine/Redis connection opened for auth (None when off).
+    auth_dispose: Callable[[], None] | None = None
 
 
 def build_container(
@@ -107,9 +119,16 @@ def build_container(
     knowledge: KnowledgeService | None = None,
     executor: CodeExecutor | None = None,
     tool_planner: ToolPlanner | None = None,
+    coach_narrator: CoachNarrator | None = None,
+    auth_settings: AuthSettings | None = None,
+    auth_runtime: AuthRuntime | None = None,
 ) -> Container:
     resolved = settings or LLMSettings.from_env()
     flags = features or FeatureFlags.from_env()
+    # Accounts are opt-in: ``SYNAPSE_AUTH=off`` builds no engine and touches no
+    # database, so the baseline single-user checkout keeps its behaviour.
+    auth_cfg = auth_settings if auth_settings is not None else AuthSettings.from_env()
+    auth = auth_runtime if auth_runtime is not None else build_auth(auth_cfg)
     # Persistence is opt-in: tests and evaluation scripts keep the in-memory
     # adapters, while the local launcher points this at var/synapse.sqlite3.
     # Sessions and generated problems share one file so a restored session can
@@ -220,6 +239,14 @@ def build_container(
         auditor=sink,
     )
     planner_reason = "" if tool_planner_adapter is not None else tool_planner_off_reason(resolved)
+    # The process coach is usable without a key: its rule path always exists.
+    # A model narrator is attached only when the model path is live and not in
+    # shadow, and an injected fake is gated by the same switch.
+    coach_adapter = build_coach_narrator(
+        resolved,
+        candidate=coach_narrator,
+        client=llm_client,
+    )
     service = SessionService(
         sessions=sessions,
         problems=problems,
@@ -239,6 +266,7 @@ def build_container(
         code_executor=code_executor,
         tool_planner=tool_planner_adapter,
         tool_planner_reason=planner_reason,
+        coach_service=CoachService(coach_adapter),
     )
     return Container(
         sessions=sessions,
@@ -251,6 +279,9 @@ def build_container(
         features=flags,
         knowledge=knowledge_service,
         executor=code_executor,
+        auth=auth.service if auth is not None else None,
+        auth_settings=auth_cfg,
+        auth_dispose=auth.close if auth is not None else None,
     )
 
 
@@ -334,6 +365,30 @@ def tool_planner_off_reason(settings: LLMSettings) -> str:
     if settings.mode == "shadow":
         return "shadow"
     return "planner_off"
+
+
+def build_coach_narrator(
+    settings: LLMSettings,
+    *,
+    candidate: CoachNarrator | None = None,
+    client: LLMClient | None = None,
+) -> CoachNarrator | None:
+    """The coach's model voice is optional; the rule coach is always available.
+
+    ``off`` and a missing key leave the narrator at ``None``, so the endpoint is
+    a deterministic rule coach rather than a fake model. ``shadow`` must not
+    change what the student sees, so it also keeps the rule result. An injected
+    fake is gated by the same switch.
+    """
+
+    if not settings.llm_enabled or settings.mode == "shadow":
+        return None
+    if candidate is not None:
+        return candidate
+    return LLMCoachNarrator(
+        client or OpenAICompatibleClient(settings),
+        settings=settings,
+    )
 
 
 def build_executor(

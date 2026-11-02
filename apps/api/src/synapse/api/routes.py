@@ -7,6 +7,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from synapse.api.auth import require_authenticated
 from synapse.api.deps import (
     get_executor,
     get_knowledge_service,
@@ -15,6 +16,7 @@ from synapse.api.deps import (
 )
 from synapse.api.mappers import (
     agent_trace_out,
+    coach_out,
     diagnosis_out,
     execution_out,
     generic_review_out,
@@ -27,6 +29,8 @@ from synapse.api.schemas import (
     AgentRunRequest,
     AgentTraceOut,
     ClarifierRequest,
+    CoachOut,
+    CoachRequest,
     CreateSessionRequest,
     DiagnosisOut,
     ExecutionOut,
@@ -72,6 +76,14 @@ from synapse.application.service import (
 from synapse.domain.dialogue.table import IllegalTransition
 
 router = APIRouter(prefix="/api/v1")
+
+# Diagnostic session endpoints. With ``SYNAPSE_AUTH=on`` the dependency rejects
+# a missing/invalid cookie with 401 before the route body runs; with the flag
+# off it returns immediately, so the local single-user behaviour is unchanged.
+sessions = APIRouter(
+    prefix="/sessions",
+    dependencies=[Depends(require_authenticated)],
+)
 
 
 def _session_out(view: SessionView, service: SessionService) -> SessionOut:
@@ -174,7 +186,7 @@ def search_knowledge(
     return knowledge_search_out(result)
 
 
-@router.post("/sessions", response_model=SessionOut, status_code=status.HTTP_201_CREATED)
+@sessions.post("", response_model=SessionOut, status_code=status.HTTP_201_CREATED)
 def create_session(
     request: CreateSessionRequest,
     service: SessionService = Depends(get_service),
@@ -201,7 +213,7 @@ def create_session(
     return _session_out(view, service)
 
 
-@router.get("/sessions/{session_id}", response_model=SessionOut)
+@sessions.get("/{session_id}", response_model=SessionOut)
 def get_session(
     session_id: str,
     service: SessionService = Depends(get_service),
@@ -213,7 +225,28 @@ def get_session(
     return _session_out(view, service)
 
 
-@router.get("/sessions/{session_id}/agent", response_model=AgentTraceOut)
+@sessions.post("/{session_id}/coach", response_model=CoachOut)
+def coach_session(
+    session_id: str,
+    request: CoachRequest,
+    service: SessionService = Depends(get_service),
+) -> CoachOut:
+    """Process feedback for "where am I wrong" / "how do I start".
+
+    Read-only: no state change, no probe budget, no answer store. With no model
+    configured this is the deterministic rule coach (``mode="rules"``); when the
+    model path is live the response may be ``mode="llm"``, and any model failure
+    is already converted into the rule result by the service instead of a 500.
+    """
+
+    try:
+        result = service.coach(session_id, focus=request.focus)
+    except SessionNotFound as exc:
+        raise HTTPException(status_code=404, detail="session not found") from exc
+    return coach_out(result)
+
+
+@sessions.get("/{session_id}/agent", response_model=AgentTraceOut)
 def get_agent_trace(
     session_id: str,
     service: SessionService = Depends(get_service),
@@ -232,7 +265,7 @@ def get_agent_trace(
     return agent_trace_out(trace)
 
 
-@router.post("/sessions/{session_id}/agent/run", response_model=AgentTraceOut)
+@sessions.post("/{session_id}/agent/run", response_model=AgentTraceOut)
 def run_agent_trace(
     session_id: str,
     request: AgentRunRequest,
@@ -263,8 +296,8 @@ def run_agent_trace(
     return agent_trace_out(trace)
 
 
-@router.post(
-    "/sessions/{session_id}/review/run",
+@sessions.post(
+    "/{session_id}/review/run",
     response_model=GenericReviewOut,
     response_model_exclude_none=True,
 )
@@ -302,7 +335,7 @@ def run_review(
     return generic_review_out(review)
 
 
-@router.post("/sessions/{session_id}/intake", response_model=SessionOut)
+@sessions.post("/{session_id}/intake", response_model=SessionOut)
 def answer_intake_clarifier(
     session_id: str,
     request: ClarifierRequest,
@@ -334,7 +367,7 @@ def answer_intake_clarifier(
     return _session_out(view, service)
 
 
-@router.post("/sessions/{session_id}/intake/probe", response_model=SessionOut)
+@sessions.post("/{session_id}/intake/probe", response_model=SessionOut)
 def answer_intake_probe(
     session_id: str,
     request: IntakeProbeRequest,
@@ -366,7 +399,7 @@ def answer_intake_probe(
     return _session_out(view, service)
 
 
-@router.post("/sessions/{session_id}/steps", response_model=StepVerdictOut)
+@sessions.post("/{session_id}/steps", response_model=StepVerdictOut)
 def verify_step(
     session_id: str,
     request: StepRequest,
@@ -395,7 +428,7 @@ def verify_step(
     return step_verdict_out(verdict)
 
 
-@router.post("/sessions/{session_id}/turns", response_model=SessionOut)
+@sessions.post("/{session_id}/turns", response_model=SessionOut)
 def submit_turn(
     session_id: str,
     request: TurnRequest,
@@ -420,7 +453,7 @@ def submit_turn(
     return _session_out(view, service)
 
 
-@router.post("/sessions/{session_id}/card/disagree", response_model=DiagnosisOut)
+@sessions.post("/{session_id}/card/disagree", response_model=DiagnosisOut)
 def disagree_with_card(
     session_id: str,
     service: SessionService = Depends(get_service),
@@ -444,7 +477,7 @@ def disagree_with_card(
     return diagnosis_out(card)
 
 
-@router.post("/sessions/{session_id}/exit", response_model=SessionOut)
+@sessions.post("/{session_id}/exit", response_model=SessionOut)
 def exit_session(
     session_id: str,
     request: ExitRequest | None = None,
@@ -460,3 +493,7 @@ def exit_session(
             detail=f"会话已被另一个请求更新，请刷新后重试（{exc}）。",
         ) from exc
     return _session_out(view, service)
+
+
+# Registered last so every session route above is part of this gated router.
+router.include_router(sessions)

@@ -19,6 +19,13 @@ from synapse.application.agent import (
 from synapse.application.agent_planner import ToolPlanner
 from synapse.application.audit import AuditEntry, CallAuditor
 from synapse.application.card_builder import build_diagnosis_card
+from synapse.application.coach import (
+    CoachFocus,
+    CoachOut,
+    CoachRequest,
+    CoachService,
+    build_coach_context,
+)
 from synapse.application.commands import (
     StartSessionCommand,
     SubmitAnswerCommand,
@@ -45,6 +52,7 @@ from synapse.application.intake import (
     MAX_INTAKE_PROBES,
     DomainIntake,
     build_domain_intake,
+    checklist_for,
 )
 from synapse.application.knowledge import KnowledgeService
 from synapse.application.limits import StepRateLimited, StepRateLimiter
@@ -157,6 +165,7 @@ class SessionService:
         code_executor: CodeExecutor | None = None,
         tool_planner: ToolPlanner | None = None,
         tool_planner_reason: str = "planner_off",
+        coach_service: CoachService | None = None,
     ) -> None:
         self._sessions = sessions
         self._problems = problems
@@ -202,6 +211,10 @@ class SessionService:
         # "planner off" because a search tool could otherwise only be skipped.
         self._tool_planner = tool_planner
         self._tool_planner_reason = tool_planner_reason
+        # Process coach: the rule path is always present; the optional model
+        # narrator is injected by the composition root. It is read-only and
+        # never receives the answer store.
+        self._coach = coach_service or CoachService()
 
     def start(self, command: StartSessionCommand) -> SessionView:
         # Check the student's own equals signs before alignment: a provable
@@ -215,6 +228,10 @@ class SessionService:
         # lifetime and same class of data as probe answers, so it is kept on the
         # aggregate instead of being re-sent by the client.
         session.initial_answer = command.answer
+        # Kept for the process coach: the annotated path does not fold the work
+        # into ``initial_answer``, and quoting only the final line would turn
+        # "where am I wrong" into a comment on the conclusion.
+        session.initial_work = command.work
         problem = self._problem(session.problem_id)
 
         if self._is_reference_free(problem):
@@ -383,6 +400,34 @@ class SessionService:
             result=result,
             tests_submitted=tests_submitted,
         )
+
+    def coach(self, session_id: str, *, focus: CoachFocus) -> CoachOut:
+        """Process feedback for an attempted or a not-yet-started problem.
+
+        Read-only and derived: it does not save the session, advance the state,
+        touch the probe budget, or read ``AnswerStore``. The context is built
+        from the stored problem and the student's own text; the intake review is
+        reused when the session has one, and the domain checklist supplies the
+        start plan when it does not.
+        """
+
+        session = self._get(session_id)
+        problem = self._effective_problem(session)
+        profile = self._domains.profile_for(problem.subject)
+        intake = self._intake_for(session)
+        context = build_coach_context(
+            session_id=session.session_id,
+            problem_text=problem.text,
+            profile=profile,
+            checklist=intake.checklist if intake is not None else checklist_for(profile),
+            answer_text=session.initial_answer,
+            work_text=session.initial_work,
+            scaffold_work=session.scaffold_work,
+            observed=intake.observed if intake is not None else (),
+            gaps=intake.gaps if intake is not None else (),
+            review=intake.review if intake is not None else None,
+        )
+        return self._coach.coach(context, CoachRequest(focus=focus))
 
     def answer_clarifier(self, session_id: str, answer: str) -> SessionView:
         """Append the one allowed clarification to a reference-free intake.

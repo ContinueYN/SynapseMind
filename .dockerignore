@@ -1,0 +1,39 @@
+# Build context = repository root (see infra/compose.yaml). Keep both images
+# small, and never bake local secrets, student data, or caches into a layer.
+
+.git
+.github
+.gitignore
+.gitattributes
+**/.env
+**/.venv/
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.import_linter_cache/
+**/*.egg-info/
+
+# Local runtime data: SQLite stores, audit logs, evaluation output.
+/var/
+apps/api/var/
+apps/api/tests/
+.tmp/
+_local/
+eval/
+tools/
+docs/
+
+# Frontend build artifacts, rebuilt inside the image.
+apps/web/node_modules/
+apps/web/.next/
+apps/web/.next-*/
+apps/web/test-results/
+apps/web/playwright-report/
+apps/web/tsconfig.tsbuildinfo
+apps/web/e2e/
+
+# Infra files not needed inside the images.
+infra/.env
+infra/README.md

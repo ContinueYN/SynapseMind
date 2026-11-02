@@ -20,6 +20,17 @@ def pytest_configure(config: pytest.Config) -> None:
     """
     del config
     os.environ.pop("SYNAPSE_SESSION_DB", None)
+    # The account layer is opt-in; a developer shell configured for a real
+    # deployment must not make the module-level app open a database at import.
+    for name in (
+        "SYNAPSE_AUTH",
+        "SYNAPSE_DATABASE_URL",
+        "SYNAPSE_REDIS_URL",
+        "SYNAPSE_AUTH_ALLOW_SIGNUP",
+        "SYNAPSE_COOKIE_SECURE",
+        "SYNAPSE_AUTH_SESSION_TTL_S",
+    ):
+        os.environ.pop(name, None)
     os.environ["SYNAPSE_REVIEW_DB"] = str(
         Path(tempfile.gettempdir()) / f"synapse-review-boot-{os.getpid()}.sqlite3"
     )
@@ -38,6 +49,15 @@ def _rule_mode_by_default(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> No
         # Persistence is opt-in; a developer shell with this set must not make
         # every test share one SQLite file.
         "SYNAPSE_SESSION_DB",
+        # Same rule for account persistence and the auth gate: SYNAPSE_AUTH=off
+        # is the tested baseline, and a real Redis/Postgres URL must never leak
+        # into a test run.
+        "SYNAPSE_AUTH",
+        "SYNAPSE_DATABASE_URL",
+        "SYNAPSE_REDIS_URL",
+        "SYNAPSE_AUTH_ALLOW_SIGNUP",
+        "SYNAPSE_COOKIE_SECURE",
+        "SYNAPSE_AUTH_SESSION_TTL_S",
     ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("SYNAPSE_REVIEW_DB", str(tmp_path / "review.sqlite3"))

@@ -1485,6 +1485,211 @@ html[data-read="done"] .sm-orb-fill {
   border-bottom-color: var(--azure);
 }
 
+/* 研究依据：每条原则一块砖。砖里先写机制，再写两篇文献，最后一行「不声称」；
+ * 不做成引用墙，也不让 DOI 比结论更响。 */
+.sm-research-lede {
+  max-width: 46em;
+}
+
+.sm-research-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+  margin: var(--s4) 0 0;
+  color: var(--ink-3);
+  font-size: var(--fs-small);
+}
+
+.sm-research-facts span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.sm-research-facts span + span::before {
+  content: "·";
+  color: var(--azure-line);
+}
+
+.sm-research-facts b {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.sm-research {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 12px;
+  margin-top: var(--s5);
+}
+
+.sm-research-card {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-width: 0;
+  padding: 18px 18px 16px;
+}
+
+.sm-research-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 9px;
+}
+
+.sm-research-n {
+  color: var(--azure-ink);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  font-variant-numeric: tabular-nums;
+}
+
+.sm-research-h {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.4;
+}
+
+.sm-research-en {
+  color: var(--ink-4);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.sm-research-mech {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  line-height: 1.75;
+  text-wrap: pretty;
+}
+
+.sm-research-refs {
+  display: grid;
+  gap: 11px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sm-research-refs li {
+  display: grid;
+  gap: 4px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(140, 181, 232, 0.28);
+}
+
+.sm-research-ref {
+  display: grid;
+  gap: 3px;
+  color: var(--ink-3);
+  text-decoration: none;
+}
+
+.sm-research-cite {
+  color: var(--ink-3);
+  font-size: 11.5px;
+  line-height: 1.65;
+}
+
+.sm-research-cite b {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+.sm-research-cite cite {
+  color: var(--ink-2);
+  font-style: normal;
+}
+
+.sm-research-ref:hover .sm-research-cite cite {
+  color: var(--azure-ink);
+}
+
+.sm-research-doi {
+  width: fit-content;
+  border-bottom: 1px solid transparent;
+  color: var(--azure-ink);
+  font-size: 10.5px;
+  letter-spacing: 0.01em;
+  overflow-wrap: anywhere;
+}
+
+.sm-research-ref:hover .sm-research-doi {
+  border-bottom-color: var(--azure-line);
+}
+
+.sm-research-borrow {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 11.5px;
+  line-height: 1.65;
+}
+
+.sm-research-borrow > span {
+  color: var(--azure-ink);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+}
+
+.sm-research-boundary {
+  margin: auto 0 0;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(140, 181, 232, 0.34);
+  color: var(--ink-3);
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+.sm-research-boundary > span {
+  display: inline-block;
+  margin-right: 7px;
+  color: var(--azure-ink);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+}
+
+/* 全节只有这一句是加粗的：它必须比任何一条引用都显眼 */
+.sm-research-note {
+  margin: var(--s5) 0 0;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.92);
+  border-left: 3px solid var(--azure);
+  border-radius: var(--r-3);
+  background: linear-gradient(
+    150deg,
+    rgba(255, 255, 255, 0.88),
+    rgba(219, 238, 255, 0.62)
+  );
+  box-shadow: var(--glass-hi);
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+  line-height: 1.7;
+}
+
+.sm-research-note b {
+  display: block;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.sm-research-note span {
+  display: block;
+  margin-top: 3px;
+  color: var(--ink-3);
+  font-size: 11.5px;
+}
+
 /* 索引：一块凹进去的玻璃底板，四条引线把字段名连到它回答的问题 */
 .sm-index {
   display: grid;
@@ -3064,77 +3269,147 @@ html[data-read="done"] .sm-orb-fill {
   line-height: 1.8;
 }
 
+/* 认知需求画像：七维是本题节点的需求向量，不是学生画像。
+ * 每一行是「维度名 + 需求条 + 权重」；最高的一两维加一条浅蓝底。 */
 .sm-attr {
+  display: block;
+  margin: var(--s3) 0 0;
+  padding: 12px 14px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: var(--r-3);
+  background: linear-gradient(
+    160deg,
+    rgba(255, 255, 255, 0.72),
+    rgba(227, 240, 254, 0.46)
+  );
+  box-shadow: var(--glass-hi);
+}
+
+.sm-attr-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 7px;
-  margin: var(--s3) 0 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
 }
 
 .sm-attr-k {
-  color: var(--ink-3);
-  font-size: 10.5px;
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 11px;
+  font-weight: 600;
   letter-spacing: 0.14em;
 }
 
-.sm-attr-chip {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 7px;
-  padding: 5px 11px;
-  border: 1px solid rgba(255, 255, 255, 0.94);
-  border-radius: var(--r-pill);
-  background: linear-gradient(160deg, rgba(255, 255, 255, 0.88), rgba(227, 240, 254, 0.58));
-  box-shadow: var(--glass-hi);
+.sm-attr-sub {
+  color: var(--ink-3);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.sm-attr-list {
+  display: grid;
+  gap: 3px;
+  margin: 9px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sm-attr-row {
+  display: grid;
+  grid-template-columns: minmax(78px, 104px) minmax(0, 1fr) 38px;
+  align-items: center;
+  gap: 9px;
+  padding: 4px 6px;
+  border-radius: 8px;
+}
+
+.sm-attr-row--top {
+  background: linear-gradient(
+    90deg,
+    rgba(74, 140, 224, 0.11),
+    rgba(74, 140, 224, 0)
+  );
+}
+
+.sm-attr-name {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.sm-attr-name b {
   color: var(--ink-2);
   font-size: 12px;
-  line-height: 1.5;
-}
-
-.sm-attr-chip b {
-  color: var(--ink);
   font-weight: 600;
+  line-height: 1.4;
 }
 
-.sm-attr-chip i {
-  color: var(--azure-ink);
-  font-size: 10.5px;
+.sm-attr-row--top .sm-attr-name b {
+  color: var(--ink);
+}
+
+.sm-attr-name i {
+  color: var(--ink-3);
+  font-size: 9.5px;
   font-style: normal;
+  letter-spacing: 0.08em;
+  line-height: 1.3;
+}
+
+.sm-attr-flag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 5px;
+  border: 1px solid rgba(63, 134, 224, 0.24);
+  border-radius: var(--r-pill);
+  color: var(--azure-ink);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  vertical-align: 1px;
+}
+
+.sm-attr-bar {
+  position: relative;
+  height: 7px;
+  overflow: hidden;
+  border-radius: var(--r-pill);
+  background: rgba(140, 181, 232, 0.2);
+}
+
+.sm-attr-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #b7d7f8, #6ea8ea);
+}
+
+.sm-attr-row--top .sm-attr-bar > span {
+  background: linear-gradient(90deg, #7db4f0, #2f74cc);
+  box-shadow: 0 0 8px var(--azure-glow);
+}
+
+.sm-attr-w {
+  color: var(--ink-3);
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .sm-attr-note {
-  flex-basis: 100%;
-  margin: 1px 0 0;
+  margin: 8px 0 0;
   color: var(--ink-3);
   font-size: 11px;
   line-height: 1.65;
 }
 
-.sm-attr-all {
-  flex-basis: 100%;
-  margin-top: 1px;
-}
-
-.sm-attr-all summary {
-  width: fit-content;
-  cursor: pointer;
-  color: var(--ink-3);
-  font-size: 11px;
-  letter-spacing: 0.02em;
-  line-height: 1.6;
-}
-
-.sm-attr-all summary:hover {
-  color: var(--ink);
-}
-
-.sm-attr-vector {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 7px;
+.sm-attr-note--quiet {
+  margin-top: 3px;
+  color: var(--ink-4);
+  font-size: 10.5px;
 }
 
 .sm-ev {
@@ -3646,6 +3921,302 @@ html[data-read="done"] .sm-orb-fill {
   line-height: 1.28;
 }
 
+/* ───────────────────────── 账号入口 ───────────────────────── */
+
+/* 顶部右侧一小块：只在 /auth/me 明确回答 401/200 时出现。
+   403（认证关闭）或网络失败时组件返回 null，这里的所有规则都不会命中。 */
+.sm-account {
+  position: fixed;
+  top: 16px;
+  right: 24px;
+  z-index: 61;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sm-account-login {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 15px;
+  border: 1px solid rgba(255, 255, 255, 0.98);
+  border-bottom-color: var(--glass-edge-cool);
+  border-radius: var(--r-pill);
+  background: var(--glass-chip);
+  box-shadow:
+    var(--lift-chip),
+    var(--glass-rim),
+    var(--glass-rim-lo);
+  color: var(--azure-ink);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-decoration: none;
+  transition:
+    color var(--t-base) linear,
+    border-color var(--t-base) linear,
+    box-shadow var(--t-base) var(--ease-glide);
+}
+
+.sm-account-login:hover {
+  border-color: var(--azure-line);
+  box-shadow:
+    var(--lift-tile),
+    var(--glass-rim),
+    var(--glass-rim-lo);
+  color: var(--ink);
+}
+
+.sm-account-key {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.sm-account-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(300px, calc(100vw - 120px));
+  padding: 4px 6px 4px 5px;
+  border: 1px solid rgba(255, 255, 255, 0.98);
+  border-bottom-color: var(--glass-edge-cool);
+  border-radius: var(--r-pill);
+  background: var(--glass-chip);
+  box-shadow:
+    var(--lift-chip),
+    var(--glass-rim),
+    var(--glass-rim-lo);
+  color: var(--ink);
+}
+
+.sm-account-avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: linear-gradient(160deg, #7fb6f2, var(--azure-deep));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.sm-account-id {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.sm-account-name {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sm-account-mail {
+  overflow: hidden;
+  color: var(--ink-3);
+  font-size: 9.5px;
+  letter-spacing: 0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sm-account-out {
+  flex: none;
+  padding: 3px 4px;
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: color var(--t-fast) linear;
+}
+
+.sm-account-out:hover:not(:disabled) {
+  color: var(--azure-ink);
+}
+
+.sm-account-out:disabled {
+  color: var(--ink-4);
+  cursor: progress;
+}
+
+.sm-account-error {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  padding: 4px 9px;
+  border: 1px solid rgba(168, 99, 42, 0.24);
+  border-radius: var(--r-1);
+  background: rgba(255, 246, 236, 0.92);
+  color: var(--warn);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+/* ───────────────────────── 账号页 ───────────────────────── */
+
+.sm-auth {
+  max-width: 620px;
+  margin: 0 auto;
+  padding: var(--s7) 0 var(--s8);
+}
+
+.sm-auth-head {
+  padding: 0 4px;
+}
+
+.sm-auth-title {
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(30px, 3.4vw, 42px);
+  font-weight: 600;
+  letter-spacing: -0.032em;
+  line-height: 1.18;
+  text-wrap: balance;
+}
+
+.sm-auth-lede {
+  max-width: 34em;
+}
+
+.sm-auth-panel {
+  margin-top: var(--s6);
+}
+
+.sm-auth-tabs {
+  display: inline-flex;
+  gap: 3px;
+  margin-bottom: var(--s5);
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.46);
+  box-shadow:
+    inset 0 2px 5px -3px rgba(31, 63, 107, 0.18),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.sm-auth-tab {
+  padding: 7px 15px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--ink-3);
+  font-family: inherit;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition:
+    color var(--t-base) linear,
+    background var(--t-base) linear,
+    box-shadow var(--t-base) var(--ease-glide);
+}
+
+.sm-auth-tab:hover {
+  color: var(--ink);
+}
+
+.sm-auth-tab[aria-selected="true"] {
+  background: linear-gradient(160deg, #ffffff, #e8f3ff);
+  box-shadow:
+    0 4px 10px -7px rgba(30, 72, 132, 0.55),
+    inset 0 1px 0 #ffffff;
+  color: var(--azure-ink);
+  font-weight: 600;
+}
+
+.sm-auth-tab:focus-visible {
+  outline: 2px solid var(--azure-line);
+  outline-offset: 2px;
+}
+
+.sm-auth-owner {
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid rgba(63, 134, 224, 0.18);
+  border-radius: var(--r-1);
+  background: rgba(236, 246, 255, 0.62);
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+  line-height: 1.7;
+}
+
+.sm-auth-owner b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.sm-auth-owner code {
+  margin-left: 4px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.75);
+  color: var(--azure-ink);
+  font-size: 11px;
+}
+
+.sm-auth-actions {
+  display: flex;
+}
+
+.sm-auth-submit {
+  width: 100%;
+}
+
+.sm-auth-note {
+  margin-top: 0;
+}
+
+.sm-auth-back {
+  margin-top: var(--s2);
+}
+
+@media (max-width: 620px) {
+  .sm-account {
+    top: 16px;
+    right: 12px;
+  }
+
+  .sm-account-user {
+    max-width: 120px;
+    gap: 6px;
+  }
+
+  .sm-account-mail {
+    display: none;
+  }
+
+  .sm-account-name {
+    font-size: 11px;
+  }
+
+  .sm-auth {
+    padding: var(--s6) 0 var(--s7);
+  }
+
+  .sm-auth-tabs {
+    display: flex;
+    width: 100%;
+  }
+
+  .sm-auth-tab {
+    flex: 1;
+    padding: 7px 8px;
+    font-size: 11.5px;
+    letter-spacing: 0.02em;
+  }
+}
+
 /* ───────────────────────── 断点 ───────────────────────── */
 
 /* 段落入场：进视口才动，读过的段落不再动（`Reveal` 负责 data-in）。
@@ -3859,6 +4430,11 @@ html[data-read="done"] .sm-orb-fill {
     gap: 10px;
   }
 
+  .sm-research {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
   /* 板上留白收一档，但页签仍然探出板边 */
   .sm-flow {
     margin-top: var(--s6);
@@ -3918,6 +4494,24 @@ html[data-read="done"] .sm-orb-fill {
 
   .sm-note-item {
     padding: 13px 16px 14px;
+  }
+
+  .sm-research-card {
+    padding: 15px 15px 14px;
+  }
+
+  .sm-research-note {
+    padding: 12px 14px;
+  }
+
+  .sm-attr {
+    padding: 11px 11px 10px;
+  }
+
+  .sm-attr-row {
+    grid-template-columns: minmax(66px, 84px) minmax(0, 1fr) 32px;
+    gap: 7px;
+    padding: 4px;
   }
 
   .sm-index {

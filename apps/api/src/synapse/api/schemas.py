@@ -6,6 +6,8 @@ FastAPI/Pydantic from leaking into the domain layer.
 
 from __future__ import annotations
 
+import re
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -314,9 +316,21 @@ class GenericReviewOut(StrictModel):
     not_checked: list[str] = Field(max_length=8)
     next_step: str = Field(min_length=1, max_length=240)
     disclaimer: str = Field(min_length=1, max_length=300)
-    options: list[ReviewOptionOut] | None = Field(default=None, min_length=2, max_length=6)
-    tradeoff_question: str | None = Field(default=None, max_length=300)
-    execution: ReviewExecutionOut | None = None
+    options: list[ReviewOptionOut] | None = Field(
+        default=None,
+        min_length=2,
+        max_length=6,
+        exclude_if=lambda value: value is None,
+    )
+    tradeoff_question: str | None = Field(
+        default=None,
+        max_length=300,
+        exclude_if=lambda value: value is None,
+    )
+    execution: ReviewExecutionOut | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+    )
 
 
 class ReviewRunRequest(StrictModel):
@@ -641,3 +655,127 @@ class AgentTraceOut(StrictModel):
 class HealthOut(StrictModel):
     status: Literal["ok"] = "ok"
     version: str
+
+
+# --- process coach (v0.1) ----------------------------------------------------
+#
+# The coach is process feedback, not a solution. These DTOs deliberately have no
+# ``answer``/``solution``/``score``/``rank`` field: the response model itself is
+# part of the boundary, not only the service behind it.
+
+CoachFocusOut = Literal["where_wrong", "how_to_start"]
+CoachModeOut = Literal["rules", "llm"]
+CoachPointKindOut = Literal[
+    "missing_evidence",
+    "missing_reasoning",
+    "missing_constraint",
+    "no_attempt",
+    "next_step",
+    "process_note",
+]
+
+
+class CoachRequest(StrictModel):
+    """The only two things a student can ask the coach for."""
+
+    focus: CoachFocusOut
+
+
+class CoachPointOut(StrictModel):
+    """One process observation; ``basis`` names where it came from."""
+
+    kind: CoachPointKindOut
+    text: str = Field(min_length=1, max_length=200)
+    basis: str = Field(min_length=1, max_length=64)
+
+
+class CoachOut(StrictModel):
+    """Process feedback with its uncertainty made explicit.
+
+    ``not_claimed`` must be non-empty: the coach has no correctness check, no
+    answer store and no score, and the client renders that list rather than
+    letting the result read like a verdict.
+    """
+
+    version: Literal["0.1"]
+    mode: CoachModeOut
+    focus: CoachFocusOut
+    headline: str = Field(min_length=1, max_length=160)
+    points: list[CoachPointOut] = Field(min_length=1, max_length=4)
+    next_question: str = Field(min_length=1, max_length=200)
+    not_claimed: list[str] = Field(min_length=1, max_length=6)
+    disclaimer: str = Field(min_length=1, max_length=320)
+
+
+# Deliberately simple: the API stores only addresses this pattern accepts, and a
+# full RFC 5322 parser would add a dependency without making an address reachable.
+_EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _normalize_email(value: str) -> str:
+    cleaned = value.strip().lower()
+    if not _EMAIL_PATTERN.match(cleaned):
+        raise ValueError("email is not a valid address")
+    return cleaned
+
+
+class RegisterRequest(StrictModel):
+    """Account creation for a self-hosted owner.
+
+    Only the first registration succeeds unless ``SYNAPSE_AUTH_ALLOW_SIGNUP=on``.
+    The password is length-checked here and hashed with Argon2id before it
+    reaches any store; it is never logged or echoed back.
+    """
+
+    email: str = Field(min_length=3, max_length=320)
+    password: str = Field(min_length=8, max_length=200)
+    display_name: str | None = Field(default=None, max_length=120)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        return _normalize_email(value)
+
+    @field_validator("password")
+    @classmethod
+    def password_must_not_be_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("password must not be blank")
+        return value
+
+    @field_validator("display_name")
+    @classmethod
+    def normalize_display_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = " ".join(value.split())
+        return cleaned or None
+
+
+class LoginRequest(StrictModel):
+    """Credentials for an existing account.
+
+    The password has no real minimum here beyond being non-empty: rejecting a
+    short password at login would tell a caller something about the account.
+    """
+
+    email: str = Field(min_length=3, max_length=320)
+    password: str = Field(min_length=1, max_length=200)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        return _normalize_email(value)
+
+
+class AuthUserOut(StrictModel):
+    """The public account view; no digest, no session token."""
+
+    id: str = Field(min_length=1, max_length=40)
+    email: str = Field(min_length=3, max_length=320)
+    display_name: str | None = Field(default=None, max_length=120)
+    created_at: datetime
+
+
+class LogoutOut(StrictModel):
+    status: Literal["ok"] = "ok"

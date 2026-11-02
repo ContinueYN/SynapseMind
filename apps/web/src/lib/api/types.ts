@@ -35,7 +35,35 @@ export type GenericReviewOption = NonNullable<GenericReview["options"]>[number];
 export type AgentTrace = Schemas["AgentTraceOut"];
 export type AgentStep = Schemas["AgentStepOut"];
 export type AgentSuggestion = Schemas["AgentSuggestionOut"];
+/** Process coach: feedback on the attempt/process, never a solution. */
+export type CoachResult = Schemas["CoachOut"];
+export type CoachPoint = Schemas["CoachPointOut"];
+export type CoachFocus = CoachResult["focus"];
 export type VerificationMode = Domain["verification"];
+
+/**
+ * The public account view from `/api/v1/auth/me` (and the register/login
+ * responses). Hand-written because the generated contract file predates the
+ * auth slice; the fields mirror `AuthUserOut` and never include the password
+ * digest or the session token.
+ */
+export interface AuthUser {
+  id: string;
+  email: string;
+  display_name: string | null;
+  created_at: string;
+}
+
+export interface RegisterAccountInput {
+  email: string;
+  password: string;
+  display_name?: string;
+}
+
+export interface LoginAccountInput {
+  email: string;
+  password: string;
+}
 
 export interface AgentRunInput {
   code: string;

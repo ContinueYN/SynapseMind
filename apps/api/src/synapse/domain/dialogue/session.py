@@ -55,6 +55,11 @@ class DialogueSession:
     # not widen what the snapshot holds in kind, only what the reference-free
     # path keeps. Empty for sessions created before this field existed.
     initial_answer: str = ""
+    # The worked text submitted with the problem, verbatim. The reference-free
+    # path folds it into ``initial_answer`` (the intake/review reads one text),
+    # but the annotated path keeps the short answer separate. The coach quotes
+    # from this field so it can talk about the process, not only the conclusion.
+    initial_work: str = ""
     # A reference-free session may ask at most one clarifying question. Once the
     # student appends an answer, the derived intake stops asking; the flag is
     # stored so a reload cannot re-open the same question or accept a second

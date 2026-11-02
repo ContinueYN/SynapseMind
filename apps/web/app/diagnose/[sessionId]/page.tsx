@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { AgentTracePanel } from "@/components/AgentTracePanel";
+import { CoachPanel } from "@/components/CoachPanel";
 import { Dendrite, type DendriteStop } from "@/components/Dendrite";
 import { DiagnosisCardView } from "@/components/DiagnosisCardView";
 import { IntakeView } from "@/components/IntakeView";
@@ -13,6 +14,7 @@ import { Plane } from "@/components/Plane";
 import { PhysicsStepCheck } from "@/components/PhysicsStepCheck";
 import { ProblemBrief } from "@/components/ProblemBrief";
 import { ScaffoldView } from "@/components/ScaffoldView";
+import { SignInRequired } from "@/components/SignInRequired";
 import { StepCheck } from "@/components/StepCheck";
 import { StructureHintView } from "@/components/StructureHintView";
 import { Surface } from "@/components/Surface";
@@ -26,6 +28,7 @@ import {
   exitSession,
   getSession,
   isSessionConflict,
+  isUnauthorized,
   submitTurn,
 } from "@/src/lib/api/client";
 import type { SessionResponse } from "@/src/lib/api/types";
@@ -57,6 +60,8 @@ export default function DiagnosePage() {
   const [session, setSession] = useState<SessionResponse | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /* 401 from any session call: the gate wants a cookie, not a retry */
+  const [authRequired, setAuthRequired] = useState(false);
   const [pending, setPending] = useState<{ answer: string; unknown: boolean } | null>(
     null,
   );
@@ -80,7 +85,11 @@ export default function DiagnosePage() {
       })
       .catch((caught) => {
         if (!cancelled) {
-          setError(caught instanceof Error ? caught.message : "加载会话失败。");
+          if (isUnauthorized(caught)) {
+            setAuthRequired(true);
+          } else {
+            setError(caught instanceof Error ? caught.message : "加载会话失败。");
+          }
         }
       });
     return () => {
@@ -113,10 +122,14 @@ export default function DiagnosePage() {
       const latest = await getSession(sessionId);
       setSession(latest);
       setError(message);
-    } catch {
-      setError(
-        "会话已在另一个窗口更新；自动刷新失败，请手动刷新页面后再试。",
-      );
+    } catch (caught) {
+      if (isUnauthorized(caught)) {
+        setAuthRequired(true);
+      } else {
+        setError(
+          "会话已在另一个窗口更新；自动刷新失败，请手动刷新页面后再试。",
+        );
+      }
     }
   }
 
@@ -133,7 +146,9 @@ export default function DiagnosePage() {
         }),
       );
     } catch (caught) {
-      if (isSessionConflict(caught)) {
+      if (isUnauthorized(caught)) {
+        setAuthRequired(true);
+      } else if (isSessionConflict(caught)) {
         await refreshAfterConflict("answer");
       } else if (caught instanceof ApiError && caught.status === 422) {
         setError("这一问要从选项里选一个；也可以点「我还是不懂」，换成更低的台阶。");
@@ -153,7 +168,9 @@ export default function DiagnosePage() {
     try {
       setSession(await answerClarifier(sessionId, answer));
     } catch (caught) {
-      if (isSessionConflict(caught)) {
+      if (isUnauthorized(caught)) {
+        setAuthRequired(true);
+      } else if (isSessionConflict(caught)) {
         await refreshAfterConflict("clarify");
       } else {
         setError(caught instanceof Error ? caught.message : "补充没有提交，请重试。");
@@ -172,7 +189,9 @@ export default function DiagnosePage() {
     try {
       setSession(await answerProbe(sessionId, answer));
     } catch (caught) {
-      if (isSessionConflict(caught)) {
+      if (isUnauthorized(caught)) {
+        setAuthRequired(true);
+      } else if (isSessionConflict(caught)) {
         await refreshAfterConflict("probe");
       } else {
         setError(caught instanceof Error ? caught.message : "补充没有提交，请重试。");
@@ -192,7 +211,9 @@ export default function DiagnosePage() {
     try {
       setSession(await submitTurn(sessionId, { answer: text }));
     } catch (caught) {
-      if (isSessionConflict(caught)) {
+      if (isUnauthorized(caught)) {
+        setAuthRequired(true);
+      } else if (isSessionConflict(caught)) {
         await refreshAfterConflict("answer");
       } else if (caught instanceof ApiError && caught.status === 422) {
         setError("先写一行过程；不用写最终答案。");
@@ -212,7 +233,9 @@ export default function DiagnosePage() {
       setSession(await exitSession(sessionId));
       setRevealArmed(false);
     } catch (caught) {
-      if (isSessionConflict(caught)) {
+      if (isUnauthorized(caught)) {
+        setAuthRequired(true);
+      } else if (isSessionConflict(caught)) {
         await refreshAfterConflict("exit");
       } else {
         setError(caught instanceof Error ? caught.message : "退出失败，请重试。");
@@ -234,12 +257,20 @@ export default function DiagnosePage() {
       setSession(await exitSession(sessionId, true));
       setRevealArmed(false);
     } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : "读取解法失败，请重试。",
-      );
+      if (isUnauthorized(caught)) {
+        setAuthRequired(true);
+      } else {
+        setError(
+          caught instanceof Error ? caught.message : "读取解法失败，请重试。",
+        );
+      }
     } finally {
       setBusy(false);
     }
+  }
+
+  if (authRequired) {
+    return <SignInRequired next={`/diagnose/${encodeURIComponent(sessionId)}`} />;
   }
 
   if (error && !session) {
@@ -459,6 +490,7 @@ export default function DiagnosePage() {
                   onProbe={sendProbe}
                   sessionId={sessionId}
                 />
+                <CoachPanel next={`/diagnose/${sessionId}`} sessionId={sessionId} />
                 <KnowledgePanel
                   query={intake.domain.label}
                   subject={intake.domain.name}

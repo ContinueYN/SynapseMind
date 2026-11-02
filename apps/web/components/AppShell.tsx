@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 
+import { AccountMenu } from "@/components/AccountMenu";
 import { BrandOrb } from "@/components/BrandOrb";
 import { Ground } from "@/components/Ground";
 import { PointerField } from "@/components/PointerField";
@@ -15,6 +16,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <ScrollRule />
       <ScrollMemory />
       <BrandOrb />
+      <AccountMenu />
 
       <main className="sm-main">
         <div className="sm-shell">{children}</div>
@@ -22,7 +24,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <div className="sm-shell">
         <footer className="sm-foot">
-          <span>目前只支持一道示例题：高中数学 · 函数与导数</span>
+          <span>通用问题诊断 · 自托管 · 数学、写作、代码与生活决策</span>
           <span className="sm-foot-links">
             <Link className="sm-foot-link" href="/cases">
               演示记录

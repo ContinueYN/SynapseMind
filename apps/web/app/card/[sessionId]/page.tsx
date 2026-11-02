@@ -4,12 +4,14 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { CoachPanel } from "@/components/CoachPanel";
 import { DiagnosisCardView } from "@/components/DiagnosisCardView";
 import { KnowledgePanel } from "@/components/KnowledgePanel";
 import { Plane } from "@/components/Plane";
 import { ProblemBrief } from "@/components/ProblemBrief";
+import { SignInRequired } from "@/components/SignInRequired";
 import { Surface } from "@/components/Surface";
-import { exitSession, getSession } from "@/src/lib/api/client";
+import { exitSession, getSession, isUnauthorized } from "@/src/lib/api/client";
 import type { SessionResponse } from "@/src/lib/api/types";
 
 export default function CardPage() {
@@ -17,6 +19,7 @@ export default function CardPage() {
   const sessionId = params.sessionId;
   const [session, setSession] = useState<SessionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [authRequired, setAuthRequired] = useState(false);
   const [revealed, setRevealed] = useState<SessionResponse | null>(null);
   const [revealArmed, setRevealArmed] = useState(false);
   const [revealing, setRevealing] = useState(false);
@@ -25,9 +28,13 @@ export default function CardPage() {
   useEffect(() => {
     getSession(sessionId)
       .then(setSession)
-      .catch((caught) =>
-        setError(caught instanceof Error ? caught.message : "加载卡点卡失败。"),
-      );
+      .catch((caught) => {
+        if (isUnauthorized(caught)) {
+          setAuthRequired(true);
+        } else {
+          setError(caught instanceof Error ? caught.message : "加载卡点卡失败。");
+        }
+      });
   }, [sessionId]);
 
   async function reveal() {
@@ -42,12 +49,20 @@ export default function CardPage() {
       setRevealed(await exitSession(sessionId, true));
       setRevealArmed(false);
     } catch (caught) {
-      setRevealError(
-        caught instanceof Error ? caught.message : "读取解法失败，请重试。",
-      );
+      if (isUnauthorized(caught)) {
+        setAuthRequired(true);
+      } else {
+        setRevealError(
+          caught instanceof Error ? caught.message : "读取解法失败，请重试。",
+        );
+      }
     } finally {
       setRevealing(false);
     }
+  }
+
+  if (authRequired) {
+    return <SignInRequired next={`/card/${encodeURIComponent(sessionId)}`} />;
   }
 
   if (error) {
@@ -149,6 +164,7 @@ export default function CardPage() {
         subject={session.subject}
         verification={session.domain.verification}
       />
+      <CoachPanel next={`/card/${sessionId}`} sessionId={sessionId} />
 
       {revealed?.answer && revealed.solution ? (
         <Surface>

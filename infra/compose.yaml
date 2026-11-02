@@ -1,0 +1,178 @@
+# Self-hosted single-node stack for the local demo:
+#
+#   nginx :80  ->  web :3000 (Next.js standalone)  +  api :8000 (FastAPI)
+#                  api -> postgres :5432, redis :6379
+#                  api -> SQLite session/review stores on the `appdata` volume
+#
+# Usage, from the repository root:
+#   cp infra/.env.example infra/.env            # optional; defaults are localhost
+#   docker compose -f infra/compose.yaml up -d --build
+#   open http://localhost
+#
+# Only nginx publishes a host port; api/web/postgres/redis stay on the internal
+# network. `docker compose -f infra/compose.yaml config` must stay valid with
+# no daemon and with no infra/.env (every value below has a default).
+
+name: synapse
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-synapse}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-synapse}
+      POSTGRES_DB: ${POSTGRES_DB:-synapse}
+      # C collation: identical sort/uniqueness behaviour on every host.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks: [synapse]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    logging: *default-logging
+    # AOF keeps the small rate-limit / session keys across restarts.
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    networks: [synapse]
+
+  api:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.api
+      args:
+        # Optional: point pip at a mirror when pypi.org is slow or blocked.
+        #   $env:PIP_INDEX_URL="https://pypi.tuna.tsinghua.edu.cn/simple"
+        #   docker compose -f infra/compose.yaml build api
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+    image: synapse-api:local
+    restart: unless-stopped
+    logging: *default-logging
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # Env contract shared with the auth/Alembic slice. Keys the current code
+      # does not read yet are inert; nothing here creates a second migration
+      # tree, and no auth code is duplicated in this stack.
+      SYNAPSE_ENV: ${SYNAPSE_ENV:-docker}
+      SYNAPSE_DATABASE_URL: ${SYNAPSE_DATABASE_URL:-postgresql+psycopg://synapse:synapse@postgres:5432/synapse}
+      SYNAPSE_REDIS_URL: ${SYNAPSE_REDIS_URL:-redis://redis:6379/0}
+      SYNAPSE_AUTH: ${SYNAPSE_AUTH:-on}
+      SYNAPSE_COOKIE_SECURE: ${SYNAPSE_COOKIE_SECURE:-off}
+      # The diagnostic store and the review queue are still SQLite in this
+      # slice; both files live on the persistent `appdata` volume.
+      SYNAPSE_SESSION_DB: ${SYNAPSE_SESSION_DB:-/data/synapse.sqlite3}
+      SYNAPSE_REVIEW_DB: ${SYNAPSE_REVIEW_DB:-/data/review.sqlite3}
+      # Same-origin browser calls through nginx send Origin: http://localhost;
+      # add your own origin here if you expose the stack differently.
+      SYNAPSE_WEB_ORIGINS: ${SYNAPSE_WEB_ORIGINS:-http://localhost,http://127.0.0.1}
+      # Optional features stay off unless explicitly enabled.
+      SYNAPSE_LLM_MODE: ${SYNAPSE_LLM_MODE:-off}
+      SYNAPSE_EXEC: ${SYNAPSE_EXEC:-off}
+      SYNAPSE_RAG: ${SYNAPSE_RAG:-off}
+      # Show the seven problem-side CHC demand tags on the card. This is a
+      # description of what the task asks for, never an ability score.
+      SYNAPSE_CHC_ATTRIBUTION: ${SYNAPSE_CHC_ATTRIBUTION:-on}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+    volumes:
+      - appdata:/data
+    expose:
+      - "8000"
+    healthcheck:
+      # <500 on purpose: the auth slice may gate /health with a 401/403, which
+      # still means the process is up and serving.
+      test:
+        - CMD
+        - python
+        - -c
+        - "import sys,httpx;sys.exit(0 if httpx.get('http://127.0.0.1:8000/api/v1/health',timeout=3).status_code<500 else 1)"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    networks: [synapse]
+
+  web:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.web
+      args:
+        # Baked in at build time. Empty = same origin: the browser calls
+        # /api/v1/... and nginx forwards it to api. Set an absolute URL (for
+        # example http://localhost) and rebuild if you front the app
+        # differently.
+        NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-}
+    image: synapse-web:local
+    restart: unless-stopped
+    logging: *default-logging
+    depends_on:
+      api:
+        condition: service_healthy
+    expose:
+      - "3000"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    networks: [synapse]
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    logging: *default-logging
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    ports:
+      - "${SYNAPSE_HTTP_PORT:-80}:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/nginx-health | grep -q ok"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+    networks: [synapse]
+
+volumes:
+  pgdata:
+  redisdata:
+  appdata:
+
+networks:
+  synapse:
+    driver: bridge

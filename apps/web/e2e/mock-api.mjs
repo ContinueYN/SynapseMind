@@ -233,12 +233,23 @@ function sessionBody(id) {
 }
 
 function send(res, status, body) {
-  res.writeHead(status, {
+  const origin = res.req?.headers.origin;
+  const headers = {
     "Content-Type": "application/json; charset=utf-8",
-    "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "content-type",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  });
+  };
+  // The web client sends `credentials: "include"` on every call. A wildcard
+  // origin is illegal for credentialed CORS, so echo the caller and allow the
+  // cookie jar explicitly.
+  if (origin) {
+    headers["Access-Control-Allow-Origin"] = origin;
+    headers["Access-Control-Allow-Credentials"] = "true";
+    headers["Vary"] = "Origin";
+  } else {
+    headers["Access-Control-Allow-Origin"] = "*";
+  }
+  res.writeHead(status, headers);
   res.end(body === undefined ? "" : JSON.stringify(body));
 }
 
@@ -340,6 +351,19 @@ const server = createServer(async (req, res) => {
 
   if (req.method === "GET" && url.pathname === "/health") {
     send(res, 200, { status: "ok" });
+    return;
+  }
+
+  // The e2e suite runs the auth-off shape: /auth/me answers 403 so AccountMenu
+  // renders nothing and every existing local flow stays unauthenticated.
+  if (url.pathname.startsWith("/api/v1/auth/")) {
+    if (req.method === "POST" && url.pathname === "/api/v1/auth/logout") {
+      send(res, 200, { status: "ok" });
+      return;
+    }
+    send(res, 403, {
+      detail: "认证未启用；设置 SYNAPSE_AUTH=on 后才能使用账号接口。",
+    });
     return;
   }
 

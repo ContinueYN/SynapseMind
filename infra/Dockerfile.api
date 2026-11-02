@@ -1,0 +1,48 @@
+# syntax=docker/dockerfile:1
+#
+# FastAPI image. Build context is the repository root:
+#   docker build -f infra/Dockerfile.api -t synapse-api:local .
+#
+# Only [project].dependencies from apps/api/pyproject.toml are installed: the
+# `dev` and `rag` extras stay out of the runtime image. Deps are installed from
+# a wheel, not `-e .`, so the container cannot silently import a stale checkout.
+FROM python:3.12-slim AS runtime
+
+# Optional package index override for networks where pypi.org is slow or
+# unreachable (for example a regional mirror). Defaults to the public index;
+# it is a build argument, not a baked-in policy:
+#   docker build --build-arg PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple ...
+ARG PIP_INDEX_URL=https://pypi.org/simple
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_DEFAULT_TIMEOUT=120 \
+    PIP_RETRIES=10
+
+WORKDIR /app
+
+# Copy the app tree (tests/venv/local var/ are excluded by .dockerignore) so an
+# alembic.ini / alembic/ tree is picked up automatically once the auth slice
+# lands. COPY of a missing optional path would fail the build.
+COPY apps/api/ ./
+
+RUN pip install --no-cache-dir --index-url "$PIP_INDEX_URL" .
+
+# Non-root runtime user. /data is the persistent mount for the SQLite session
+# and review stores; a named volume inherits this ownership on first use.
+RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin appuser \
+    && mkdir -p /data /app/var/audit \
+    && chown -R appuser:appuser /data /app/var
+
+COPY infra/docker/api-entrypoint.sh /usr/local/bin/api-entrypoint.sh
+RUN chmod 0755 /usr/local/bin/api-entrypoint.sh
+
+USER appuser
+
+EXPOSE 8000
+
+# Waits for Postgres, runs `alembic upgrade head` when alembic.ini exists, then
+# execs uvicorn (see infra/docker/api-entrypoint.sh and infra/README.md).
+ENTRYPOINT ["/usr/local/bin/api-entrypoint.sh"]

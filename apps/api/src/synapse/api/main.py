@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import os
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from synapse.api.auth import router as auth_router
 from synapse.api.deps import Container, build_container
 from synapse.api.routes import router
+from synapse.application.auth import AuthStoreUnavailable
 from synapse.infrastructure.snapshots import SnapshotError
 from synapse.infrastructure.sqlite_state import StateSchemaError
 
@@ -23,14 +27,27 @@ def _web_origins() -> list[str]:
 
 
 def create_app(container: Container | None = None) -> FastAPI:
+    # The composition root is injectable so tests can swap one adapter (a fake
+    # graph generator, a stub LLM client) without patching globals.
+    resolved = container or build_container()
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        try:
+            yield
+        finally:
+            # Release the auth engine/Redis connection. A test that never enters
+            # the lifespan can call ``container.auth_dispose`` directly.
+            if resolved.auth_dispose is not None:
+                resolved.auth_dispose()
+
     app = FastAPI(
         title="SynapseMind API",
         version="0.1.0",
         description="单题诊断引导：状态机、探针、卡点卡。学习模式不返回答案。",
+        lifespan=lifespan,
     )
-    # The composition root is injectable so tests can swap one adapter (a fake
-    # graph generator, a stub LLM client) without patching globals.
-    app.state.container = container or build_container()
+    app.state.container = resolved
 
     @app.exception_handler(SnapshotError)
     async def snapshot_error_handler(_request: Request, exc: Exception) -> JSONResponse:
@@ -49,14 +66,28 @@ def create_app(container: Container | None = None) -> FastAPI:
             content={"detail": f"会话存储结构不兼容：{exc}"},
         )
 
+    @app.exception_handler(AuthStoreUnavailable)
+    async def auth_store_error_handler(_request: Request, exc: Exception) -> JSONResponse:
+        # A missing migration or an unreachable database/Redis is an operator
+        # problem. It must not look like "wrong password" or a silent logout.
+        return JSONResponse(
+            status_code=503,
+            content={"detail": f"账号服务暂不可用：{exc}"},
+        )
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=_web_origins(),
-        allow_credentials=False,
+        # The browser always sends the same cookie jar (``credentials: include``)
+        # so a session created while auth is on survives; with auth off the
+        # cookie is simply absent. The origin list above is explicit, never "*",
+        # which is what makes credentialed CORS safe here.
+        allow_credentials=True,
         allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["*"],
     )
     app.include_router(router)
+    app.include_router(auth_router)
     return app
 
 

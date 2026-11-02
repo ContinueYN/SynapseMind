@@ -192,6 +192,16 @@ _COPY: dict[IntakeFramework, _IntakeCopy] = {
 }
 
 
+def checklist_for(profile: DomainProfile) -> tuple[str, ...]:
+    """The domain's start checklist.
+
+    Shared by the intake card and the coach's "怎么开始" plan so a reference-free
+    session with no intake still gets the same goal/known/constraint wording.
+    """
+
+    return _COPY[profile.framework].checklist
+
+
 @dataclass(frozen=True, slots=True)
 class IntakeNode:
     """One node of the structure shown on the intake card.

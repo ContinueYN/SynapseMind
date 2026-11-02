@@ -537,6 +537,12 @@ def encode_session(
             # this text, so it must survive a reload. Old rows get "" and show no
             # gap, which is the same as an attempt that mentioned nothing.
             "initial_answer": session.initial_answer,
+            # Additive in v0.2: the worked text submitted with the problem. The
+            # reference-free path already folds it into ``initial_answer``; the
+            # annotated path keeps it here so the process coach can quote the
+            # student's own steps. Old rows get "" and the coach then quotes the
+            # answer only, which is the same data they had.
+            "initial_work": session.initial_work,
             # Additive in v0.2: whether the one clarifying question has been
             # used. Old rows answer "no", which is the safe default: the derived
             # intake may ask once, but it cannot show a second answer was stored.
@@ -588,6 +594,7 @@ def decode_session(snapshot: object) -> DialogueSession:
         scaffold_level=_integer(data.get("scaffold_level", 0), "session.scaffold_level"),
         scaffold_work=_text(data.get("scaffold_work", ""), "session.scaffold_work"),
         initial_answer=_text(data.get("initial_answer", ""), "session.initial_answer"),
+        initial_work=_text(data.get("initial_work", ""), "session.initial_work"),
         clarifier_answered=_flag(
             data.get("clarifier_answered", False), "session.clarifier_answered"
         ),

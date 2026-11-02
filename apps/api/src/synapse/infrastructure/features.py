@@ -38,20 +38,20 @@ class FeatureFlags:
     def from_env(cls, env: Mapping[str, str] | None = None) -> FeatureFlags:
         source = os.environ if env is None else env
         return cls(
-            equality_check=_parse_flag(
+            equality_check=parse_flag(
                 "SYNAPSE_EQUALITY_CHECK",
                 source.get("SYNAPSE_EQUALITY_CHECK", "off"),
             ),
-            rag=_parse_flag("SYNAPSE_RAG", source.get("SYNAPSE_RAG", "off")),
-            chc_attribution=_parse_flag(
+            rag=parse_flag("SYNAPSE_RAG", source.get("SYNAPSE_RAG", "off")),
+            chc_attribution=parse_flag(
                 "SYNAPSE_CHC_ATTRIBUTION",
                 source.get("SYNAPSE_CHC_ATTRIBUTION", "off"),
             ),
-            execution=_parse_flag("SYNAPSE_EXEC", source.get("SYNAPSE_EXEC", "off")),
+            execution=parse_flag("SYNAPSE_EXEC", source.get("SYNAPSE_EXEC", "off")),
         )
 
 
-def _parse_flag(name: str, raw: str) -> bool:
+def parse_flag(name: str, raw: str) -> bool:
     value = raw.strip().lower()
     if value in _TRUE:
         return True

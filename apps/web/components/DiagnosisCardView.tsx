@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import { Surface } from "@/components/Surface";
 import {
@@ -37,6 +37,17 @@ export function DiagnosisCardView({
   const dueHours = card.verify?.due_hours ?? 24;
   const excluded = card.excluded ?? [];
   const confidence = Math.round((card.confidence ?? 0) * 100);
+  const attribution = card.attribution;
+  /* all_dimensions 是完整七维；旧卡没有它时退回服务端给的前两维。 */
+  const demandDimensions = attribution
+    ? attribution.all_dimensions?.length
+      ? attribution.all_dimensions
+      : attribution.dimensions
+    : [];
+  const topKeys = new Set(
+    attribution?.dimensions.map((dimension) => dimension.key) ?? [],
+  );
+  const attrHeadingId = useId();
 
   async function markDisagree() {
     if (disagreed || recording) return;
@@ -108,31 +119,65 @@ export function DiagnosisCardView({
           <h2 className="sm-card-h">{card.label}</h2>
           <p className="sm-card-sub">{card.one_line}</p>
 
-          {card.attribution && card.attribution.dimensions.length > 0 ? (
-            <div className="sm-attr">
-              <span className="sm-attr-k">本题的认知需求</span>
-              {card.attribution.dimensions.map((dimension) => (
-                <span className="sm-attr-chip" key={dimension.key}>
-                  <b>{dimension.label}</b>
-                  <i>{dimension.weight.toFixed(2)}</i>
+          {attribution && demandDimensions.length > 0 ? (
+            <section aria-labelledby={attrHeadingId} className="sm-attr">
+              <div className="sm-attr-head">
+                <h3 className="sm-attr-k" id={attrHeadingId}>
+                  认知需求画像
+                </h3>
+                <span className="sm-attr-sub">
+                  {demandDimensions.length === 7
+                    ? "CHC 七维 · 本题节点"
+                    : "本题节点需求"}
                 </span>
-              ))}
-              <p className="sm-attr-note">{card.attribution.note}</p>
-              {(card.attribution.all_dimensions?.length ?? 0) > 0 ? (
-                <details className="sm-attr-all">
-                  <summary>查看七维需求向量</summary>
-                  <div className="sm-attr-vector">
-                    {card.attribution.all_dimensions?.map((dimension) => (
-                      <span className="sm-attr-chip" key={dimension.key}>
-                        <b>{dimension.key}</b> {dimension.label}
-                        <i>{dimension.weight.toFixed(2)}</i>
+              </div>
+
+              <ul
+                aria-label="本题的 CHC 认知需求维度"
+                className="sm-attr-list"
+              >
+                {demandDimensions.map((dimension) => {
+                  const isTop = topKeys.has(dimension.key);
+                  const percent = Math.round(
+                    Math.min(1, Math.max(0, dimension.weight)) * 100,
+                  );
+                  return (
+                    <li
+                      className={`sm-attr-row${isTop ? " sm-attr-row--top" : ""}`}
+                      key={dimension.key}
+                    >
+                      <span className="sm-attr-name">
+                        <b>
+                          {dimension.label}
+                          {isTop ? (
+                            <em className="sm-attr-flag">主要需求</em>
+                          ) : null}
+                        </b>
+                        <i>{dimension.key}</i>
                       </span>
-                    ))}
-                  </div>
-                  <p className="sm-attr-note">未标注维度记 0；只描述本题节点的认知需求。</p>
-                </details>
-              ) : null}
-            </div>
+                      <span
+                        aria-label={`${dimension.label}（${dimension.key}）本题需求权重 ${dimension.weight.toFixed(2)}`}
+                        className="sm-attr-bar"
+                        role="img"
+                      >
+                        <span
+                          aria-hidden="true"
+                          style={{ width: `${percent}%` }}
+                        />
+                      </span>
+                      <span className="sm-attr-w">
+                        {dimension.weight.toFixed(2)}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+
+              <p className="sm-attr-note">{attribution.note}</p>
+              <p className="sm-attr-note sm-attr-note--quiet">
+                条长是本题节点的需求权重（0–1），未标注维度记 0；不是对你的测评，单题不足以断言任何一项能力。
+              </p>
+            </section>
           ) : null}
 
           <p className="sm-lab" style={{ marginTop: 30 }}>
@@ -206,7 +251,7 @@ export function DiagnosisCardView({
           ) : null}
 
           <p className="sm-fine">
-            本记录仅用于教学定位：不产出能力分数，不做智力或医学评估，不给提分承诺。
+            本记录仅用于教学定位：不评人、不打分，不做智力或医学评估，不给提分承诺。
           </p>
         </div>
     </Surface>

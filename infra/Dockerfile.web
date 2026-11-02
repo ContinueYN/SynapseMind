@@ -1,0 +1,45 @@
+# syntax=docker/dockerfile:1
+#
+# Next.js standalone image. Build context is the repository root:
+#   docker build -f infra/Dockerfile.web -t synapse-web:local .
+#
+# NEXT_PUBLIC_* is inlined into the client bundle at build time. The default is
+# the empty string, i.e. "same origin", so the browser calls /api/v1/... and
+# nginx proxies it to the api service. Change it only by rebuilding (see
+# infra/README.md).
+FROM node:22-alpine AS deps
+WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
+COPY apps/web/package.json apps/web/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+
+FROM node:22-alpine AS builder
+WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
+ARG NEXT_PUBLIC_API_BASE=""
+ENV NEXT_PUBLIC_API_BASE=${NEXT_PUBLIC_API_BASE}
+COPY --from=deps /app/node_modules ./node_modules
+COPY apps/web/ ./
+RUN npm run build
+
+FROM node:22-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    PORT=3000 \
+    HOSTNAME=0.0.0.0
+
+# `output: "standalone"` emits a self-contained server.js plus the traced
+# node_modules; static assets and public/ are copied next to it.
+COPY --from=builder /app/public ./public
+COPY --from=builder --chown=node:node /app/.next/standalone ./
+COPY --from=builder --chown=node:node /app/.next/static ./.next/static
+
+# Next writes ISR/fetch cache entries under .next/cache at run time; the `node`
+# user must own that directory (standalone output does not create it).
+RUN mkdir -p /app/.next/cache && chown -R node:node /app/.next
+
+USER node
+
+EXPOSE 3000
+CMD ["node", "server.js"]

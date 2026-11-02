@@ -10,8 +10,14 @@ import { EMPTY_DRAFT, ProblemForm, type Draft } from "@/components/ProblemForm";
 import { Reveal } from "@/components/Reveal";
 import { Surface } from "@/components/Surface";
 import { useTiltZone } from "@/components/useTilt";
-import { createSession } from "@/src/lib/api/client";
+import { createSession, isUnauthorized } from "@/src/lib/api/client";
 import type { CreateSessionInput } from "@/src/lib/api/types";
+import {
+  PAPERS,
+  PRINCIPLES,
+  RESEARCH_BOUNDARY,
+  papersFor,
+} from "@/src/lib/research/papers";
 import { handOffSession } from "@/src/lib/session-handoff";
 
 /* 四步：只写这一步"给什么"，不写"意味着什么" */
@@ -26,27 +32,6 @@ const EDGE = [
   ["给你", "卡在哪一步，依据是你写过的哪几句，下次先练什么。"],
   ["不给", "过程中的最终解法、分数、排名，以及任何能力或医学评估。"],
   ["要你", "题目、一个答案、写到的那一行。空着的格子会标出来。"],
-] as const;
-
-const GROUNDS = [
-  {
-    tag: "突触可塑性",
-    authors: "Citri & Malenka (2008)",
-    text: "只借「成功提取会强化通路」的形状，不做脑测量。",
-    doi: "10.1038/sj.npp.1301559",
-  },
-  {
-    tag: "认知负荷",
-    authors: "Sweller (1988)",
-    text: "先降低外在负荷，再一次只给一个最小动作。",
-    doi: "10.1207/s15516709cog1202_4",
-  },
-  {
-    tag: "反馈",
-    authors: "Hattie & Timperley (2007)",
-    text: "反馈指向任务与下一步，不指向「你这个人」。",
-    doi: "10.3102/003465430298487",
-  },
 ] as const;
 
 const META = [
@@ -89,6 +74,13 @@ export default function HomePage() {
       handOffSession(session);
       router.push(`/diagnose/${session.session_id}`);
     } catch (caught) {
+      if (isUnauthorized(caught)) {
+        // The API gate says there is no session; the form itself is not wrong.
+        // Carry the user to /login and come back to the same entry point.
+        setBusy(false);
+        router.push("/login?next=/");
+        return;
+      }
       setError(caught instanceof Error ? caught.message : "开始失败，请稍后重试。");
       setBusy(false);
     }
@@ -236,31 +228,85 @@ export default function HomePage() {
         <Plane>
           <h2 className="sm-label">
             <em>05</em>
-            依据
+            研究依据 / Research basis
           </h2>
 
-          <p className="sm-statement">类比有出处，效果不借背书。</p>
+          <p className="sm-statement">借的是机制，不借效果背书。</p>
 
-          <div className="sm-grounds">
-            {GROUNDS.map((ground) => (
-              <a
-                className="sm-ground sm-tile"
-                href={`https://doi.org/${ground.doi}`}
-                key={ground.doi}
-                rel="noreferrer"
-                target="_blank"
+          <p className="sm-lede sm-research-lede">
+            每条原则只写三件事：借的机制、对应的设计动作、以及不声称什么。
+            文献按 DOI 链到原文；引用解释设计来源，不是疗效证据。
+          </p>
+
+          <p className="sm-research-facts">
+            <span>
+              <b>{PAPERS.length}</b> 篇公开文献
+            </span>
+            <span>
+              <b>{PRINCIPLES.length}</b> 条设计原则
+            </span>
+            <span>
+              <b>0</b> 项效果背书
+            </span>
+          </p>
+
+          <div className="sm-research">
+            {PRINCIPLES.map((principle, index) => (
+              <article
+                className="sm-tile sm-research-card"
+                data-tilt=""
+                key={principle.id}
               >
-                <span className="sm-ground-k">{ground.tag}</span>
-                <b>{ground.authors}</b>
-                <span>{ground.text}</span>
-                <em>doi:{ground.doi}</em>
-              </a>
+                <header className="sm-research-head">
+                  <span className="sm-research-n">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                  <h3 className="sm-research-h">{principle.label}</h3>
+                  <span className="sm-research-en">{principle.english}</span>
+                </header>
+
+                <p className="sm-research-mech">{principle.mechanism}</p>
+
+                <ul className="sm-research-refs">
+                  {papersFor(principle).map((paper) => (
+                    <li key={paper.id}>
+                      <a
+                        className="sm-research-ref"
+                        href={paper.url}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        <span className="sm-research-cite">
+                          <b>{paper.authors}</b> ({paper.year}).{" "}
+                          <cite>{paper.title}</cite>. <span>{paper.venue}</span>
+                        </span>
+                        <span className="sm-research-doi">
+                          doi:{paper.doi}
+                          <span aria-hidden="true"> ↗</span>
+                        </span>
+                      </a>
+                      <p className="sm-research-borrow">
+                        <span aria-hidden="true">借用 · </span>
+                        {paper.borrow}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+
+                <p className="sm-research-boundary">
+                  <span>不声称</span>
+                  {principle.notClaiming}
+                </p>
+              </article>
             ))}
           </div>
 
-          <p className="sm-fine">
-            这些文献只解释设计形状：怎么降低负荷、怎么给反馈、为什么用「强化」作类比。
-            我们没有做对照实验，也没有延迟正确率；不把类比写成神经测量，也不承诺提分。
+          <p className="sm-research-note" role="note">
+            <b>{RESEARCH_BOUNDARY}</b>
+            <span>
+              引用只说明「为什么这样设计」，不代表我们复现了论文结果，
+              也不构成对任何人的效果承诺。
+            </span>
           </p>
 
           <p className="sm-ground-more">
@@ -269,7 +315,7 @@ export default function HomePage() {
             <Link href="/cases">六段演示记录 →</Link>
           </p>
         </Plane>
-      </Reveal>
+    </Reveal>
     </div>
   );
 }

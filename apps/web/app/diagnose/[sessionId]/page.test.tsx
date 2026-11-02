@@ -10,6 +10,7 @@ import {
   ApiError,
   exitSession,
   getSession,
+  requestCoach,
   searchKnowledge,
   submitTurn,
 } from "@/src/lib/api/client";
@@ -44,6 +45,7 @@ vi.mock("@/src/lib/api/client", () => {
     answerClarifier: vi.fn(),
     answerProbe: vi.fn(),
     getSession: vi.fn(),
+    requestCoach: vi.fn(),
     runReview: vi.fn(),
     submitTurn: vi.fn(),
     exitSession: vi.fn(),
@@ -55,6 +57,8 @@ vi.mock("@/src/lib/api/client", () => {
     }),
     isSessionConflict: (error: unknown) =>
       error instanceof ApiError && error.status === 409,
+    isUnauthorized: (error: unknown) =>
+      error instanceof ApiError && error.status === 401,
   };
 });
 
@@ -166,6 +170,23 @@ describe("DiagnosePage conflict recovery", () => {
     Element.prototype.scrollIntoView = vi.fn();
   });
 
+  it("shows a sign-in card instead of a generic load failure on 401", async () => {
+    vi.mocked(getSession).mockRejectedValueOnce(
+      new ApiError(401, "需要先登录。"),
+    );
+
+    render(<DiagnosePage />);
+
+    expect(await screen.findByText("请先登录")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /去登录/ }),
+    ).toHaveAttribute(
+      "href",
+      "/login?next=%2Fdiagnose%2FS_CONFLICT",
+    );
+    expect(screen.queryByText("会话没打开")).not.toBeInTheDocument();
+  });
+
   it("reloads the latest state instead of replaying a stale answer", async () => {
     vi.mocked(getSession)
       .mockResolvedValueOnce(FIRST)
@@ -220,6 +241,7 @@ describe("DiagnosePage generic entry", () => {
     vi.mocked(exitSession).mockReset();
     vi.mocked(answerClarifier).mockReset();
     vi.mocked(answerProbe).mockReset();
+    vi.mocked(requestCoach).mockReset();
     vi.mocked(searchKnowledge).mockReset();
     vi.mocked(searchKnowledge).mockResolvedValue({
       version: "0.2",
@@ -245,6 +267,44 @@ describe("DiagnosePage generic entry", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByText(/系统把握/)).not.toBeInTheDocument();
     expect(screen.getByText("通用问题（通用）")).toBeInTheDocument();
+  });
+
+  it("offers the process coach on the generic intake surface", async () => {
+    vi.mocked(getSession).mockResolvedValueOnce(GENERIC);
+    vi.mocked(requestCoach).mockResolvedValueOnce({
+      version: "0.1",
+      mode: "rules",
+      focus: "where_wrong",
+      headline: "先不判对错：可以从入口整理里核对两处。",
+      points: [
+        {
+          kind: "process_note",
+          text: "你写到「目标」；可以先核对目标有没有写成一句可检验的话。",
+          basis: "attempt.quote",
+        },
+        {
+          kind: "next_step",
+          text: "补一句约束：哪些条件不能动。",
+          basis: "checklist[1]",
+        },
+      ],
+      next_question: "这一步用到的条件，在题面里能找到吗？",
+      not_claimed: ["没有判断这段过程或答案的对错。"],
+      disclaimer: "规则版：按固定规则取证据，没有调用模型；这是过程反馈，不是解法。",
+    });
+
+    const user = userEvent.setup();
+    render(<DiagnosePage />);
+
+    await screen.findByText("入口整理 · 不定位卡点");
+    await user.click(screen.getByRole("button", { name: "我错在哪" }));
+
+    expect(
+      await screen.findByText("先不判对错：可以从入口整理里核对两处。"),
+    ).toBeInTheDocument();
+    expect(requestCoach).toHaveBeenCalledWith("S_CONFLICT", "where_wrong");
+    expect(screen.getAllByText("规则版").length).toBeGreaterThan(0);
+    expect(screen.getByText("这次没有判断")).toBeInTheDocument();
   });
 
   it("submits the single clarification and shows the updated intake", async () => {

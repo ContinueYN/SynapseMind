@@ -16,7 +16,10 @@ from synapse.api.schemas import (
     AgentTraceOut,
     AttributionDimensionOut,
     AttributionOut,
+    AuthUserOut,
     CardOut,
+    CoachOut,
+    CoachPointOut,
     DiagnosisOut,
     DomainIntakeOut,
     DomainOut,
@@ -45,6 +48,8 @@ from synapse.api.schemas import (
     VerifyOut,
 )
 from synapse.application.agent import AgentTrace
+from synapse.application.auth import AuthUser
+from synapse.application.coach import CoachOut as CoachResult
 from synapse.application.composer import ProbePrompt
 from synapse.application.domains import DomainDescriptor
 from synapse.application.execution import ExecutionResult
@@ -65,6 +70,15 @@ def _knowledge_excerpt(body: str, limit: int = 300) -> str:
     if len(body) <= limit:
         return body
     return body[: limit - 1] + "…"
+
+
+def _clip_text(text: str, limit: int) -> str:
+    """Keep a mapper-produced string inside its DTO limit without dropping it."""
+
+    cleaned = text.strip()
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[: limit - 1] + "…"
 
 
 def _knowledge_hit(hit: KnowledgeHit) -> KnowledgeHitOut:
@@ -424,4 +438,42 @@ def agent_trace_out(trace: AgentTrace) -> AgentTraceOut:
             steps_used=trace.limits.steps_used,
         ),
         notice=trace.notice,
+    )
+
+
+def coach_out(result: CoachResult) -> CoachOut:
+    """Map the application DTO to the wire shape.
+
+    Text is clipped to the schema's limits here rather than letting response
+    validation fail: the coach must always answer, even when a rule line is
+    slightly too long. ``not_claimed`` stays a list, never a single sentence.
+    """
+
+    return CoachOut(
+        version="0.1",
+        mode=result.mode,
+        focus=result.focus,
+        headline=_clip_text(result.headline, 160),
+        points=[
+            CoachPointOut(
+                kind=point.kind,
+                text=_clip_text(point.text, 200),
+                basis=_clip_text(point.basis, 64),
+            )
+            for point in result.points
+        ],
+        next_question=_clip_text(result.next_question, 200),
+        not_claimed=[_clip_text(item, 200) for item in result.not_claimed],
+        disclaimer=_clip_text(result.disclaimer, 320),
+    )
+
+
+def auth_user_out(user: AuthUser) -> AuthUserOut:
+    """Only the public account fields; digest and token are not reachable here."""
+
+    return AuthUserOut(
+        id=user.id,
+        email=user.email,
+        display_name=user.display_name,
+        created_at=user.created_at,
     )
