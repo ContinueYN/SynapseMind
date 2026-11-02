@@ -128,7 +128,7 @@ npm run generate:api
 
 学生点「我不同意」后，API 把卡面结论写入 `var/review.sqlite3`（本地文件，不入库）。两种复核方式：
 
-1. **教师复核页**：启动本地服务后打开 <http://localhost:3000/admin/review>。只读列表 + 逐条判断（准确 / 说得通但不对 / 空泛）+ 本机备注，导出 CSV。判断只存在浏览器 `localStorage`，不写回复核库；换机器或清站点数据会丢。
+1. **内部复核页**：启动本地服务后打开 <http://localhost:3000/admin/review>。只读列表 + 逐条判断（准确 / 说得通但不对 / 空泛）+ 本机备注，导出 CSV。判断只存在浏览器 `localStorage`，不写回复核库；换机器或清站点数据会丢。
 2. **命令行导出 Markdown**：
 
 ```powershell
@@ -136,4 +136,4 @@ python scripts/eval/review_queue.py
 python scripts/eval/review_queue.py --out eval/reports/review.md
 ```
 
-两种输出都不含学生原文；最后一列留给教师填写。当前是本地 SQLite 队列，没有鉴权，也没有审核状态。
+两种输出都不含学生原文；最后一列留给复核者填写。当前是本地 SQLite 队列，没有鉴权，也没有审核状态。

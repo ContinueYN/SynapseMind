@@ -1,6 +1,6 @@
 # apps/web
 
-Next.js 15 App Router + TypeScript。只做“一次诊断”的界面，不做课程商城、社区、家长端大屏。
+Next.js 15 App Router + TypeScript。只做“一次诊断”的界面，不做课程商城或社区。
 
 选型依据见 [ADR-0001](../../docs/adr/0001-language-and-code-architecture.md)。Web 只负责页面、交互与 API 调用；状态机、诊断、答案防护都在 `apps/api`，不在 Next.js Route Handler 里。
 
@@ -11,7 +11,7 @@ Next.js 15 App Router + TypeScript。只做“一次诊断”的界面，不做�
 | `/` | 交题：题目、答案、过程、卡在哪儿、自评 |
 | `/diagnose/[sessionId]` | 一次一问的追问；轮次树突、对话线、退出 |
 | `/card/[sessionId]` | 独立卡点卡：证据、排除项、置信度、下一练；可打印 |
-| `/admin/review` | 教师复核：只读异议队列、逐条判断、导出 CSV |
+| `/admin/review` | 内部复核：只读异议队列、逐条判断、导出 CSV |
 
 设计稿中还有 `/practice/[taskId]`、`/verify/[sessionId]`、`/q/[problemId]`，**M1 不建空页面**，等对应后端能力落地再加。`/admin/review` 先不加鉴权，是本机工具，不要对公网暴露。
 
@@ -25,7 +25,7 @@ apps/web/
 │  ├─ page.tsx                # 交题页；只负责创建会话与跳转
 │  ├─ diagnose/[sessionId]/   # 会话状态机的前端投影
 │  ├─ card/[sessionId]/       # 只读卡点卡页
-│  ├─ admin/review/           # 教师复核页：只读队列 + 人工判断 + CSV
+│  ├─ admin/review/           # 内部复核页：只读队列 + 人工判断 + CSV
 │  ├─ icon.svg                # 站点图标（突触标记）
 │  └─ styles/                 # tokens.css + surface.css
 ├─ components/
@@ -43,7 +43,7 @@ apps/web/
 │  ├─ Thread.tsx              # 已答轮次连成一条线
 │  ├─ DiagnosisCardView.tsx   # 卡点卡视图；“我不同意”写回会话
 │  ├─ KnowledgePanel.tsx      # 卡旁的出处知识卡；RAG 关闭/无命中/失败时隐藏
-│  ├─ ReviewBoard.tsx         # 教师复核：取队列、判断、导出
+│  ├─ ReviewBoard.tsx         # 内部复核：取队列、判断、导出
 │  └─ review-sheet.ts         # 复核纯逻辑：判断词表、CSV、本机草稿
 └─ src/lib/api/
    ├─ generated.ts            # openapi-typescript 从 FastAPI 契约生成，勿手改
@@ -61,8 +61,8 @@ apps/web/
 - 一次只显示一个主问题；选项不超过 4 个；键盘 `1–4` 直接作答。
 - “我还是不懂”永远可点，点了换更具体的问法，不重复原题。
 - “直接退出学习模式”是显式出口，需要二次确认；退出后不生成卡点卡。
-- 卡点卡上必须有“我不同意”：异议写回会话，同时写入本地复核库；教师复核页读同一队列，判断只存在浏览器里并导出 CSV。
-- 教师复核页只读：不提供写接口，不改变会话或卡点卡；判断存 `localStorage`，换机器或清站点数据就会丢。
+- 卡点卡上必须有“我不同意”：异议写回会话，同时写入本地复核库；内部复核页读同一队列，判断只存在浏览器里并导出 CSV。
+- 内部复核页只读：不提供写接口，不改变会话或卡点卡；判断存 `localStorage`，换机器或清站点数据就会丢。
 - 移动端优先；当前是文本输入，拍照上传在 M2。
 - 学习模式页面不出现最终答案，也不出现能力分数或等级。
 
@@ -84,7 +84,7 @@ npm install
 npm run dev        # http://localhost:3000
 npm run typecheck
 npm run lint
-npm test           # Vitest + jsdom：结构提示、交题表单、教师复核的组件回归
+npm test           # Vitest + jsdom：结构提示、交题表单、内部复核的组件回归
 npm run test:watch
 npm run build
 npm run generate:api   # 需要先生成 .tmp/openapi.json
@@ -106,7 +106,7 @@ NEXT_DIST_DIR=.next        # 可选：并行跑第二份产物时指向别的目
 ## 当前边界
 
 - 只支持一道种子题；换题由 API 返回 422，前端显示错误，不做假成功。
-- 会话默认在 API 内存里；`run.py` 会启用本地 SQLite 快照（`SYNAPSE_SESSION_DB`），API 重启后 `/diagnose/[id]` 仍可恢复。仍未接 PostgreSQL，也没有清理/TTL。
-- 教师复核页没有鉴权，队列只含卡面结论、不含学生原文；CSV 导出按浏览器本地时间命名。
+- 会话默认在 API 内存里；`run.py` 会启用本地 SQLite 快照（`SYNAPSE_SESSION_DB`），API 重启后 `/diagnose/[id]` 仍可恢复。账号、登录票据和加密的模型凭据在 PostgreSQL；诊断快照仍是 SQLite，没有自动 TTL。
+- 内部复核页没有鉴权，队列只含卡面结论、不含学生原文；CSV 导出按浏览器本地时间命名。
 - 历史记录只展示问答原话，不做完整时间线/回放。
 - 不用 Tailwind/组件库：设计令牌 + 语义 class 更少依赖、更好审。

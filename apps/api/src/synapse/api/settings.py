@@ -12,9 +12,10 @@ user A can never read or overwrite user B's credential. With ``SYNAPSE_AUTH=off`
 the endpoints answer 403: there is no account to attach a key to, and the local
 baseline keeps using the optional server key.
 
-Rotation note: these routes sit under ``/api/v1/settings``, which the async auth
-middleware treats like ``/api/v1/sessions`` — every call consumes the one-time
-cookie and the response carries its replacement.
+Ticket exchange: these routes sit under ``/api/v1/settings``, which the async
+auth middleware treats like ``/api/v1/sessions`` — presenting a login ticket
+consumes it and the response carries the ordinary session cookie; an ordinary
+session is reused without a new ``Set-Cookie``.
 """
 
 from __future__ import annotations
@@ -56,7 +57,7 @@ class SettingsContext:
 def get_settings_context(request: Request) -> SettingsContext:
     """The BYOK service plus the authenticated account.
 
-    The middleware has already rotated the cookie and stored the account on
+    The middleware has already authenticated the cookie and stored the account on
     ``request.state``. Without auth there is no account, so the endpoint is 403
     rather than pretending the server key is the user's.
     """

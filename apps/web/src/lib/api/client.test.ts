@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   ApiError,
@@ -13,6 +13,7 @@ import {
   requestCoach,
   SESSION_REUSED_EVENT,
   saveModelSettings,
+  searchKnowledge,
   testModelSettings,
 } from "./client";
 import type {
@@ -108,6 +109,12 @@ describe("auth client", () => {
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(init.method).toBe("POST");
     expect(init.credentials).toBe("include");
+  });
+
+  it("accepts an empty 205 response too", async () => {
+    stubFetch(reply(undefined, 205));
+
+    await expect(logoutAccount()).resolves.toBeUndefined();
   });
 
   it("surfaces the API detail string on a failed login", async () => {
@@ -224,12 +231,20 @@ describe("model settings client", () => {
   });
 });
 
-describe("authenticated request queue", () => {
+describe("login-ticket bootstrap", () => {
+  beforeEach(async () => {
+    // A protected response spends any ticket an earlier test left pending, so
+    // every test starts with an open gate.
+    stubFetch(reply(OWNER));
+    await getMe();
+    vi.unstubAllGlobals();
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it("starts the second concurrent call only after the first one resolves", async () => {
+  it("lets ordinary authenticated calls overlap once no ticket is pending", async () => {
     const first = deferred<Response>();
     const second = deferred<Response>();
     const order: string[] = [];
@@ -254,22 +269,145 @@ describe("authenticated request queue", () => {
       return user;
     });
 
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    // Both fetches leave immediately; neither waits for the other response.
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(order).toEqual(["first:start", "second:start"]);
+
+    first.resolve(reply(OWNER));
+    second.resolve(reply(OWNER));
+    await Promise.all([firstCall, secondCall]);
+
+    expect(order.slice(0, 2)).toEqual(["first:start", "second:start"]);
+    expect(order).toContain("first:done");
+    expect(order).toContain("second:done");
+  });
+
+  it("serializes protected calls until the first post-login response spends the ticket", async () => {
+    const first = deferred<Response>();
+    const second = deferred<Response>();
+    const third = deferred<Response>();
+    const order: string[] = [];
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(reply(OWNER)) // login
+      .mockImplementationOnce(() => {
+        order.push("first:start");
+        return first.promise;
+      })
+      .mockImplementationOnce(() => {
+        order.push("second:start");
+        return second.promise;
+      })
+      .mockImplementationOnce(() => {
+        order.push("third:start");
+        return third.promise;
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      loginAccount({ email: OWNER.email, password: "password123" }),
+    ).resolves.toEqual(OWNER);
+
+    const firstCall = getMe().then((user) => {
+      order.push("first:done");
+      return user;
+    });
+    const secondCall = getModelSettings().then((settings) => {
+      order.push("second:done");
+      return settings;
+    });
+
+    // Only one ticket-consuming request is in flight before the first response.
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(order).toEqual(["first:start"]);
 
     first.resolve(reply(OWNER));
     await firstCall;
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
     expect(order).toEqual(["first:start", "first:done", "second:start"]);
 
-    second.resolve(reply(OWNER));
-    await secondCall;
+    // The first response spent the ticket, so a new protected call is not held
+    // behind the still-pending second one.
+    const thirdCall = getMe().then((user) => {
+      order.push("third:done");
+      return user;
+    });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
     expect(order).toEqual([
       "first:start",
       "first:done",
       "second:start",
-      "second:done",
+      "third:start",
     ]);
+
+    second.resolve(reply(SETTINGS));
+    third.resolve(reply(OWNER));
+    await secondCall;
+    await thirdCall;
+  });
+
+  it("never serializes public calls and never lets them spend the ticket", async () => {
+    const publicCall = deferred<Response>();
+    const firstProtected = deferred<Response>();
+    const secondProtected = deferred<Response>();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(reply(OWNER)) // login
+      .mockImplementationOnce(() => publicCall.promise)
+      .mockImplementationOnce(() => firstProtected.promise)
+      .mockImplementationOnce(() => secondProtected.promise);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await loginAccount({ email: OWNER.email, password: "password123" });
+
+    // A public call leaves immediately even while the ticket is pending.
+    const knowledge = searchKnowledge("递归");
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+    publicCall.resolve(reply({}));
+    await knowledge;
+
+    // Its response must not open the gate: the two protected calls below still
+    // run one at a time.
+    const protectedFirst = getMe();
+    const protectedSecond = getModelSettings();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+
+    firstProtected.resolve(reply(OWNER));
+    await protectedFirst;
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
+
+    secondProtected.resolve(reply(SETTINGS));
+    await protectedSecond;
+  });
+
+  it("keeps the gate armed when a protected fetch fails before any response", async () => {
+    const retry = deferred<Response>();
+    const second = deferred<Response>();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(reply(OWNER)) // login
+      .mockRejectedValueOnce(new Error("network down")) // getMe, no response
+      .mockImplementationOnce(() => retry.promise)
+      .mockImplementationOnce(() => second.promise);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await loginAccount({ email: OWNER.email, password: "password123" });
+    await expect(getMe()).rejects.toMatchObject({ status: 0 });
+
+    // The failed call never reached the server, so the ticket may still be
+    // valid: the next two protected calls remain serialized.
+    const retried = getMe();
+    const concurrent = getModelSettings();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+
+    retry.resolve(reply(OWNER));
+    await retried;
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
+
+    second.resolve(reply(SETTINGS));
+    await concurrent;
   });
 });
 
@@ -278,7 +416,7 @@ describe("session reuse", () => {
     vi.unstubAllGlobals();
   });
 
-  it("flags a replayed-cookie 401 and tells the account UI", async () => {
+  it("flags a replayed login-ticket 401 and tells the account UI", async () => {
     stubFetch(reply({ detail: "会话被复用，已强制退出。" }, 401));
     const listener = vi.fn();
     window.addEventListener(SESSION_REUSED_EVENT, listener);
@@ -290,5 +428,24 @@ describe("session reuse", () => {
     } finally {
       window.removeEventListener(SESSION_REUSED_EVENT, listener);
     }
+  });
+});
+
+describe("API_BASE", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("keeps an explicit empty value as same-origin and strips a trailing slash", async () => {
+    vi.resetModules();
+    vi.stubEnv("NEXT_PUBLIC_API_BASE", "https://api.example.test/");
+    const absolute = await import("./client");
+    expect(absolute.API_BASE).toBe("https://api.example.test");
+
+    vi.resetModules();
+    vi.stubEnv("NEXT_PUBLIC_API_BASE", "");
+    const sameOrigin = await import("./client");
+    expect(sameOrigin.API_BASE).toBe("");
   });
 });

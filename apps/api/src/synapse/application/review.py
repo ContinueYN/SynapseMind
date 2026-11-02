@@ -48,7 +48,7 @@ class ReviewService:
     """Read-only listing of the disagreement queue.
 
     The queue is written by ``SessionService.mark_card_disagree``. This service
-    only reads it, so the teacher page cannot change a session or a card by
+    only reads it, so the review page cannot change a session or a card by
     accident: there is no write method to call.
     """
 

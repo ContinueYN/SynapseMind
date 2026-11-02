@@ -10,13 +10,15 @@ a missing migration (or an unreachable database) becomes a 503 with a migration
 hint instead of an opaque 500. Redis failures do the same.
 
 Only digests are stored: a leaked ``auth_sessions`` table cannot be replayed as
-a cookie. Consumption is atomic in both adapters, because the cookie is a
-one-time credential:
+a cookie. Consumption is atomic because a login ticket is a one-time credential;
+an ordinary session is read with the non-mutating ``lookup`` instead:
 
-* SQL: a conditional ``UPDATE ... WHERE used_at IS NULL``; a losing racer sees
-  ``rowcount == 0`` and is told the token was already used.
-* Redis: ``GETDEL`` removes the live key and the adapter writes a ``used:<sha>``
+* SQL: ``consume`` uses a conditional ``UPDATE ... WHERE used_at IS NULL``; a
+  losing racer sees ``rowcount == 0`` and is told the token was already used.
+  ``lookup`` is a plain select and never writes.
+* Redis: ``consume`` uses ``GETDEL`` and the adapter writes a ``used:<sha>``
   tombstone, so a replay is distinguishable from a token that never existed.
+  ``lookup`` uses ``GET`` and leaves the live key in place.
   A family-revocation key closes every token of a chain at once.
 """
 
@@ -114,7 +116,11 @@ class SqlUserStore:
 
 
 class SqlSessionTokenStore:
-    """Default token store: one row per issued cookie, consumed exactly once."""
+    """Default token store: one row per issued cookie.
+
+    Login-ticket rows are consumed exactly once; ordinary-session rows are only
+    ever read by ``lookup`` and stay reusable until revoked or expired.
+    """
 
     def __init__(self, sessions: sessionmaker[Session]) -> None:
         self._sessions = sessions
@@ -144,7 +150,7 @@ class SqlSessionTokenStore:
             raise AuthStoreUnavailable(_STORE_HINT) from exc
 
     def consume(self, token_hash: str, *, now: datetime) -> TokenState:
-        """Atomically spend one digest.
+        """Atomically spend one digest (the login-ticket path).
 
         The read is only used to describe the outcome; the authoritative step is
         the conditional update. Two concurrent requests cannot both see
@@ -187,6 +193,19 @@ class SqlSessionTokenStore:
         except SQLAlchemyError as exc:
             raise AuthStoreUnavailable(_STORE_HINT) from exc
 
+    def lookup(self, token_hash: str, *, now: datetime) -> TokenState:
+        """Read one digest without spending it (the ordinary-session path)."""
+
+        del now  # expiry is enforced by the use case, not by this read
+        try:
+            with self._sessions() as session:
+                row: AuthSessionRow | None = session.scalar(
+                    select(AuthSessionRow).where(AuthSessionRow.token_hash == token_hash)
+                )
+        except SQLAlchemyError as exc:
+            raise AuthStoreUnavailable(_STORE_HINT) from exc
+        return TokenState.unknown() if row is None else _state_for(row)
+
     def revoke_family(self, family_id: str, *, now: datetime) -> None:
         try:
             with self._sessions() as session:
@@ -207,10 +226,13 @@ class SqlSessionTokenStore:
 def _state_for(row: AuthSessionRow) -> TokenState:
     expires_at = as_utc(row.expires_at)
     status: TokenStatus
-    if row.revoked_at is not None:
-        status = "revoked"
-    elif row.used_at is not None:
+    # ``used`` wins over ``revoked``: replaying a consumed login ticket is the
+    # theft signal even when the family was already closed (logout). Ordinary
+    # rows are never consumed, so they still report their revocation here.
+    if row.used_at is not None:
         status = "used"
+    elif row.revoked_at is not None:
+        status = "revoked"
     else:
         status = "active"
     return TokenState(
@@ -274,6 +296,7 @@ class RedisSessionTokenStore:
             raise AuthStoreUnavailable(_REDIS_HINT) from exc
 
     def consume(self, token_hash: str, *, now: datetime) -> TokenState:
+        del now  # the Redis TTL and the payload expiry bound the value
         try:
             raw = self._client.getdel(self._key(token_hash))
             if raw is None:
@@ -283,32 +306,40 @@ class RedisSessionTokenStore:
                 state = _parse(tombstone)
                 if state is None:
                     return TokenState.unknown()
-                return TokenState(
-                    status="used",
-                    user_id=state.user_id,
-                    family_id=state.family_id,
-                    expires_at=state.expires_at,
-                )
+                return _payload_state(state, "used")
             state = _parse(raw)
             if state is None:
                 return TokenState.unknown()
             if self._family_revoked(state.family_id):
-                return TokenState(
-                    status="revoked",
-                    user_id=state.user_id,
-                    family_id=state.family_id,
-                    expires_at=state.expires_at,
-                )
+                return _payload_state(state, "revoked")
             # Write the tombstone before reporting active: a second request then
             # sees ``used`` instead of ``unknown``. Both outcomes are a 401, but
             # only the tombstone can raise the theft alarm.
             self._client.set(self._used_key(token_hash), _raw_text(raw), ex=self._ttl_s)
-            return TokenState(
-                status="active",
-                user_id=state.user_id,
-                family_id=state.family_id,
-                expires_at=state.expires_at,
-            )
+            return _payload_state(state, "active")
+        except RedisError as exc:
+            raise AuthStoreUnavailable(_REDIS_HINT) from exc
+
+    def lookup(self, token_hash: str, *, now: datetime) -> TokenState:
+        """Read one digest without removing it (the ordinary-session path)."""
+
+        del now  # expiry is enforced by the use case
+        try:
+            raw = self._client.get(self._key(token_hash))
+            if raw is None:
+                tombstone = self._client.get(self._used_key(token_hash))
+                if tombstone is None:
+                    return TokenState.unknown()
+                state = _parse(tombstone)
+                if state is None:
+                    return TokenState.unknown()
+                return _payload_state(state, "used")
+            state = _parse(raw)
+            if state is None:
+                return TokenState.unknown()
+            if self._family_revoked(state.family_id):
+                return _payload_state(state, "revoked")
+            return _payload_state(state, "active")
         except RedisError as exc:
             raise AuthStoreUnavailable(_REDIS_HINT) from exc
 
@@ -341,6 +372,15 @@ class _Payload:
         self.user_id = user_id
         self.family_id = family_id
         self.expires_at = expires_at
+
+
+def _payload_state(payload: _Payload, status: TokenStatus) -> TokenState:
+    return TokenState(
+        status=status,
+        user_id=payload.user_id,
+        family_id=payload.family_id,
+        expires_at=payload.expires_at,
+    )
 
 
 def _raw_text(raw: str | bytes) -> str:

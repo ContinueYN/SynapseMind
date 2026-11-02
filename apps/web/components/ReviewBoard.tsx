@@ -18,7 +18,7 @@ import { API_BASE, listReviewItems } from "@/src/lib/api/client";
 import type { ReviewItem } from "@/src/lib/api/types";
 
 /**
- * 教师复核页。
+ * 内部复核页。
  *
  * 只做三件事：读队列、逐条标记、导出 CSV。队列是只读的，判断存在本机
  * 浏览器里，不写回复核库；服务端没有鉴权，所以这一页是本机工具，不是
@@ -138,7 +138,7 @@ export function ReviewBoard() {
         <Plane className="sm-review-hero">
           <p className="sm-eyebrow">
             <span aria-hidden="true" className="sm-dot" />
-            教师复核 · 本机工具
+            内部复核 · 本机工具
           </p>
           <h1 className="sm-h1">正在读异议队列。</h1>
           <p className="sm-p">只读；不会改动任何会话或卡点卡。</p>
@@ -152,7 +152,7 @@ export function ReviewBoard() {
       <Plane className="sm-review-hero">
         <p className="sm-eyebrow">
           <span aria-hidden="true" className="sm-dot" />
-          教师复核 · 本机工具
+          内部复核 · 本机工具
         </p>
 
         <h1 className="sm-h1">只看卡面，不看原文。</h1>

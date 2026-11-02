@@ -1,6 +1,6 @@
 """Account and session use cases for a self-hosted, multi-user deployment.
 
-There are no roles, tenants or classrooms here: every registered account gets
+There are no role or tenant tables here: every registered account gets
 its own isolated workspace (see ``SessionService.with_owner``). Registration is
 open when ``SYNAPSE_AUTH_ALLOW_SIGNUP=on``; when it is off the deployment keeps
 the original "first registration wins, later ones get 409" policy so a personal
@@ -15,18 +15,22 @@ Three boundaries this module keeps:
 * Raw secrets never reach a store. Passwords arrive as KDF digests; session
   tokens are stored as SHA-256 digests, so a database read cannot be replayed
   as a cookie.
-* Session cookies are **one-time**: ``rotate`` consumes the presented token
-  atomically and issues a new one in the same family. A consumed token can never
-  authenticate again. Presenting one is treated as theft and revokes the whole
-  family.
+* A cookie is either a **one-time login ticket** (``L_…``) or an **ordinary
+  session** (``S_…``). Register/login issue a ticket; the first authenticated
+  request consumes it atomically and mints an ordinary session in the same
+  family. Presenting a consumed ticket again is the theft signal and revokes
+  the whole family, while an ordinary session is looked up in place and reused
+  until logout/expiry — it is never consumed per request. Legacy unprefixed
+  cookies are treated as ordinary sessions.
 * Expiry is checked here, not only in the store, so a token store that forgets
   its TTL (or a SQL row read after the fact) still cannot authenticate.
 
 The "first registration wins" rule is a plain user count, not a transaction
 lock: two simultaneous first registrations with *different* e-mails could both
-pass when signup is off. That is acceptable for a single-owner instance and is
-recorded as a follow-up rather than hidden behind a fake invitation flow. With
-``allow_signup=True`` the count is not consulted at all.
+pass when signup is off. That is acceptable when signup is deliberately closed
+and only the operator registers, and is recorded as a follow-up rather than
+hidden behind a fake invitation flow. With ``allow_signup=True`` the count is
+not consulted at all.
 """
 
 from __future__ import annotations
@@ -134,13 +138,31 @@ class IssuedSession:
 
 
 @dataclass(frozen=True, slots=True)
-class RotatedSession:
-    """The replacement cookie produced by consuming an older one."""
+class AuthenticatedSession:
+    """The account behind a presented cookie, plus an optional replacement.
 
-    token: str
-    expires_at: datetime
+    ``replacement_token`` is set only when a one-time login ticket was consumed
+    and exchanged for an ordinary session. An ordinary cookie authenticates in
+    place: it returns no replacement, so the API must not send ``Set-Cookie``.
+    """
+
     user: AuthUser
     family_id: str
+    replacement_token: str | None = None
+
+
+# Login tickets are single-use; ordinary sessions are reused until logout/TTL.
+# Stores only ever see SHA-256 digests, so the prefix costs no schema change.
+LOGIN_TICKET_PREFIX = "L_"
+SESSION_PREFIX = "S_"
+
+
+def _is_login_ticket(token: str) -> bool:
+    return token.startswith(LOGIN_TICKET_PREFIX)
+
+
+def _new_token(prefix: str) -> str:
+    return f"{prefix}{secrets.token_urlsafe(32)}"
 
 
 def hash_session_token(token: str) -> str:
@@ -150,7 +172,7 @@ def hash_session_token(token: str) -> str:
 
 
 def new_family_id() -> str:
-    """A stable identifier for one login's chain of rotated tokens."""
+    """A stable identifier for one login's token family."""
 
     return f"F_{uuid4().hex}"
 
@@ -189,11 +211,13 @@ class UserStore(Protocol):
 
 
 class SessionTokenStore(Protocol):
-    """One-time session tokens: SQL rows or Redis keys with a native TTL.
+    """Session-token records: SQL rows or Redis keys with a native TTL.
 
-    ``consume`` must be atomic: two concurrent calls for the same digest may not
-    both return ``active``. The SQL adapter relies on a conditional ``UPDATE``;
-    the Redis adapter uses ``GETDEL`` plus a tombstone.
+    ``lookup`` is read-only and is the ordinary-session path. ``consume`` must
+    be atomic and is used only for one-time login tickets (and store-level race
+    tests): two concurrent calls for the same digest may not both return
+    ``active``. The SQL adapter relies on a conditional ``UPDATE``; the Redis
+    adapter uses ``GETDEL`` plus a tombstone.
     """
 
     def issue(
@@ -208,11 +232,13 @@ class SessionTokenStore(Protocol):
 
     def consume(self, token_hash: str, *, now: datetime) -> TokenState: ...
 
+    def lookup(self, token_hash: str, *, now: datetime) -> TokenState: ...
+
     def revoke_family(self, family_id: str, *, now: datetime) -> None: ...
 
 
 class AuthService:
-    """Register/login/logout plus one-time cookie rotation."""
+    """Register/login/logout plus the login-ticket exchange."""
 
     def __init__(
         self,
@@ -253,7 +279,12 @@ class AuthService:
             password_hash=self._hasher.hash(password),
             created_at=now,
         )
-        return self._issue(record, now, family_id=new_family_id())
+        return self._issue(
+            record,
+            now,
+            family_id=new_family_id(),
+            prefix=LOGIN_TICKET_PREFIX,
+        )
 
     def login(self, *, email: str, password: str) -> IssuedSession:
         record = self._users.find_by_email(normalize_email(email))
@@ -263,46 +294,65 @@ class AuthService:
             raise InvalidCredentials("邮箱或密码不正确。")
         if not self._hasher.verify(record.password_hash, password):
             raise InvalidCredentials("邮箱或密码不正确。")
-        return self._issue(record, self._clock(), family_id=new_family_id())
+        return self._issue(
+            record,
+            self._clock(),
+            family_id=new_family_id(),
+            prefix=LOGIN_TICKET_PREFIX,
+        )
 
     def logout(self, token: str | None) -> None:
         """Revoke the whole family behind a cookie; blank input is a no-op.
 
-        The presented digest is consumed first so logout is not a way to keep a
-        session alive, then every token in its family is revoked. An unknown or
-        already-spent cookie is still a successful no-op: a client must always be
-        able to clean its jar.
+        A lookup (not a consume) is enough: logout must never raise the reuse
+        alarm, and revoking the family closes both an unspent login ticket and
+        an ordinary session. An unknown or already-revoked cookie is a
+        successful no-op so a client can always clean its jar.
         """
 
         if not token:
             return
         now = self._clock()
-        state = self._tokens.consume(hash_session_token(token), now=now)
+        state = self._tokens.lookup(hash_session_token(token), now=now)
         if state.family_id is not None:
             self._tokens.revoke_family(state.family_id, now=now)
 
-    def rotate(self, token: str | None) -> RotatedSession | None:
-        """Consume one cookie and issue its replacement.
+    def authenticate(self, token: str | None) -> AuthenticatedSession | None:
+        """Resolve one presented cookie.
 
-        ``None`` means "not logged in": missing, unknown, revoked or expired.
-        A digest that was already consumed raises :class:`SessionReuseDetected`
-        after the whole family has been revoked — that is the theft signal, and
-        the caller is expected to clear the cookie and answer 401.
+        ``None`` means "not logged in": missing, unknown, revoked, spent by a
+        non-ticket path or expired. A login ticket is consumed exactly once; its
+        first use mints an ordinary session in the same family. Presenting an
+        already-consumed ticket raises :class:`SessionReuseDetected` after the
+        whole family has been revoked — that is the theft signal. An ordinary
+        session is looked up in place and never consumed, so reusing it is not
+        detectable and simply keeps authenticating.
         """
 
         if not token:
             return None
         now = self._clock()
-        state = self._tokens.consume(hash_session_token(token), now=now)
+        token_hash = hash_session_token(token)
+        is_ticket = _is_login_ticket(token)
+        state = (
+            self._tokens.consume(token_hash, now=now)
+            if is_ticket
+            else self._tokens.lookup(token_hash, now=now)
+        )
 
         if state.status == "used":
-            family_id = state.family_id
-            if family_id is not None:
-                self._tokens.revoke_family(family_id, now=now)
-            raise SessionReuseDetected(
-                "检测到会话被复用，已强制下线，请重新登录。",
-                family_id=family_id,
-            )
+            if is_ticket:
+                family_id = state.family_id
+                if family_id is not None:
+                    self._tokens.revoke_family(family_id, now=now)
+                raise SessionReuseDetected(
+                    "检测到会话被复用，已强制下线，请重新登录。",
+                    family_id=family_id,
+                )
+            # An ordinary cookie is never consumed; ``used`` can only be a
+            # legacy row from the old per-request rotation. Fail closed without
+            # accusing the browser of theft.
+            return None
         if state.status in {"unknown", "revoked"}:
             return None
         if state.user_id is None or state.expires_at is None:
@@ -322,16 +372,29 @@ class AuthService:
         # store that somehow lost it starts a fresh family instead of sharing
         # one with an unrelated token.
         family_id = state.family_id or new_family_id()
-        issued = self._issue(user, now, family_id=family_id)
-        return RotatedSession(
-            token=issued.token,
-            expires_at=issued.expires_at,
+        if not is_ticket:
+            return AuthenticatedSession(user=_to_auth_user(user), family_id=family_id)
+        issued = self._issue(
+            user,
+            now,
+            family_id=family_id,
+            prefix=SESSION_PREFIX,
+        )
+        return AuthenticatedSession(
             user=issued.user,
             family_id=family_id,
+            replacement_token=issued.token,
         )
 
-    def _issue(self, record: UserRecord, now: datetime, *, family_id: str) -> IssuedSession:
-        token = secrets.token_urlsafe(32)
+    def _issue(
+        self,
+        record: UserRecord,
+        now: datetime,
+        *,
+        family_id: str,
+        prefix: str,
+    ) -> IssuedSession:
+        token = _new_token(prefix)
         expires_at = now + timedelta(seconds=self._session_ttl_s)
         self._tokens.issue(
             token_hash=hash_session_token(token),
@@ -343,11 +406,15 @@ class AuthService:
         return IssuedSession(
             token=token,
             expires_at=expires_at,
-            user=AuthUser(
-                id=record.id,
-                email=record.email,
-                display_name=record.display_name,
-                created_at=record.created_at,
-            ),
+            user=_to_auth_user(record),
             family_id=family_id,
         )
+
+
+def _to_auth_user(record: UserRecord) -> AuthUser:
+    return AuthUser(
+        id=record.id,
+        email=record.email,
+        display_name=record.display_name,
+        created_at=record.created_at,
+    )

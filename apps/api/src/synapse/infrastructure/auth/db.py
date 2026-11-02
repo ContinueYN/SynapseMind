@@ -49,10 +49,11 @@ class UserRow(Base):
 class AuthSessionRow(Base):
     """Server-side half of the cookie, stored as a SHA-256 token digest.
 
-    ``family_id`` groups every token produced by one login's rotation chain;
-    revoking it (logout or reuse detection) logs that browser out everywhere.
-    ``used_at`` is the one-time marker: a non-null value means the digest was
-    already spent and presenting it again is treated as session theft.
+    ``family_id`` groups the one-time login ticket and the ordinary session it
+    was exchanged for; revoking it (logout or reuse detection) logs that browser
+    out everywhere. ``used_at`` marks a consumed login ticket: a non-null value
+    means the digest was already spent and presenting it again is treated as
+    session theft. Ordinary sessions stay unspent and are read with a lookup.
     """
 
     __tablename__ = "auth_sessions"

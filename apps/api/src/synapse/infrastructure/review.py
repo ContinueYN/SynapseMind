@@ -1,8 +1,8 @@
 """Local, durable review queue.
 
 SQLite is deliberate: one file under ``var/`` (ignored), no server, no
-migration framework. It is enough to make a teacher review pass possible before
-the product has PostgreSQL and authentication.
+migration framework. It is enough for a local review pass; the review queue
+stays local while accounts and credentials live in the auth database.
 """
 
 from __future__ import annotations

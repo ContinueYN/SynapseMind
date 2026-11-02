@@ -77,7 +77,7 @@ docker compose -f infra/compose.yaml config --quiet
 
 > `NEXT_PUBLIC_*` 是**构建期**内联的：改 `NEXT_PUBLIC_API_BASE` 必须 `docker compose -f infra/compose.yaml build web` 重新构建，改运行时环境变量不会生效。
 
-## 多账号、BYOK 与一次性会话
+## 多账号、BYOK 与一次性登录票据
 
 **注册**：`SYNAPSE_AUTH_ALLOW_SIGNUP=on` 时 `/api/v1/auth/register` 对所有人开放；每个账号的会话、快照和模型 key 互相隔离（拿别人的 session id 只会得到 404）。设成 `off` 就回到旧策略：只有第一个账号能注册。
 
@@ -92,7 +92,7 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 - 换成另一个主密钥不会自动重加密：已保存的行会变成“无法解密”，设置页显示 `configured=false` + 警告，用户重新保存一次即可；**丢主密钥等于所有用户要重填 key**，这是刻意的（明文不落库）。
 - 用户 key 只在调用模型时短暂解密，随请求结束丢弃；API 从不回传 key，只回传 `key_last4`。
 
-**一次性会话 cookie**：`synapse_session` 每访问一次 `/api/v1/sessions/*` 或 `/api/v1/settings/*` 就被消费并换发新值，旧值再出现会被判定为复用（可能是被窃取），服务端会撤销**整条会话链**并让用户重新登录。因此同一个浏览器标签页里不要并发发多个认证请求：前端要串行化（single-flight），否则第二个请求会带着刚被消费的 cookie，看起来就像被盗。刷新页面不会丢登录，因为响应已经把新 cookie 写回。`SYNAPSE_AUTH_SESSION_TTL_S` 是整条链的硬过期（默认 7 天）。
+**一次性登录票据**：登录/注册成功时，`synapse_session` 里放的是一次性登录票据（服务端只存哈希）；第一个受保护请求（`/auth/me`、`/api/v1/sessions/*` 或 `/api/v1/settings/*`）消费它并换发普通会话 cookie。之后同一个普通 cookie 反复使用，不再轮转，也不会因为并发认证请求被判成复用——标签页里正常并发请求是安全的。已经消费过的**登录票据**再次出现才会被判定为复用（可能是被窃取），服务端会撤销整条 token family 并让用户重新登录；普通会话只在 logout、过期或显式撤销时失效。`SYNAPSE_AUTH_SESSION_TTL_S` 是整条链的硬过期（默认 7 天）。
 
 **诊断数据仍在 SQLite**：`/data/synapse.sqlite3` 存会话快照（含学生作答原文），`/data/review.sqlite3` 存复核队列；Postgres 只放账号、会话 token 的哈希和加密后的模型 key。
 
@@ -208,7 +208,7 @@ docker compose -f infra/compose.yaml exec -u root api chown 10001:10001 /data/sy
 - **单机、单实例**：SQLite 仍是单写者；多副本时 API 的 revision CAS 只保证不丢更新，不保证吞吐。
 - **没有完整 Postgres 迁移**：Postgres 目前只有账号、会话链和加密后的模型 key；诊断会话、复核队列、生成题仍是 `/data` 上的 SQLite 文件。
 - **主密钥只有一把**：`SYNAPSE_CREDENTIAL_KEY` 同时加密所有用户的 key，不做轮换/多版本；换值后已保存的行无法解密（设置页显示未配置，用户重填即可），丢了也只能重填。没有 KMS 或硬件密钥。
-- **会话是单飞（single-flight）的**：同一浏览器并发发认证请求时，第二个请求会带着刚被消费的 cookie，被判成复用并强制下线；这是安全代价，不是 bug。
+- **只有登录票据是一次性的**：登录后的首个受保护请求消费票据并换发普通会话；普通会话可并发复用，不会因为并发被强制下线。复用已消费的登录票据才会撤销整条 token family。
 - 没有 worker / 后台 TTL / 对象存储 / OCR / pgvector 检索；RAG 默认关，开了还会在容器里下模型（默认 `~/.cache`，重启即失）。
 - 没有自动备份、监控、日志采集；`json-file` 日志按 10 MB × 3 轮转。
 - healthcheck 用 `/api/v1/health`，并**故意把 401/403 当作存活**（auth 开启时会话路由会要求登录）；这只证明进程在服务，不证明鉴权配置正确。

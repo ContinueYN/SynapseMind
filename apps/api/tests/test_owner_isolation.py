@@ -1,8 +1,9 @@
 """Owner isolation: one workspace per account, 404 for everybody else.
 
 The service binds an owner per request and every load goes through one check.
-These tests drive the real app (gate, rotation, SQLite persistence) so a
-regression in the wiring, not only in the domain object, is caught.
+These tests drive the real app (gate, login-ticket exchange, SQLite
+persistence) so a regression in the wiring, not only in the domain object, is
+caught.
 
 A session that has no owner (a row written before ownership existed, or one
 created with auth off) is deliberately **not** shared: under auth it is visible

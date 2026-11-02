@@ -4,9 +4,9 @@ Revision ID: 0001_auth
 Revises:
 Create Date: 2026-11-02
 
-This is the whole schema for a self-hosted single-owner deployment. There are no
-tenant, role or classroom tables on purpose: one instance has one owner account,
-plus any account the operator explicitly allows.
+This is the whole account schema for a self-hosted multi-account deployment.
+There are no tenant or role tables on purpose: each registered account owns its
+own workspace, and the operator controls whether signup is open.
 
 Dialect notes:
 

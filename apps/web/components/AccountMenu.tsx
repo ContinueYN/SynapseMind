@@ -92,7 +92,7 @@ export function AccountMenu() {
   }, [pathname]);
 
   useEffect(() => {
-    // A rotated cookie was replayed somewhere else in the app. Drop the
+    // A one-time login ticket was replayed somewhere else in the app. Drop the
     // identity immediately instead of waiting for the next /auth/me.
     function clearAccount() {
       if (!pathname || pathname === "/login" || pathname.startsWith("/login/")) {

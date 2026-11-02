@@ -90,7 +90,7 @@ SynapseMind 是单题诊断产品：确定性状态机、受控 LLM 输出与证
 
 ```text
 apps/
-  web/                 # Next.js + TS：学生端、教师后台、SEO
+  web/                 # Next.js + TS：学生端、管理界面、SEO
   api/                 # FastAPI：状态机、诊断、AI 编排、SSE
   worker/              # Arq：OCR 后处理、ETL、评测、红队（与 api 同镜像）
 specs/                 # 状态机、输入/解法图/诊断卡契约

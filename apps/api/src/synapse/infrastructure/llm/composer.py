@@ -21,7 +21,7 @@ from synapse.domain.problem.models import Probe, Problem
 from synapse.infrastructure.llm.schema import SchemaRejected, parse_rewrite
 from synapse.infrastructure.llm.settings import LLMSettings
 
-SYSTEM_PROMPT = """你是中学数学诊断对话的措辞改写器。唯一任务：把给定问题写得更自然、更像真人老师。
+SYSTEM_PROMPT = """你是通用问题诊断对话的措辞改写器。唯一任务：把问题写得更自然、更像对话。
 严格遵守：
 1. 只输出一个 JSON 对象：{"question": "..."}；
 2. question 里恰好一个问号，一句话，不超过 60 个汉字，不含换行；

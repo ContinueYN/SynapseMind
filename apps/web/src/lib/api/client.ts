@@ -58,10 +58,10 @@ export function isUnauthorized(error: unknown): error is ApiError {
 }
 
 /**
- * The server rotates `synapse_session` on every authenticated request and
- * rejects a cookie it has already seen: that is the session-theft signal, not
- * an ordinary expired login. The caller must drop account state and send the
- * user back through `/login?reason=session_reused`.
+ * The server rejects a login ticket it has already exchanged: replaying the
+ * one-time ticket is the session-theft signal, not an ordinary expired login.
+ * The caller must drop account state and send the user back through
+ * `/login?reason=session_reused`.
  */
 export const SESSION_REUSED_EVENT = "synapse:session-reused";
 
@@ -92,22 +92,56 @@ export function isAuthDisabled(error: unknown): error is ApiError {
 }
 
 /**
- * The session cookie rotates on every authenticated response. If two browser
- * requests leave at the same time, the second one still carries the cookie the
- * first response is about to invalidate; the server then reads that as a
- * replayed cookie and signs the user out. Keeping one module-level chain means
- * a request only starts after the previous response (and its Set-Cookie) has
- * been fully handled.
+ * Login and register hand out a one-time ticket, not a long-lived cookie that
+ * rotates per request. The first authenticated request exchanges that ticket
+ * for an ordinary session cookie; from then on the cookie is stable and every
+ * later request just carries it.
  *
- * The rejection handler is the same task on purpose: a failed request must not
- * reject the chain and silently skip every later call. `current` still rejects
- * for the caller, so error values are preserved.
+ * Only the short window between login and that first exchange needs any
+ * coordination: if two protected requests left at once, both would present the
+ * same ticket and the server would read the second one as a replay. So we set
+ * `bootstrapPending` after a successful login/register and serialize just the
+ * calls that can spend the ticket (`/auth/me`, `/sessions...`, `/settings...`).
+ * Public calls are never serialized, and once the ticket is spent every call
+ * runs normally and in parallel again.
+ *
+ * The flag is cleared as soon as any protected-path response arrives, including
+ * an error response: the response proves the ticket has been presented and
+ * consumed (or rejected). A transport failure before any response deliberately
+ * leaves it set, because the request never reached the server and a retry may
+ * still consume the same valid ticket.
+ *
+ * `bootstrapEpoch` guards the re-login case: a response belonging to an older
+ * login must not clear the gate that a newer login just armed.
  */
-let credentialQueue: Promise<unknown> = Promise.resolve();
+let bootstrapPending = false;
+let bootstrapEpoch = 0;
+let bootstrapQueue: Promise<unknown> = Promise.resolve();
 
-function serializeAuthenticated<T>(task: () => Promise<T>): Promise<T> {
-  const current = credentialQueue.then(task, task);
-  credentialQueue = current.then(
+const BOOTSTRAP_PATHS = ["/api/v1/auth/me", "/api/v1/sessions", "/api/v1/settings"];
+
+function canSpendLoginTicket(path: string): boolean {
+  const pathname = path.split("?")[0];
+  return BOOTSTRAP_PATHS.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
+
+function armBootstrap(): void {
+  bootstrapPending = true;
+  bootstrapEpoch += 1;
+}
+
+function settleBootstrap(epoch: number): void {
+  if (epoch === bootstrapEpoch) bootstrapPending = false;
+}
+
+function serializeBootstrap<T>(task: () => Promise<T>): Promise<T> {
+  // The rejection handler is the same task on purpose: a failed request must not
+  // reject the chain and silently skip every later call. `current` still rejects
+  // for the caller, so error values are preserved.
+  const current = bootstrapQueue.then(task, task);
+  bootstrapQueue = current.then(
     () => undefined,
     () => undefined,
   );
@@ -115,13 +149,15 @@ function serializeAuthenticated<T>(task: () => Promise<T>): Promise<T> {
 }
 
 async function performRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const epochWhenSent = canSpendLoginTicket(path) ? bootstrapEpoch : null;
   let response: Response;
   try {
     response = await fetch(`${API_BASE}${path}`, {
       ...init,
-      // The session cookie is HttpOnly and SameSite=Lax. Sending it on every
-      // call keeps the API useful behind nginx (API_BASE = "") as well as in
-      // the local split (web :3000, api :8000, same site "localhost").
+      // The session cookie (or the one-time login ticket on the first call after
+      // login) is HttpOnly and SameSite=Lax. Sending it on every call keeps the
+      // API useful behind nginx (API_BASE = "") as well as in the local split
+      // (web :3000, api :8000, same site "localhost").
       credentials: "include",
       headers: {
         "Content-Type": "application/json",
@@ -129,11 +165,17 @@ async function performRequest<T>(path: string, init?: RequestInit): Promise<T> {
       },
     });
   } catch {
+    // No response means the ticket may not have been spent; leave the gate
+    // armed so a retry can still exchange it.
     throw new ApiError(
       0,
       `连不上诊断服务（${API_BASE}），请确认 FastAPI 已启动。`,
     );
   }
+
+  // Any protected-path response proves the ticket (if one was pending) has been
+  // presented, so the gate can open. Success and error statuses both count.
+  if (epochWhenSent !== null) settleBootstrap(epochWhenSent);
 
   // 204/205 have no body by definition; parsing "" would still work, but the
   // explicit branch keeps `logoutAccount` (and any future DELETE) honest.
@@ -166,28 +208,48 @@ async function performRequest<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 function request<T>(path: string, init?: RequestInit): Promise<T> {
-  return serializeAuthenticated(() => performRequest<T>(path, init));
+  const task = () => performRequest<T>(path, init);
+  // Only the login-ticket bootstrap window is serialized; everything else goes
+  // straight to fetch so ordinary calls can overlap again.
+  return bootstrapPending && canSpendLoginTicket(path)
+    ? serializeBootstrap(task)
+    : task();
 }
 
-/** The account behind the session cookie; 401 logged out, 403 auth disabled. */
+/**
+ * The account behind the session cookie; 401 logged out, 403 auth disabled.
+ * After login this is the call that exchanges the one-time ticket.
+ */
 export function getMe(): Promise<AuthUser> {
   return request<AuthUser>("/api/v1/auth/me");
 }
 
-/** Create an account; 409 means this email already has one. */
-export function registerAccount(input: RegisterAccountInput): Promise<AuthUser> {
-  return request<AuthUser>("/api/v1/auth/register", {
+/**
+ * Create an account; 409 means this email already has one. A successful
+ * response hands out the one-time login ticket, so arm the bootstrap gate.
+ */
+export async function registerAccount(
+  input: RegisterAccountInput,
+): Promise<AuthUser> {
+  const user = await request<AuthUser>("/api/v1/auth/register", {
     method: "POST",
     body: JSON.stringify(input),
   });
+  armBootstrap();
+  return user;
 }
 
-/** Exchange email/password for a new HttpOnly cookie. */
-export function loginAccount(input: LoginAccountInput): Promise<AuthUser> {
-  return request<AuthUser>("/api/v1/auth/login", {
+/**
+ * Exchange email/password for the one-time login ticket. The first protected
+ * request turns that ticket into an ordinary session cookie.
+ */
+export async function loginAccount(input: LoginAccountInput): Promise<AuthUser> {
+  const user = await request<AuthUser>("/api/v1/auth/login", {
     method: "POST",
     body: JSON.stringify(input),
   });
+  armBootstrap();
+  return user;
 }
 
 /**
@@ -200,8 +262,8 @@ export async function logoutAccount(): Promise<void> {
 
 /**
  * The signed-in user's own model config. Never carries the key: only
- * `key_last4` and a masked status line. 401 means the cookie is gone (or was
- * replayed); 403 means this deployment has no account layer.
+ * `key_last4` and a masked status line. 401 means there is no session (or the
+ * login ticket was replayed); 403 means this deployment has no account layer.
  */
 export function getModelSettings(): Promise<ModelSettings> {
   return request<ModelSettings>("/api/v1/settings/model");
@@ -361,7 +423,7 @@ export function disagreeWithCard(sessionId: string): Promise<Diagnosis> {
   );
 }
 
-/** Read the local review queue; the teacher page never writes back. */
+/** Read the local review queue; the internal review page never writes back. */
 export function listReviewItems(): Promise<ReviewListing> {
   return request<ReviewListing>("/api/v1/review/items");
 }

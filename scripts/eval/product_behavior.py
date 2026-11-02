@@ -9,7 +9,7 @@ accuracy benchmark. It answers one narrow question on a fixed case set:
 What it deliberately does **not** measure:
 
 * whether a diagnosis is correct, or whether the student learned anything;
-* real-student accuracy or any classroom outcome;
+* real-student accuracy or any learning outcome;
 * generated graphs, knowledge-card retrieval or real code execution (all off);
 * natural-language understanding quality.
 

@@ -121,7 +121,7 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 - `/agent` 只读（`specs/agent-trace.schema.json` v0.2）：只对没有参考结构的入口会话可用，已有图/卡点卡的会话返回 **409**；最多 3 步，v0.2 仍是确定性规则选择，不调模型。`reflection` 只复述结构缺口与工具状态，不是卡点结论。工具白名单是 `check_structure` / `search_patterns` / `search_sources` / `compare_options` / `ask_clarifying` / `run_code` / `run_tests`，没有读答案或推进状态的工具。写作/研究优先用 `search_sources` 查 `source` 类卡；没有来源卡时写 skipped，不把概念卡当来源。`status` 只表示工具调用状态（`ok`/`skipped`/`failed`），不是答案对错；RAG 未开启时检索工具写 skipped，检索不可用写 failed。轨迹只含输入/输出摘要与引用，不含学生原文或思维链；`suggestions` 不排序、不推荐选项。
 - `/agent/run` 只接受显式提交的 Python（`specs/agent-run.schema.json` v0.1），`tests` 必须和 `code` 一起提交；只有 `EXECUTABLE` 框架接受代码，不从题面自动抽代码。它和 `/executions` 共用 `SYNAPSE_EXEC` 开关与受限本地执行器：关闭时轨迹里是 **skipped（没有运行）**，不是 `pass`；执行结果只进轨迹摘要和可逆实验建议，不写会话、不读答案库、不出诊断卡。`pass` 仍只表示退出码 0 或提交的测试通过。
 - `/steps` 只验证提交的这一步（`specs/step-verification.schema.json`）：不推进状态、不出卡；`unknown` 表示未启用/读不懂/没有可判的断言，不是“这步正确”。
-- `/review/items` 只读（`specs/review-queue.schema.json`）：只返回卡面结论与位置，不含学生原文；没有鉴权，判断也不写回服务端——教师在浏览器里标记后自行导出 CSV。
+- `/review/items` 只读（`specs/review-queue.schema.json`）：只返回卡面结论与位置，不含学生原文；没有鉴权，判断也不写回服务端——复核者在浏览器里标记后自行导出 CSV。
 - `/knowledge/search` 只读（`specs/knowledge-search.schema.json` v0.2）：`q` 是概念标签，不是学生作答原文；`subject` 是开放标签（1–40 字符），可选 `verification` 过滤（formal/executable/empirical/argumentative）；返回卡片的五类 `kind`、`subject`、`verifications`、标题、摘录、出处（title/url/license）和余弦分数。`enabled=false` 表示 `SYNAPSE_RAG` 未开启；开启但模型不可用时返回 **503**，不会静默返回空结果。
 - `SessionOut.subject` 是插件键（内部路由用）；`SessionOut.domain` 才是展示用的开放领域标签与验证方式（`formal`/`executable`/`empirical`/`argumentative`）。入口澄清若点名了领域，只改 `domain`（展示/清单/检索），`subject` 仍是提交时的插件键。前端只在 `domain.name` 为数学/物理时显示单步检查入口。
 - 没有参考结构的问题（开放领域、未知领域，或本环境没有生成器）返回 `SessionOut.intake`（`specs/` 未单列 schema，字段见 `DomainIntakeOut`）；它不是卡点卡的简化版：不定位卡点、不估把握、不给唯一答案。
@@ -134,8 +134,8 @@ application 不 import 任何模型 SDK；模型客户端只在 infrastructure/l
 - 同一个文件存**会话快照**和**运行时生成的题**（标注种子题仍来自 `seed.py`）。只存会话不存生成题的话，重启后生成题会话就找不到自己的图；生成题图首次写入后优先复用，换生成器/prompt 后删文件才会重建。
 - 快照是版本化 JSON（`infrastructure/snapshots.py`），不是 `pickle`；损坏或版本不匹配会抛 `SnapshotError`，不会静默读成半条会话。
 - 快照包含学生探针回答、证据链、`initial_answer`（含澄清与最多三次结构补充）、`domain_override`、`intake_probe_count` 和 `work_findings`（学生自己的式子），因此这个文件是**本地学生数据**：`var/` 已忽略，没有 TTL/加密/清理任务，删文件即清空。
-- 每个操作独立连接；同一会话的写入是 compare-and-swap（`revision`），过期写返回 **409**，不会覆盖新状态；服务层不自动重试。SQLite 仍是单写者，多进程下 CAS 只保证不丢更新，不保证吞吐。这是本机单用户工具的边界，不是多教师并发方案。
-- 没有 PostgreSQL、Alembic、Redis；`ProblemRepository` / `SessionRepository` 端口不变，换 PostgreSQL 时只换适配器。
+- 每个操作独立连接；同一会话的写入是 compare-and-swap（`revision`），过期写返回 **409**，不会覆盖新状态；服务层不自动重试。SQLite 仍是单写者，多进程下 CAS 只保证不丢更新，不保证吞吐。这是单实例的边界，不是多实例并发方案。
+- 诊断快照仍走 SQLite；账号、一次性会话 token 与加密模型凭据在 PostgreSQL（`users` / `auth_sessions` / `user_model_credentials`，Alembic `0001`–`0003`）。`ProblemRepository` / `SessionRepository` 端口不变，换存储时只换适配器。
 
 ## LLM 追问（M2）
 

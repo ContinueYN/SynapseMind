@@ -7,13 +7,13 @@ wrote — ``work`` is the student's own text, ``answer`` their final answer — 
 reports, per answer:
 
 * did a card come out, and which node/layer it points at;
-* does that node contain the bottleneck a teacher marked
+* does that node contain the bottleneck a reviewer marked
   (``expected_bottleneck``);
 * did the student end up with the correct final answer
   (``final_correct``), which makes "卡点命中" and "答对了还指卡点" separable.
 
 It writes a Markdown sheet whose last column (``人工判断``) is left blank on
-purpose: the teacher fills 准确 / 说得通但不对 / 空泛, and only then is there a
+purpose: the reviewer fills 准确 / 说得通但不对 / 空泛, and only then is there a
 diagnosis-accuracy number. Until ``source == "student"`` rows exist, everything
 here is a pipeline test, and the report says so.
 
@@ -95,7 +95,7 @@ def load_problems(path: Path) -> dict[str, dict[str, Any]]:
 def _payloads(path: Path) -> list[dict[str, Any]]:
     """JSONL, or CSV with a header row — whichever the reviewer finds easier.
 
-    The CSV path exists so a teacher can fill a spreadsheet instead of writing
+    The CSV path exists so a reviewer can fill a spreadsheet instead of writing
     JSON by hand; columns are the same field names as the JSONL rows.
     """
 
@@ -147,7 +147,7 @@ def _normalise(text: str) -> str:
 def matches(expected: str, node_text: str, one_line: str) -> bool:
     """Substring match, whitespace-insensitive.
 
-    Not semantic on purpose: a teacher writing ``导数符号`` should hit a node
+    Not semantic on purpose: a reviewer writing ``导数符号`` should hit a node
     that says ``讨论导数的符号``, but nothing here should paper over a card that
     names a different step.
     """

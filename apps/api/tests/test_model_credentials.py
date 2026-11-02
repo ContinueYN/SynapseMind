@@ -4,8 +4,9 @@ Two layers are covered:
 
 * the application service (presets, validation, masking, "saved key is used for
   the test" semantics) with an in-memory fake store, no HTTP;
-* the real app (gate + rotation + Alembic + SQLite): the exact JSON contract in
-  the task, 422/503 paths, and that two accounts never see each other's key.
+* the real app (gate + login-ticket exchange + Alembic + SQLite): the exact JSON
+  contract in the task, 422/503 paths, and that two accounts never see each
+  other's key.
 
 The key itself must never come back from any endpoint, so those assertions are
 explicit rather than implied by the masked DTO.
@@ -524,7 +525,7 @@ def test_delete_removes_the_row_and_is_idempotent(
     assert alice.delete("/api/v1/settings/model").status_code == 204
 
 
-def test_rotation_applies_to_the_settings_routes(
+def test_login_ticket_is_exchanged_on_the_settings_routes(
     make_byok_app: Callable[..., ByokHarness],
 ) -> None:
     harness = make_byok_app()
@@ -536,6 +537,12 @@ def test_rotation_applies_to_the_settings_routes(
     after = alice.cookies.get("synapse_session")
     assert before and after and after != before
     assert "set-cookie" in response.headers
+
+    # The exchanged ordinary session is reused, not rotated again.
+    reused = alice.get("/api/v1/settings/model")
+    assert reused.status_code == 200
+    assert "set-cookie" not in reused.headers
+    assert alice.cookies.get("synapse_session") == after
 
 
 def test_missing_master_key_is_503_and_never_writes(

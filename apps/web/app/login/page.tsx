@@ -231,7 +231,7 @@ function LoginPanel() {
         </p>
 
         <p className="sm-fine sm-auth-session">
-          每次请求后会话 cookie 都会轮换；同一份凭据被重复使用时，会自动退出以保护账号。
+          登录时发一次登录票据，首个请求换成普通会话；只有登录票据被重复使用才会自动退出，普通会话不会每次轮换。
         </p>
 
         <p className="sm-fine sm-auth-back">

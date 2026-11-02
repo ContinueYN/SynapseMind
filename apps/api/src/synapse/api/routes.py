@@ -144,7 +144,7 @@ def run_code(
 def list_review_items(
     review: ReviewService = Depends(get_review_service),
 ) -> ReviewItemsOut:
-    """Read-only listing of disagreed cards for the teacher review page.
+    """Read-only listing of disagreed cards for the internal review page.
 
     There is no write endpoint and no authentication yet: the queue is a local
     SQLite file, and the page exports the reviewer's judgment as a CSV instead

@@ -77,7 +77,7 @@ describe("LoginPage", () => {
       "true",
     );
     expect(screen.queryByLabelText(/显示名/)).not.toBeInTheDocument();
-    expect(screen.getByText(/会话 cookie 都会轮换/)).toBeInTheDocument();
+    expect(screen.getByText(/首个请求换成普通会话/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "创建账号" }));
 

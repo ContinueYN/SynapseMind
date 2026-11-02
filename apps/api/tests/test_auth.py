@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import secrets
 import sqlite3
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
@@ -28,7 +29,13 @@ from sqlalchemy import func, inspect, select
 from alembic import command
 from synapse.api.deps import Container
 from synapse.api.main import create_app
-from synapse.application.auth import AuthService, SessionReuseDetected
+from synapse.application.auth import (
+    LOGIN_TICKET_PREFIX,
+    SESSION_PREFIX,
+    AuthService,
+    SessionReuseDetected,
+    hash_session_token,
+)
 from synapse.infrastructure.auth.build import build_auth
 from synapse.infrastructure.auth.db import (
     AuthSessionRow,
@@ -570,6 +577,15 @@ def test_redis_store_roundtrip_uses_the_configured_ttl() -> None:
     key = f"synapse:auth:sess:{token_hash}"
     assert fake.expiries[key] == 120
 
+    # A lookup is read-only: the live key stays and no tombstone appears.
+    looked_up = store.lookup(token_hash, now=now)
+    assert looked_up.status == "active"
+    assert looked_up.user_id == "U_1"
+    assert looked_up.family_id == "F_1"
+    assert looked_up.expires_at == expires_at
+    assert key in fake.values
+    assert f"synapse:auth:used:{token_hash}" not in fake.values
+
     state = store.consume(token_hash, now=now)
     assert state.status == "active"
     assert state.user_id == "U_1"
@@ -583,6 +599,7 @@ def test_redis_store_roundtrip_uses_the_configured_ttl() -> None:
     replay = store.consume(token_hash, now=now)
     assert replay.status == "used"
     assert replay.family_id == "F_1"
+    assert store.lookup(token_hash, now=now).status == "used"
 
 
 def test_redis_store_revokes_a_whole_family() -> None:
@@ -599,6 +616,8 @@ def test_redis_store_revokes_a_whole_family() -> None:
         )
     store.revoke_family("F_1", now=now)
     assert fake.expiries["synapse:auth:fam:F_1"] == 60
+    # Both paths report the revocation while the live key is still present.
+    assert store.lookup("0" * 64, now=now).status == "revoked"
     state = store.consume("0" * 64, now=now)
     assert state.status == "revoked"
 
@@ -608,6 +627,7 @@ def test_redis_store_rejects_a_corrupt_value() -> None:
     store = RedisSessionTokenStore(fake, ttl_s=60)
     fake.values[f"synapse:auth:sess:{'b' * 64}"] = "{not json"
     assert store.consume("b" * 64, now=datetime.now(UTC)).status == "unknown"
+    assert store.lookup("b" * 64, now=datetime.now(UTC)).status == "unknown"
 
 
 def test_redis_backed_sessions_skip_the_sql_session_table(
@@ -629,20 +649,30 @@ def test_redis_backed_sessions_skip_the_sql_session_table(
     assert runtime is not None
     try:
         issued = runtime.service.register(email=OWNER_EMAIL, password=OWNER_PASSWORD)
-        rotated = runtime.service.rotate(issued.token)
-        assert rotated is not None
-        assert rotated.user.email == OWNER_EMAIL
+        assert issued.token.startswith(LOGIN_TICKET_PREFIX)
+
+        authenticated = runtime.service.authenticate(issued.token)
+        assert authenticated is not None
+        assert authenticated.user.email == OWNER_EMAIL
+        replacement = authenticated.replacement_token
+        assert replacement is not None
+        assert replacement.startswith(SESSION_PREFIX)
         assert any(key.startswith("synapse:auth:sess:") for key in fake.values)
 
         factory = build_session_factory(engine)
         with factory() as session:
             assert session.scalar(select(func.count()).select_from(AuthSessionRow)) == 0
 
-        runtime.service.logout(rotated.token)
-        # Logout already consumed the value; presenting it again is the same
-        # theft signal as any other replay of a consumed digest.
+        # An ordinary session is reused in place: no new token, no Set-Cookie.
+        reused = runtime.service.authenticate(replacement)
+        assert reused is not None
+        assert reused.replacement_token is None
+
+        runtime.service.logout(replacement)
+        assert runtime.service.authenticate(replacement) is None
+        # Replaying the consumed login ticket is still the theft signal.
         with pytest.raises(SessionReuseDetected):
-            runtime.service.rotate(rotated.token)
+            runtime.service.authenticate(issued.token)
     finally:
         runtime.close()
 
@@ -661,7 +691,17 @@ def test_sessions_fall_back_to_sql_without_redis(
         factory = build_session_factory(engine)
         with factory() as session:
             assert session.scalar(select(func.count()).select_from(AuthSessionRow)) == 1
-        assert runtime.service.rotate(issued.token) is not None
+        authenticated = runtime.service.authenticate(issued.token)
+        assert authenticated is not None
+        replacement = authenticated.replacement_token
+        assert replacement is not None
+        # The exchange leaves the spent ticket row beside the ordinary session,
+        # and both belong to the same token family.
+        with factory() as session:
+            rows = list(session.scalars(select(AuthSessionRow)))
+        assert len(rows) == 2
+        assert rows[0].family_id == rows[1].family_id
+        assert runtime.service.authenticate(replacement) is not None
     finally:
         runtime.close()
 
@@ -690,56 +730,113 @@ def test_service_rejects_expired_tokens_with_an_injected_clock(tmp_path: Path) -
     )
     try:
         issued = service.register(email=OWNER_EMAIL, password=OWNER_PASSWORD)
-        assert service.rotate(issued.token) is not None
+        exchanged = service.authenticate(issued.token)
+        assert exchanged is not None
+        ordinary = exchanged.replacement_token
+        assert ordinary is not None
+
         issued = service.login(email=OWNER_EMAIL, password=OWNER_PASSWORD)
         clock_values[0] = now + timedelta(seconds=61)
-        # The row is still unconsumed, but the hard expiry wins.
-        assert service.rotate(issued.token) is None
+        # The ticket row is still unconsumed, but the hard expiry wins.
+        assert service.authenticate(issued.token) is None
+        # The ordinary session issued at ``now`` has expired too.
+        assert service.authenticate(ordinary) is None
     finally:
         engine.dispose()
 
 
 # --------------------------------------------------------------------------
-# One-time cookies: rotation and reuse detection
+# Login tickets vs ordinary sessions: exchange, reuse and expiry
 # --------------------------------------------------------------------------
 
 
-def test_every_protected_request_rotates_the_cookie(
+def test_login_ticket_is_exchanged_once_for_an_ordinary_session(
     make_auth_app: Callable[..., AuthHarness],
     sample_payload: dict[str, object],
 ) -> None:
     harness = make_auth_app()
     assert _register(harness.client).status_code == 201
-    first = _cookie_token(harness.client)
+    ticket = _cookie_token(harness.client)
+    assert ticket.startswith(LOGIN_TICKET_PREFIX)
 
     created = harness.client.post("/api/v1/sessions", json=sample_payload)
     assert created.status_code == 201, created.text
-    second = _cookie_token(harness.client)
-    assert second != first
-    assert "set-cookie" in created.headers
+    ordinary = _cookie_token(harness.client)
+    assert ordinary.startswith(SESSION_PREFIX)
+    assert ordinary != ticket
+    # The exchange is the only place a protected request sets the cookie.
+    assert len(created.headers.get_list("set-cookie")) == 1
 
     session_id = created.json()["session_id"]
-    # The rotated value still works and rotates again.
-    assert harness.client.get(f"/api/v1/sessions/{session_id}").status_code == 200
-    third = _cookie_token(harness.client)
-    assert third not in {first, second}
+    second = harness.client.get(f"/api/v1/sessions/{session_id}")
+    assert second.status_code == 200, second.text
+    assert "set-cookie" not in second.headers
+    assert _cookie_token(harness.client) == ordinary
+
+    # The same ordinary session also covers the other protected prefix.
+    settings = harness.client.get("/api/v1/settings/model")
+    assert settings.status_code == 200, settings.text
+    assert "set-cookie" not in settings.headers
+    assert _cookie_token(harness.client) == ordinary
 
 
-def test_replaying_a_consumed_cookie_revokes_the_family(
+def test_ordinary_session_is_reused_until_logout(
+    make_auth_app: Callable[..., AuthHarness],
+    sample_payload: dict[str, object],
+) -> None:
+    harness = make_auth_app()
+    assert _register(harness.client).status_code == 201
+    created = harness.client.post("/api/v1/sessions", json=sample_payload)
+    assert created.status_code == 201, created.text
+    session_id = created.json()["session_id"]
+    ordinary = _cookie_token(harness.client)
+
+    for _ in range(3):
+        response = harness.client.get(f"/api/v1/sessions/{session_id}")
+        assert response.status_code == 200
+        assert "set-cookie" not in response.headers
+        assert _cookie_token(harness.client) == ordinary
+
+    assert harness.client.post("/api/v1/auth/logout").status_code == 200
+    assert harness.client.get(f"/api/v1/sessions/{session_id}").status_code == 401
+    assert harness.client.get("/api/v1/auth/me").status_code == 401
+
+
+def test_me_exchanges_a_login_ticket_but_not_an_ordinary_session(
+    make_auth_app: Callable[..., AuthHarness],
+) -> None:
+    harness = make_auth_app()
+    assert _register(harness.client).status_code == 201
+    ticket = _cookie_token(harness.client)
+
+    first = harness.client.get("/api/v1/auth/me")
+    assert first.status_code == 200
+    ordinary = _cookie_token(harness.client)
+    assert ordinary.startswith(SESSION_PREFIX)
+    assert ordinary != ticket
+    assert len(first.headers.get_list("set-cookie")) == 1
+
+    second = harness.client.get("/api/v1/auth/me")
+    assert second.status_code == 200
+    assert "set-cookie" not in second.headers
+    assert _cookie_token(harness.client) == ordinary
+
+
+def test_replaying_a_consumed_login_ticket_revokes_the_family(
     make_auth_app: Callable[..., AuthHarness],
     sample_payload: dict[str, object],
 ) -> None:
     harness = make_auth_app(allow_signup=True)
     assert _register(harness.client).status_code == 201
-    first = _cookie_token(harness.client)
+    ticket = _cookie_token(harness.client)
     created = harness.client.post("/api/v1/sessions", json=sample_payload)
     assert created.status_code == 201, created.text
     session_id = created.json()["session_id"]
-    current = _cookie_token(harness.client)
-    assert current != first
+    ordinary = _cookie_token(harness.client)
+    assert ordinary != ticket
 
     replay = harness.anonymous()
-    replay.cookies.set(COOKIE_NAME, first)
+    replay.cookies.set(COOKIE_NAME, ticket)
     reused = replay.get(f"/api/v1/sessions/{session_id}")
 
     assert reused.status_code == 401
@@ -749,23 +846,24 @@ def test_replaying_a_consumed_cookie_revokes_the_family(
     assert f"{COOKIE_NAME}=" in cleared
     assert "max-age=0" in cleared
 
-    # The alarm revoked the whole chain, not only the replayed value.
+    # The alarm revoked the whole family, including the current ordinary cookie.
     assert harness.client.get(f"/api/v1/sessions/{session_id}").status_code == 401
+    assert harness.client.get("/api/v1/auth/me").status_code == 401
 
 
-def test_me_also_rotates_and_detects_reuse(
+def test_me_replay_of_a_consumed_login_ticket_is_also_theft(
     make_auth_app: Callable[..., AuthHarness],
 ) -> None:
     harness = make_auth_app()
     assert _register(harness.client).status_code == 201
-    first = _cookie_token(harness.client)
+    ticket = _cookie_token(harness.client)
 
     assert harness.client.get("/api/v1/auth/me").status_code == 200
-    second = _cookie_token(harness.client)
-    assert second != first
+    ordinary = _cookie_token(harness.client)
+    assert ordinary != ticket
 
     replay = harness.anonymous()
-    replay.cookies.set(COOKIE_NAME, first)
+    replay.cookies.set(COOKIE_NAME, ticket)
     reused = replay.get("/api/v1/auth/me")
     assert reused.status_code == 401
     assert "会话被复用" in reused.json()["detail"]
@@ -774,22 +872,56 @@ def test_me_also_rotates_and_detects_reuse(
     assert harness.client.get("/api/v1/auth/me").status_code == 401
 
 
+def test_reusing_an_ordinary_session_is_not_treated_as_theft(
+    make_auth_app: Callable[..., AuthHarness],
+    sample_payload: dict[str, object],
+) -> None:
+    harness = make_auth_app()
+    assert _register(harness.client).status_code == 201
+    created = harness.client.post("/api/v1/sessions", json=sample_payload)
+    assert created.status_code == 201, created.text
+    session_id = created.json()["session_id"]
+    ordinary = _cookie_token(harness.client)
+
+    clone = harness.anonymous()
+    clone.cookies.set(COOKIE_NAME, ordinary)
+    copied = clone.get("/api/v1/auth/me")
+    assert copied.status_code == 200
+    assert "set-cookie" not in copied.headers
+
+    # Neither copy is accused of theft: the family is still alive.
+    assert harness.client.get(f"/api/v1/sessions/{session_id}").status_code == 200
+    assert clone.get(f"/api/v1/sessions/{session_id}").status_code == 200
+
+
 def test_logout_revokes_every_token_in_the_family(
     make_auth_app: Callable[..., AuthHarness],
 ) -> None:
     harness = make_auth_app()
     assert _register(harness.client).status_code == 201
-    oldest = _cookie_token(harness.client)
+    ticket = _cookie_token(harness.client)
     assert harness.client.get("/api/v1/auth/me").status_code == 200
-    newest = _cookie_token(harness.client)
-    assert newest != oldest
+    ordinary = _cookie_token(harness.client)
+    assert ordinary != ticket
 
-    assert harness.client.post("/api/v1/auth/logout").status_code == 200
+    logout = harness.client.post("/api/v1/auth/logout")
+    assert logout.status_code == 200
+    # Logout itself is not a theft alarm even when the ticket was already spent.
+    assert "会话被复用" not in logout.text
 
-    for token in (oldest, newest):
-        replay = harness.anonymous()
-        replay.cookies.set(COOKIE_NAME, token)
-        assert replay.get("/api/v1/auth/me").status_code == 401
+    # Replaying the *consumed* ticket is still theft, even after logout.
+    ticket_replay = harness.anonymous()
+    ticket_replay.cookies.set(COOKIE_NAME, ticket)
+    reused = ticket_replay.get("/api/v1/auth/me")
+    assert reused.status_code == 401
+    assert "会话被复用" in reused.json()["detail"]
+
+    # The ordinary session was revoked, not consumed, so it is a plain 401.
+    ordinary_replay = harness.anonymous()
+    ordinary_replay.cookies.set(COOKIE_NAME, ordinary)
+    revoked = ordinary_replay.get("/api/v1/auth/me")
+    assert revoked.status_code == 401
+    assert "会话被复用" not in revoked.json()["detail"]
 
 
 def test_two_consumes_cannot_both_succeed(tmp_path: Path) -> None:
@@ -821,12 +953,185 @@ def test_two_consumes_cannot_both_succeed(tmp_path: Path) -> None:
         engine.dispose()
 
 
+def test_sql_lookup_is_read_only_and_reports_state(tmp_path: Path) -> None:
+    database = tmp_path / "lookup-auth.sqlite3"
+    url = _sqlite_url(database)
+    _upgrade(url)
+    engine = create_auth_engine(url)
+    factory = build_session_factory(engine)
+    try:
+        store = SqlSessionTokenStore(factory)
+        now = datetime.now(UTC)
+        token_hash = "d" * 64
+        other_hash = "e" * 64
+        store.issue(
+            token_hash=token_hash,
+            user_id="U_1",
+            family_id="F_1",
+            created_at=now,
+            expires_at=now + timedelta(seconds=60),
+        )
+
+        first = store.lookup(token_hash, now=now)
+        assert first.status == "active"
+        assert first.user_id == "U_1"
+        assert first.family_id == "F_1"
+        assert first.expires_at == now + timedelta(seconds=60)
+        # A lookup does not spend the digest.
+        assert store.lookup(token_hash, now=now).status == "active"
+
+        # Expiry is reported, not enforced, by the store; the service decides.
+        with factory() as session:
+            row = session.scalar(
+                select(AuthSessionRow).where(AuthSessionRow.token_hash == token_hash)
+            )
+            assert row is not None
+            row.expires_at = now - timedelta(seconds=1)
+            session.commit()
+        expired = store.lookup(token_hash, now=now)
+        assert expired.status == "active"
+        assert expired.expires_at is not None
+        assert expired.expires_at < now
+
+        # Only consume spends it; a later lookup sees the used marker.
+        assert store.consume(token_hash, now=now).status == "active"
+        assert store.lookup(token_hash, now=now).status == "used"
+
+        # Revoking one family leaves another family's lookup untouched.
+        store.issue(
+            token_hash=other_hash,
+            user_id="U_2",
+            family_id="F_2",
+            created_at=now,
+            expires_at=now + timedelta(seconds=60),
+        )
+        store.revoke_family("F_2", now=now)
+        assert store.lookup(other_hash, now=now).status == "revoked"
+        assert store.lookup(token_hash, now=now).status == "used"
+        assert store.lookup("f" * 64, now=now).status == "unknown"
+    finally:
+        engine.dispose()
+
+
+def test_legacy_unprefixed_tokens_are_ordinary_sessions(tmp_path: Path) -> None:
+    database = tmp_path / "legacy-auth.sqlite3"
+    url = _sqlite_url(database)
+    _upgrade(url)
+    engine = create_auth_engine(url)
+    factory = build_session_factory(engine)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    tokens = SqlSessionTokenStore(factory)
+    service = AuthService(
+        users=SqlUserStore(factory),
+        tokens=tokens,
+        hasher=Argon2PasswordHasher(),
+        session_ttl_s=60,
+        clock=lambda: now,
+    )
+    try:
+        issued = service.register(email=OWNER_EMAIL, password=OWNER_PASSWORD)
+        legacy = "legacy-" + secrets.token_urlsafe(32)
+        assert not legacy.startswith(LOGIN_TICKET_PREFIX)
+        assert not legacy.startswith(SESSION_PREFIX)
+        legacy_hash = hash_session_token(legacy)
+        tokens.issue(
+            token_hash=legacy_hash,
+            user_id=issued.user.id,
+            family_id=issued.family_id,
+            created_at=now,
+            expires_at=now + timedelta(seconds=60),
+        )
+
+        authenticated = service.authenticate(legacy)
+        assert authenticated is not None
+        assert authenticated.user.id == issued.user.id
+        assert authenticated.replacement_token is None
+        # Unprefixed means ordinary: it is reusable, not a one-time ticket.
+        assert service.authenticate(legacy) is not None
+        with factory() as session:
+            row = session.scalar(
+                select(AuthSessionRow).where(AuthSessionRow.token_hash == legacy_hash)
+            )
+            assert row is not None
+            assert row.used_at is None
+    finally:
+        engine.dispose()
+
+
+def test_legacy_unprefixed_tokens_are_ordinary_on_redis(tmp_path: Path) -> None:
+    database = tmp_path / "legacy-redis-auth.sqlite3"
+    url = _sqlite_url(database)
+    _upgrade(url)
+    engine = create_auth_engine(url)
+    factory = build_session_factory(engine)
+    fake = FakeRedis()
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    tokens = RedisSessionTokenStore(fake, ttl_s=60)
+    service = AuthService(
+        users=SqlUserStore(factory),
+        tokens=tokens,
+        hasher=Argon2PasswordHasher(),
+        session_ttl_s=60,
+        clock=lambda: now,
+    )
+    try:
+        issued = service.register(email=OWNER_EMAIL, password=OWNER_PASSWORD)
+        legacy = "legacy-" + secrets.token_urlsafe(32)
+        legacy_hash = hash_session_token(legacy)
+        tokens.issue(
+            token_hash=legacy_hash,
+            user_id=issued.user.id,
+            family_id=issued.family_id,
+            created_at=now,
+            expires_at=now + timedelta(seconds=60),
+        )
+
+        authenticated = service.authenticate(legacy)
+        assert authenticated is not None
+        assert authenticated.replacement_token is None
+        assert service.authenticate(legacy) is not None
+        assert f"synapse:auth:used:{legacy_hash}" not in fake.values
+    finally:
+        engine.dispose()
+
+
+def test_redis_backed_ordinary_sessions_expire(tmp_path: Path) -> None:
+    database = tmp_path / "redis-expiry-auth.sqlite3"
+    url = _sqlite_url(database)
+    _upgrade(url)
+    engine = create_auth_engine(url)
+    factory = build_session_factory(engine)
+    fake = FakeRedis()
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    clock_values = [now]
+    service = AuthService(
+        users=SqlUserStore(factory),
+        tokens=RedisSessionTokenStore(fake, ttl_s=60),
+        hasher=Argon2PasswordHasher(),
+        session_ttl_s=60,
+        clock=lambda: clock_values[0],
+    )
+    try:
+        issued = service.register(email=OWNER_EMAIL, password=OWNER_PASSWORD)
+        exchanged = service.authenticate(issued.token)
+        assert exchanged is not None
+        ordinary = exchanged.replacement_token
+        assert ordinary is not None
+        assert service.authenticate(ordinary) is not None
+
+        clock_values[0] = now + timedelta(seconds=61)
+        # The fake Redis does not sweep keys; the service's hard expiry wins.
+        assert service.authenticate(ordinary) is None
+    finally:
+        engine.dispose()
+
+
 def test_multi_user_signup_keeps_families_independent(
     make_auth_app: Callable[..., AuthHarness],
 ) -> None:
     harness = make_auth_app(allow_signup=True)
     assert _register(harness.client, email="a@example.com").status_code == 201
-    a_stale = _cookie_token(harness.client)
+    a_ticket = _cookie_token(harness.client)
     a_identity = harness.client.get("/api/v1/auth/me").json()
 
     second = harness.anonymous()
@@ -837,7 +1142,7 @@ def test_multi_user_signup_keeps_families_independent(
 
     # A replay alarm on A's chain must not touch B's session.
     replay = harness.anonymous()
-    replay.cookies.set(COOKIE_NAME, a_stale)
+    replay.cookies.set(COOKIE_NAME, a_ticket)
     reused = replay.get("/api/v1/auth/me")
     assert reused.status_code == 401
     assert "会话被复用" in reused.json()["detail"]

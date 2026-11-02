@@ -56,7 +56,7 @@ export interface paths {
         };
         /**
          * List Review Items
-         * @description Read-only listing of disagreed cards for the teacher review page.
+         * @description Read-only listing of disagreed cards for the internal review page.
          *
          *     There is no write endpoint and no authentication yet: the queue is a local
          *     SQLite file, and the page exports the reviewer's judgment as a CSV instead
@@ -359,11 +359,13 @@ export interface paths {
         put?: never;
         /**
          * Register
-         * @description Create the first owner account and sign it in.
+         * @description Create an account and sign it in.
          *
-         *     A deployment that already has an owner answers 409 unless the operator set
-         *     ``SYNAPSE_AUTH_ALLOW_SIGNUP=on``. The same 409 covers a duplicate email, so
-         *     the endpoint does not tell a caller whether a different account exists.
+         *     Open to every registration when
+         *     ``SYNAPSE_AUTH_ALLOW_SIGNUP=on`` (multi-user mode). Without it the first
+         *     account claims the instance and later registrations answer 409. A duplicate
+         *     email is the same 409, so the endpoint does not tell a caller whether a
+         *     different account exists.
          */
         post: operations["register_api_v1_auth_register_post"];
         delete?: never;
@@ -383,7 +385,7 @@ export interface paths {
         put?: never;
         /**
          * Login
-         * @description Exchange email/password for a new server-side session.
+         * @description Exchange email/password for a new session family.
          *
          *     A wrong password, an unknown email and a closed shop all answer 401 with the
          *     same message; the password check runs the KDF even for an unknown email so
@@ -407,7 +409,7 @@ export interface paths {
         put?: never;
         /**
          * Logout
-         * @description Revoke the current session server-side and clear the cookie.
+         * @description Revoke the current session family and clear the cookie.
          *
          *     Idempotent: calling it without a cookie succeeds. It also works when auth is
          *     off, so a client that was pointed at a gated server can clean up its jar.
@@ -428,11 +430,66 @@ export interface paths {
         };
         /**
          * Me
-         * @description The account behind the cookie, or 401 for missing/expired/revoked.
+         * @description The account behind the cookie; exchanges a login ticket if present.
          */
         get: operations["me_api_v1_auth_me_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/model": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Model Settings
+         * @description The masked view; ``configured`` is false until a key is stored and usable.
+         */
+        get: operations["get_model_settings_api_v1_settings_model_get"];
+        /**
+         * Put Model Settings
+         * @description Store (or replace) this account's key, encrypted with the master key.
+         *
+         *     The response is the same masked view as ``GET``: the key is never echoed and
+         *     is not recoverable through the API afterwards.
+         */
+        put: operations["put_model_settings_api_v1_settings_model_put"];
+        post?: never;
+        /**
+         * Delete Model Settings
+         * @description Delete this account's stored key; deleting nothing is still 204.
+         */
+        delete: operations["delete_model_settings_api_v1_settings_model_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/model/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test Model Settings
+         * @description Call the provider once with a one-token request.
+         *
+         *     A provider-side rejection or network failure is a normal ``200`` with
+         *     ``ok=false`` and a key-free message; a malformed URL/input is 422 and a
+         *     missing master key is 503. Nothing from the response body is echoed.
+         */
+        post: operations["test_model_settings_api_v1_settings_model_test_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1209,6 +1266,76 @@ export interface components {
              */
             status: "ok";
         };
+        /**
+         * ModelCredentialIn
+         * @description A full save from the settings form; the key is required on save.
+         */
+        ModelCredentialIn: {
+            /** Provider */
+            provider: string;
+            /**
+             * Base Url
+             * @default
+             */
+            base_url: string;
+            /**
+             * Model
+             * @default
+             */
+            model: string;
+            /** Api Key */
+            api_key: string;
+        };
+        /**
+         * ModelCredentialOut
+         * @description The masked credential view; the key itself is never part of it.
+         */
+        ModelCredentialOut: {
+            /** Configured */
+            configured: boolean;
+            /** Provider */
+            provider?: string | null;
+            /** Base Url */
+            base_url?: string | null;
+            /** Model */
+            model?: string | null;
+            /** Key Last4 */
+            key_last4?: string | null;
+            /** Last Verified At */
+            last_verified_at?: string | null;
+            /** Encryption Ready */
+            encryption_ready: boolean;
+            /** Warning */
+            warning?: string | null;
+        };
+        /**
+         * ModelCredentialTestIn
+         * @description Test a candidate credential; omitted fields fall back to the saved row.
+         */
+        ModelCredentialTestIn: {
+            /** Provider */
+            provider?: string | null;
+            /** Base Url */
+            base_url?: string | null;
+            /** Model */
+            model?: string | null;
+            /** Api Key */
+            api_key?: string | null;
+        };
+        /**
+         * ModelTestOut
+         * @description Result of one provider probe; ``message`` never contains the key.
+         */
+        ModelTestOut: {
+            /** Ok */
+            ok: boolean;
+            /** Latency Ms */
+            latency_ms: number;
+            /** Model */
+            model: string;
+            /** Message */
+            message: string;
+        };
         /** NextActionOut */
         NextActionOut: {
             /**
@@ -1308,7 +1435,7 @@ export interface components {
         };
         /**
          * ReviewItemOut
-         * @description One disagreed card, as the teacher review page sees it.
+         * @description One disagreed card, as the internal review page sees it.
          *
          *     It deliberately carries the card's conclusion and location only: the
          *     student's own work is not copied into the queue (v0.1,
@@ -2154,6 +2281,110 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuthUserOut"];
+                };
+            };
+        };
+    };
+    get_model_settings_api_v1_settings_model_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelCredentialOut"];
+                };
+            };
+        };
+    };
+    put_model_settings_api_v1_settings_model_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModelCredentialIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelCredentialOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_model_settings_api_v1_settings_model_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    test_model_settings_api_v1_settings_model_test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ModelCredentialTestIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelTestOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -1,6 +1,6 @@
 """Pick an open domain label from the stem, without a whitelist.
 
-The product is a general problem diagnoser, not a K12 tutor: a submitted stem can
+The product is a general problem diagnoser, not a subject tutor: a submitted stem can
 be a math problem, a code bug, an algorithm, a writing task, a research question,
 a life decision, a work problem, or something the system has never seen. A
 domain is therefore an *open label*, and detection is advisory only:

@@ -473,7 +473,8 @@ def build_composer(
 def get_service(request: Request) -> SessionService:
     """The session facade, bound to the current owner.
 
-    The async auth middleware rotated the cookie and stored the account on
+    The async auth middleware authenticated the cookie (exchanging a one-time
+    login ticket if that is what was presented) and stored the account on
     ``request.state`` before dispatch; binding the owner here is what makes
     another user's session a 404 instead of a readable object. With auth off the
     owner is ``None`` and no filtering happens (the local baseline).

@@ -2,7 +2,7 @@
 
 The API appends one row when a student disagrees with a card. The row contains
 the card's conclusion and location, not the student's work. The last column is
-left blank for a teacher to mark 准确 / 说得通但不对 / 空泛.
+left blank for a reviewer to mark 准确 / 说得通但不对 / 空泛.
 
 Usage::
 
@@ -32,7 +32,7 @@ def render(items: list[ReviewItem]) -> str:
     lines = [
         "# 卡点卡异议复核",
         "",
-        "> 来源：学生点击「我不同意」；不含学生原文。最后一列留给教师填写。",
+        "> 来源：学生点击「我不同意」；不含学生原文。最后一列留给复核者填写。",
         "",
         f"共 {len(items)} 条。",
         "",

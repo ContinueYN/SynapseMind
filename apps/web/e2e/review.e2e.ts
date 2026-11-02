@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 
 import { expect, test } from "@playwright/test";
 
-test("teacher review lists disagreements and exports the judgment as CSV", async ({
+test("internal review lists disagreements and exports the judgment as CSV", async ({
   page,
 }) => {
   await page.goto("/admin/review");
@@ -49,7 +49,7 @@ test("teacher review lists disagreements and exports the judgment as CSV", async
   expect(csv).toContain("2026-10-31T08:00:00+00:00");
 });
 
-test("teacher review drops to one column at 390px", async ({ page }) => {
+test("internal review drops to one column at 390px", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/admin/review");
 

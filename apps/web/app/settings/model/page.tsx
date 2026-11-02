@@ -324,7 +324,7 @@ export default function ModelSettingsPage() {
           <p className="sm-kicker">会话已退出</p>
           <h1 className="sm-h1">检测到会话被复用，已强制退出。</h1>
           <p className="sm-p">
-            这是安全机制：同一份登录凭据被重复使用时，服务端会作废旧会话。
+            这是安全机制：一次性登录票据被重复使用时，服务端会作废这条会话链。
             请重新登录后再改模型设置。当前页面不会保留你填过的 Key。
           </p>
           <p style={{ marginTop: 26 }}>

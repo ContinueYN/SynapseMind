@@ -498,7 +498,7 @@ class ExecutionOut(StrictModel):
 
 
 class ReviewItemOut(StrictModel):
-    """One disagreed card, as the teacher review page sees it.
+    """One disagreed card, as the internal review page sees it.
 
     It deliberately carries the card's conclusion and location only: the
     student's own work is not copied into the queue (v0.1,

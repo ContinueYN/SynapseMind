@@ -1,13 +1,20 @@
-"""Account endpoints and the one-time session gate.
+"""Account endpoints and the login-ticket exchange.
 
-The cookie is the whole session: **every authenticated request consumes the
-current ``synapse_session`` value and the response sets a new one**. A consumed
-value can never authenticate again. If one is presented twice the server treats
-it as theft: it revokes the whole token family, clears the cookie and answers
-401 with a detail containing ``会话被复用`` so the client can tell the user to log
-in again.
+The cookie is the whole session, and it carries one of two kinds of value:
 
-Where rotation happens:
+* a one-time **login ticket** (``L_…``) issued by register/login. The first
+  authenticated request consumes it exactly once and the response sets an
+  ordinary session cookie (``S_…``) in the same token family;
+* an ordinary **session** (``S_…``, or a legacy unprefixed value). It is reused
+  on every request until logout, expiry or revocation, and ordinary requests
+  never carry ``Set-Cookie``.
+
+Presenting an already-consumed login ticket is the theft signal: the whole
+family is revoked, the cookie is cleared and the response is 401 with a detail
+containing ``会话被复用``. Replaying an ordinary session is not detectable and
+simply keeps authenticating until it is revoked or expires.
+
+Where the exchange happens:
 
 * ``/api/v1/sessions…`` and ``/api/v1/settings…`` — the async
   ``session_auth_middleware``. It must be async because the model runtime reads
@@ -50,7 +57,6 @@ from synapse.application.auth import (
     InvalidCredentials,
     IssuedSession,
     RegistrationClosed,
-    RotatedSession,
     SessionReuseDetected,
 )
 from synapse.application.context import bind_owner, reset_owner
@@ -63,10 +69,10 @@ _AUTH_DISABLED = "认证未启用；设置 SYNAPSE_AUTH=on 后才能使用账号
 _REUSE_DETAIL = "检测到会话被复用，已强制下线，请重新登录。"
 _STORE_UNAVAILABLE = "账号服务暂不可用："
 
-# Only these resources rotate the cookie. Public routes (health, docs, knowledge
-# search, executions, the local review queue, the account endpoints) must never
-# consume it: a public page load would otherwise invalidate the session the
-# diagnostic page is using.
+# Only these resources exchange the login ticket. Public routes (health, docs,
+# knowledge search, executions, the local review queue, the account endpoints)
+# must never touch the cookie: a public page load would otherwise burn the
+# session the diagnostic page is using.
 _PROTECTED_PREFIXES = ("/api/v1/sessions", "/api/v1/settings")
 
 
@@ -136,14 +142,6 @@ def _issued_cookie(response: Response, container: Container, issued: IssuedSessi
     _set_cookie(response, container, issued.token)
 
 
-def _rotated_cookie(
-    response: Response,
-    container: Container,
-    rotated: RotatedSession,
-) -> None:
-    _set_cookie(response, container, rotated.token)
-
-
 def _is_protected(path: str) -> bool:
     return any(path == prefix or path.startswith(prefix + "/") for prefix in _PROTECTED_PREFIXES)
 
@@ -153,11 +151,12 @@ async def session_auth_middleware(
     call_next: Callable[[Request], Awaitable[Response]],
     container: Container,
 ) -> Response:
-    """Rotate the cookie for protected resources, then bind the current owner.
+    """Authenticate the cookie for protected resources, then bind the owner.
 
-    Returns early (without calling the route) for a missing, expired, unknown,
-    revoked or replayed cookie. The replacement value is set on the way out, once
-    the route has produced a response.
+    A login ticket is exchanged for an ordinary session and only that exchange
+    puts a ``Set-Cookie`` on the response; an ordinary session authenticates in
+    place without one. Returns early (without calling the route) for a missing,
+    expired, unknown, revoked or replayed ticket.
     """
 
     if not container.auth_settings.enabled or not _is_protected(request.url.path):
@@ -172,7 +171,7 @@ async def session_auth_middleware(
 
     token = request.cookies.get(COOKIE_NAME)
     try:
-        rotated = service.rotate(token)
+        authenticated = service.authenticate(token)
     except SessionReuseDetected:
         reuse_response: Response = JSONResponse(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -189,7 +188,7 @@ async def session_auth_middleware(
             content={"detail": f"{_STORE_UNAVAILABLE}{exc}"},
         )
 
-    if rotated is None:
+    if authenticated is None:
         denied: Response = JSONResponse(
             status_code=status.HTTP_401_UNAUTHORIZED,
             content={"detail": _LOGIN_REQUIRED},
@@ -201,14 +200,15 @@ async def session_auth_middleware(
             _delete_cookie(denied, container)
         return denied
 
-    request.state.auth_user = rotated.user
-    request.state.session_token = rotated.token
-    owner_token = bind_owner(rotated.user.id)
+    request.state.auth_user = authenticated.user
+    request.state.session_token = authenticated.replacement_token or token
+    owner_token = bind_owner(authenticated.user.id)
     try:
         forwarded: Response = await call_next(request)
     finally:
         reset_owner(owner_token)
-    _rotated_cookie(forwarded, container, rotated)
+    if authenticated.replacement_token is not None:
+        _set_cookie(forwarded, container, authenticated.replacement_token)
     return forwarded
 
 
@@ -284,18 +284,19 @@ def logout(request: Request, response: Response) -> LogoutOut:
 
 @router.get("/me", response_model=AuthUserOut)
 def me(request: Request, response: Response) -> AuthUserOut:
-    """The account behind the cookie; rotates the cookie on success."""
+    """The account behind the cookie; exchanges a login ticket if present."""
 
     service = _enabled_service(request)
     container = _container(request)
     try:
-        rotated = service.rotate(request.cookies.get(COOKIE_NAME))
+        authenticated = service.authenticate(request.cookies.get(COOKIE_NAME))
     except SessionReuseDetected as exc:
         raise _unauthorized(container, _REUSE_DETAIL) from exc
-    if rotated is None:
+    if authenticated is None:
         raise _unauthorized(container, _LOGIN_REQUIRED)
-    _rotated_cookie(response, container, rotated)
-    return auth_user_out(rotated.user)
+    if authenticated.replacement_token is not None:
+        _set_cookie(response, container, authenticated.replacement_token)
+    return auth_user_out(authenticated.user)
 
 
 def require_authenticated(request: Request) -> AuthUser | None:
@@ -303,9 +304,10 @@ def require_authenticated(request: Request) -> AuthUser | None:
 
     Off means "no gate at all": the dependency returns immediately, which is why
     every existing unauthenticated test and local workflow keeps working. On
-    means the middleware already rotated the cookie and stored the account on
-    ``request.state``; a missing value here means the route is not covered by the
-    middleware, so it fails closed with 401 instead of running unauthenticated.
+    means the middleware already authenticated the cookie (exchanging a login
+    ticket if needed) and stored the account on ``request.state``; a missing
+    value here means the route is not covered by the middleware, so it fails
+    closed with 401 instead of running unauthenticated.
 
     Health, ``/auth/*``, docs/openapi, executions, knowledge search and the
     local review queue stay public on purpose.
