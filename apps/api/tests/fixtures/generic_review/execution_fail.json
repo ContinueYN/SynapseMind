@@ -1,0 +1,74 @@
+{
+  "version": "0.1",
+  "session_id": "S_FIXTURE_CODE_FAIL_001",
+  "problem_id": "P_GEN_CODE_FAIL_001",
+  "kind": "execution",
+  "domain": {
+    "name": "programming",
+    "label": "编程",
+    "verification": "executable"
+  },
+  "headline": "测试跑起来了，在第一个用例上失败：输出 [2,1,3]，期望 [1,2,3]。",
+  "findings": [
+    {
+      "id": "f1",
+      "kind": "test_failure",
+      "label": "首个失败",
+      "severity": "blocking",
+      "summary": "提交的测试在 [3,1,2] 上得到 [2,1,3]，与期望 [1,2,3] 不一致。",
+      "evidence_refs": ["ev3", "ev5"]
+    },
+    {
+      "id": "f2",
+      "kind": "unchecked_cases",
+      "label": "只跑了一个用例",
+      "severity": "notable",
+      "summary": "这次只运行了一个用例，没有覆盖空数组、重复元素和已排序输入。",
+      "evidence_refs": ["ev4"]
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev1",
+      "source": "student",
+      "ref": "student",
+      "excerpt": "我这段快排对 [3,1,2] 返回 [2,1,3]，不知道哪里错了。"
+    },
+    {
+      "id": "ev2",
+      "source": "graph",
+      "ref": "g1",
+      "excerpt": "目标：找出排序结果错误的原因"
+    },
+    {
+      "id": "ev3",
+      "source": "graph",
+      "ref": "g2",
+      "excerpt": "已知：输入 [3,1,2]，期望 [1,2,3]"
+    },
+    {
+      "id": "ev4",
+      "source": "execution",
+      "ref": "exec_1",
+      "excerpt": "python -m unittest -q test_quick_sort"
+    },
+    {
+      "id": "ev5",
+      "source": "execution",
+      "ref": "exec_1",
+      "excerpt": "AssertionError: Lists differ: [2, 1, 3] != [1, 2, 3]"
+    }
+  ],
+  "not_checked": [
+    "没有检查其他输入。",
+    "没有区分是实现写错，还是测试期望写错。"
+  ],
+  "next_step": "先手算 [3,1,2] 的分区过程，确认是分区边界还是交换条件写错，再补一个空数组用例。",
+  "disclaimer": "只报告本次提交的测试结果；fail 表示这次测试没有通过，不表示已经找到根因。",
+  "execution": {
+    "status": "fail",
+    "first_failure": "AssertionError: Lists differ: [2, 1, 3] != [1, 2, 3]",
+    "stdout_excerpt": "FAILED (failures=1)",
+    "tests_submitted": true
+  }
+}

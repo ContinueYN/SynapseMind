@@ -1,0 +1,20 @@
+{
+  "version": "0.1",
+  "session_id": "S_FIXTURE_UNKNOWN_001",
+  "problem_id": "P_GEN_UNKNOWN_001",
+  "kind": "structure",
+  "domain": {
+    "name": "generic",
+    "label": "通用问题",
+    "verification": "argumentative"
+  },
+  "headline": "这个问题还没有归入已知领域，也没有可用的结构图，先补一个目标。",
+  "findings": [],
+  "evidence": [],
+  "not_checked": [
+    "没有识别出所属领域，所以没有套用任何领域清单。",
+    "没有拿到目标、已知和约束，无法判断哪些结构项缺失。"
+  ],
+  "next_step": "先回答一个问题：这件事做到什么程度，你才算解决了它？",
+  "disclaimer": "未知领域不会被拒答，也不代表已经理解；这里只给出通用入口，不判断对错。"
+}

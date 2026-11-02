@@ -1,0 +1,258 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://synapsemind.dev/schemas/generic-review.schema.json",
+  "title": "GenericReview",
+  "description": "通用产物 v0.1：结构复盘 / 决策框 / 代码复现卡共用同一外壳。finding 只描述“看到/没看到什么”，每条必须带 evidence_refs；decision 不排序、不推荐，execution=skipped 只表示没有运行。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "session_id",
+    "problem_id",
+    "kind",
+    "domain",
+    "headline",
+    "findings",
+    "evidence",
+    "not_checked",
+    "next_step",
+    "disclaimer"
+  ],
+  "properties": {
+    "version": {
+      "description": "契约版本；破坏性变更才升级。",
+      "const": "0.1"
+    },
+    "session_id": {
+      "type": "string",
+      "pattern": "^S_[A-Za-z0-9_]+$",
+      "maxLength": 40
+    },
+    "problem_id": {
+      "type": "string",
+      "pattern": "^P_[A-Za-z0-9_]+$",
+      "maxLength": 48
+    },
+    "kind": {
+      "description": "structure = 结构复盘；decision = 决策框；execution = 代码复现卡。",
+      "type": "string",
+      "enum": ["structure", "decision", "execution"]
+    },
+    "domain": {
+      "$ref": "#/$defs/domain"
+    },
+    "headline": {
+      "description": "一句话说明这次整理到了什么、还缺什么；不是诊断结论。",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "findings": {
+      "description": "每条 finding 都只描述“看到/没看到”，且必须引用本对象 evidence 里已有的 id；blocking 最多 3 条，避免退化成清单。",
+      "type": "array",
+      "maxItems": 12,
+      "items": {"$ref": "#/$defs/finding"},
+      "contains": {
+        "type": "object",
+        "properties": {"severity": {"const": "blocking"}},
+        "required": ["severity"]
+      },
+      "minContains": 0,
+      "maxContains": 3
+    },
+    "evidence": {
+      "description": "本次产物引用的证据池；id 是本对象内的稳定引用键，ref 指向来源本身（图节点 id、student、execution id、知识卡 id）。",
+      "type": "array",
+      "maxItems": 24,
+      "items": {"$ref": "#/$defs/evidence"}
+    },
+    "not_checked": {
+      "description": "这次明确没有检查的东西；没有证据的观察只能放这里，不能编成 finding。",
+      "type": "array",
+      "maxItems": 8,
+      "items": {"type": "string", "minLength": 1, "maxLength": 240}
+    },
+    "next_step": {
+      "description": "一个可执行动作或一个补充问题，不是完整答案。",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240
+    },
+    "disclaimer": {
+      "description": "必须写明这次没有判断对错 / 没有运行 / 不替你选择。",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300
+    },
+    "options": {
+      "description": "仅决策框使用；至少两个选项，其中一个是“什么都不做”。只列代价、风险与可逆实验，不排序、不推荐。",
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 6,
+      "items": {"$ref": "#/$defs/option"}
+    },
+    "tradeoff_question": {
+      "description": "仅决策框使用：用取舍问题代替推荐。",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300
+    },
+    "execution": {
+      "$ref": "#/$defs/execution"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {"kind": {"const": "decision"}},
+        "required": ["kind"]
+      },
+      "then": {"required": ["options"]}
+    }
+  ],
+  "$defs": {
+    "domain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "label", "verification"],
+      "properties": {
+        "name": {
+          "description": "开放领域标签；不是白名单。",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "verification": {
+          "description": "决定措辞硬度的是验证方式，不是领域标签。",
+          "type": "string",
+          "enum": ["formal", "executable", "empirical", "argumentative"]
+        }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "label", "severity", "summary", "evidence_refs"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,31}$"
+        },
+        "kind": {
+          "description": "开放的问题类型标签，例如 missing_constraint / missing_evidence / unsupported_claim / test_failure / option_without_cost。",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["blocking", "notable"]
+        },
+        "summary": {
+          "description": "只描述看到/没看到什么；不出现“你错了”“正确答案是”“建议选”。",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "evidence_refs": {
+          "description": "非空，且每一项都必须等于本对象 evidence[].id。JSON Schema 无法表达跨数组引用，构造时由 domain/problem/generic_review.py 校验；找不到证据的观察只能进 not_checked。",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 64}
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "source", "ref"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,31}$"
+        },
+        "source": {
+          "type": "string",
+          "enum": ["student", "graph", "execution", "knowledge"]
+        },
+        "ref": {
+          "description": "student = 学生原话；graph = 图节点 id；execution = 执行记录 id；knowledge = 知识卡 id。",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "excerpt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      }
+    },
+    "option": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "costs", "risks", "reversible_test"],
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "costs": {
+          "description": "这个选项要付出的代价；空数组表示还没写，并由 option_without_cost 报出。",
+          "type": "array",
+          "maxItems": 6,
+          "items": {"type": "string", "minLength": 1, "maxLength": 80}
+        },
+        "risks": {
+          "description": "这个选项的不确定性；空数组表示还没写，并由 option_without_risk 报出。",
+          "type": "array",
+          "maxItems": 6,
+          "items": {"type": "string", "minLength": 1, "maxLength": 80}
+        },
+        "reversible_test": {
+          "description": "一个可逆的小实验；空串表示还没写，并由 missing_reversible_test 报出。",
+          "type": "string",
+          "maxLength": 200
+        }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "description": "pass 只表示退出码 0 或提交的测试通过；skipped 只表示没有运行；rejected 表示代码根本没跑。",
+          "type": "string",
+          "enum": ["pass", "fail", "timeout", "rejected", "skipped"]
+        },
+        "first_failure": {
+          "description": "首个失败摘要；skipped / rejected / pass 不得携带。",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "stdout_excerpt": {
+          "type": "string",
+          "maxLength": 400
+        },
+        "tests_submitted": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    }
+  }
+}

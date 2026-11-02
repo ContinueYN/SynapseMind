@@ -1,0 +1,95 @@
+{
+  "version": "0.1",
+  "session_id": "S_FIXTURE_DECISION_001",
+  "problem_id": "P_GEN_DECISION_001",
+  "kind": "decision",
+  "domain": {
+    "name": "decision",
+    "label": "决策",
+    "verification": "argumentative"
+  },
+  "headline": "能列出三个选项和各自的代价，但「不想长期两地分居」这条约束还没有落到具体选项上。",
+  "findings": [
+    {
+      "id": "f1",
+      "kind": "missing_constraint",
+      "label": "约束没有落到选项",
+      "severity": "blocking",
+      "summary": "「不想长期两地分居」是明确约束，但没有写哪个选项怎么满足它、哪个选项会违反它。",
+      "evidence_refs": ["ev3"]
+    },
+    {
+      "id": "f2",
+      "kind": "unstated_tradeoff",
+      "label": "取舍没有写全",
+      "severity": "notable",
+      "summary": "选项列了代价和风险，但没有写「更看重哪一边时，哪个代价会变大」，所以还比较不了。",
+      "evidence_refs": ["ev4", "ev5", "ev6"]
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev1",
+      "source": "student",
+      "ref": "student",
+      "excerpt": "我应该接受北京的工作，还是留在上海陪家人？"
+    },
+    {
+      "id": "ev2",
+      "source": "graph",
+      "ref": "g1",
+      "excerpt": "目标：决定下一份工作在哪里"
+    },
+    {
+      "id": "ev3",
+      "source": "graph",
+      "ref": "g2",
+      "excerpt": "约束：不想长期两地分居"
+    },
+    {
+      "id": "ev4",
+      "source": "graph",
+      "ref": "g3",
+      "excerpt": "选项：接受北京的工作"
+    },
+    {
+      "id": "ev5",
+      "source": "graph",
+      "ref": "g4",
+      "excerpt": "选项：留在上海陪家人"
+    },
+    {
+      "id": "ev6",
+      "source": "graph",
+      "ref": "g5",
+      "excerpt": "风险：换城市后收入可能下降"
+    }
+  ],
+  "not_checked": [
+    "没有评估北京这份 offer 的实际收入、行业前景和试用期条款。",
+    "没有替你判断家庭安排能不能调整，这需要你和家人自己确认。"
+  ],
+  "next_step": "先把「不想长期两地分居」写成可检查的条件（例如每月能见面几次），再看每个选项能不能满足。",
+  "disclaimer": "这是决策框：只列选项、代价与风险，不排序、不推荐，也不替你做人生选择。",
+  "options": [
+    {
+      "label": "接受北京的工作",
+      "costs": ["异地分居", "搬家与安置成本"],
+      "risks": ["收入与团队情况还不确定", "试用期不过要重新找"],
+      "reversible_test": "先和对方约定三个月的远程安排，期间不搬家，再决定是否迁过去。"
+    },
+    {
+      "label": "留在上海陪家人",
+      "costs": ["放弃北京的机会", "可能错过这一轮行业窗口"],
+      "risks": ["职业发展变慢", "以后仍会反复想这个选择"],
+      "reversible_test": "先在现岗位争取一个跨城项目试三个月，看看远程协作是否可行。"
+    },
+    {
+      "label": "什么都不做（暂不决定）",
+      "costs": ["错过 offer 的答复截止日期", "两边都悬着，注意力被占用"],
+      "risks": ["机会可能消失", "拖延本身让焦虑累积"],
+      "reversible_test": "给自己设一个两周的截止日，这两周只收集信息，不做任何承诺。"
+    }
+  ],
+  "tradeoff_question": "如果更看重陪伴，接受北京的代价是什么；如果更看重机会，留在上海的代价是什么？"
+}

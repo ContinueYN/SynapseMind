@@ -1,0 +1,66 @@
+{
+  "version": "0.1",
+  "session_id": "S_FIXTURE_CODE_SKIPPED_001",
+  "problem_id": "P_GEN_CODE_SKIPPED_001",
+  "kind": "execution",
+  "domain": {
+    "name": "programming",
+    "label": "编程",
+    "verification": "executable"
+  },
+  "headline": "提交了代码，但本地执行开关是关闭的，这次没有运行。",
+  "findings": [
+    {
+      "id": "f1",
+      "kind": "missing_reproduction",
+      "label": "没有最小复现",
+      "severity": "blocking",
+      "summary": "题面给了输入和错误输出，但这次没有提交能一键跑起来的测试。",
+      "evidence_refs": ["ev3"]
+    },
+    {
+      "id": "f2",
+      "kind": "execution_skipped",
+      "label": "没有运行",
+      "severity": "notable",
+      "summary": "执行开关关闭，代码没有提交给执行器，所以这次没有任何运行结果。",
+      "evidence_refs": ["ev4"]
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev1",
+      "source": "student",
+      "ref": "student",
+      "excerpt": "我这段快排对 [3,1,2] 返回 [2,1,3]，不知道哪里错了。"
+    },
+    {
+      "id": "ev2",
+      "source": "graph",
+      "ref": "g1",
+      "excerpt": "目标：找出排序结果错误的原因"
+    },
+    {
+      "id": "ev3",
+      "source": "graph",
+      "ref": "g2",
+      "excerpt": "已知：输入 [3,1,2]，期望 [1,2,3]"
+    },
+    {
+      "id": "ev4",
+      "source": "execution",
+      "ref": "exec_skipped",
+      "excerpt": "SYNAPSE_EXEC=off：请求没有提交给执行器。"
+    }
+  ],
+  "not_checked": [
+    "代码没有运行，没有检查递归深度、空数组和重复元素。",
+    "没有比较不同实现的复杂度。"
+  ],
+  "next_step": "打开本地执行开关后，把「[3,1,2] → [1,2,3]」写成一个 unittest 再提交一次。",
+  "disclaimer": "这次没有运行代码；skipped 只表示没有执行，不表示代码正确或通过。",
+  "execution": {
+    "status": "skipped",
+    "tests_submitted": false
+  }
+}

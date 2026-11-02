@@ -1,0 +1,74 @@
+{
+  "version": "0.1",
+  "session_id": "S_FIXTURE_WRITING_001",
+  "problem_id": "P_GEN_WRITING_001",
+  "kind": "structure",
+  "domain": {
+    "name": "writing",
+    "label": "写作",
+    "verification": "argumentative"
+  },
+  "headline": "这篇议论文有明确论点，但论据只有一句概括，推理中间也缺一步。",
+  "findings": [
+    {
+      "id": "f1",
+      "kind": "missing_evidence",
+      "label": "证据不足",
+      "severity": "blocking",
+      "summary": "论点后面只有「很多同学都这样」，没有具体例子、数据或来源来支撑。",
+      "evidence_refs": ["ev4"]
+    },
+    {
+      "id": "f2",
+      "kind": "reasoning_jump",
+      "label": "推理跳跃",
+      "severity": "notable",
+      "summary": "从「手机让人分心」直接跳到「禁止手机」，中间缺了「禁令能减少分心、且代价更小」这一步。",
+      "evidence_refs": ["ev3", "ev5"]
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev1",
+      "source": "student",
+      "ref": "student",
+      "excerpt": "我认为学校应该禁止学生带手机，因为手机会让人分心。"
+    },
+    {
+      "id": "ev2",
+      "source": "graph",
+      "ref": "g1",
+      "excerpt": "论点：学校应该禁止学生带手机"
+    },
+    {
+      "id": "ev3",
+      "source": "graph",
+      "ref": "g2",
+      "excerpt": "推理：手机让人分心"
+    },
+    {
+      "id": "ev4",
+      "source": "student",
+      "ref": "student",
+      "excerpt": "很多同学都这样。"
+    },
+    {
+      "id": "ev5",
+      "source": "graph",
+      "ref": "g3",
+      "excerpt": "结论：所以学校要禁止手机"
+    },
+    {
+      "id": "ev6",
+      "source": "graph",
+      "ref": "g4",
+      "excerpt": "目标：说明学校是否该禁止带手机"
+    }
+  ],
+  "not_checked": [
+    "没有核对「手机让人分心」这个说法有没有研究支持。",
+    "没有评价文章的语气、篇幅和段落安排。"
+  ],
+  "next_step": "给「手机让人分心」补一个具体例子或数据，再写一句它为什么能支持「禁止手机」。",
+  "disclaimer": "这是结构复盘：只说明写得有没有结构，不判断观点对错，也不给分。"
+}
