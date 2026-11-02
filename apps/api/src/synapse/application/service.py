@@ -218,6 +218,16 @@ class SessionService:
         problem = self._problem(session.problem_id)
 
         if self._is_reference_free(problem):
+            # The UI keeps the short answer and the worked text in two fields.
+            # The intake/review must read both: a writing answer alone ("不该
+            # 禁止") has no argument structure, while the work field is exactly
+            # where that structure lives. Keep the combined text on the
+            # aggregate so a reload reconstructs the same review.
+            session.initial_answer = "\n".join(
+                part for part in (command.answer.strip(), command.work.strip()) if part
+            )
+
+        if self._is_reference_free(problem):
             # Phase 0 generic entry: an open domain (or an unknown label) has no
             # reference graph yet, so the session starts and immediately closes
             # with the domain intake. It never probes, never cards, and never

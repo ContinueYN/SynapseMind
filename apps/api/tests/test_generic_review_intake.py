@@ -47,7 +47,14 @@ REVIEW_KEYS = {
 FORBIDDEN_DECISION_KEYS = frozenset({"score", "rank", "recommended", "best"})
 
 
-def _start(client: TestClient, text: str, *, answer: str, subject: str | None = None) -> dict:
+def _start(
+    client: TestClient,
+    text: str,
+    *,
+    answer: str,
+    subject: str | None = None,
+    work: str = "",
+) -> dict:
     problem: dict[str, object] = {"text": text}
     if subject is not None:
         problem["subject"] = subject
@@ -55,7 +62,7 @@ def _start(client: TestClient, text: str, *, answer: str, subject: str | None = 
         "/api/v1/sessions",
         json={
             "problem": problem,
-            "attempt": {"answer": answer, "work": "", "self_report": "unsure"},
+            "attempt": {"answer": answer, "work": work, "self_report": "unsure"},
             "mode": "learning",
         },
     )
@@ -114,6 +121,36 @@ def test_a_writing_intake_carries_a_structure_review(client: TestClient) -> None
     for finding in review["findings"]:
         assert set(finding["evidence_refs"]) <= evidence_ids
     assert "score" not in review and "rank" not in review
+
+
+def test_the_ui_style_answer_and_work_are_both_read(client: TestClient) -> None:
+    """The form has a short answer and a separate work field.
+
+    A writing answer alone (``不应该禁止``) has no argument structure; the review
+    must read the work field too, or the card is empty for exactly the input the
+    form is designed to collect.
+    """
+
+    work = (
+        "我想论证的是：中学生不该被禁止带手机进校园。手机能查资料，也方便联系家长。"
+        "学校禁止手机，是担心课堂被打断。"
+    )
+    created = _start(
+        client,
+        "学校是否应该禁止中学生带手机进校园？请写一段议论，说明你的立场和理由。",
+        answer="不应该禁止",
+        subject="写作",
+        work=work,
+    )
+
+    review = created["intake"]["review"]
+    assert review is not None
+    assert review["kind"] == "structure"
+    assert review["findings"], "the work field must contribute the review's findings"
+
+    reloaded = client.get(f"/api/v1/sessions/{created['session_id']}")
+    assert reloaded.status_code == 200, reloaded.text
+    assert reloaded.json()["intake"]["review"] == review
 
 
 def test_a_decision_intake_carries_the_frame_without_ranking(client: TestClient) -> None:
