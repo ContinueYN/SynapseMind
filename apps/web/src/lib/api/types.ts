@@ -140,7 +140,6 @@ export interface CreateSessionInput {
     text: string;
     /** 开放领域标签：省略即自动判断，不限于已知学科。 */
     subject?: string;
-    grade?: "high_school";
   };
   attempt: {
     answer: string;

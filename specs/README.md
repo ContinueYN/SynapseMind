@@ -32,7 +32,7 @@
 
 解法图生成物是例外：`infrastructure/llm/graph.py` 在运行时用 `jsonschema` 直接加载本目录的 `solution-graph.schema.json` 做严格校验（M2.5 S4）。契约只有这一份，代码不另抄一套字段。
 
-`problem-input.schema.json` 是交题入口（v0.2，Phase 0）。`problem.subject` 从三值枚举改为**开放标签**（1–32 字符）：省略时由系统识别，识别不出或置信不足进入 `GenericProfile` 通用模式，不再返回 422；显式写一个系统不认识的标签也照样接受，并保留原文作为标签。领域只是标签，真正决定“能说多硬的话”的是验证方式（FORMAL / EXECUTABLE / EMPIRICAL / ARGUMENTATIVE）。`SessionOut` 相应新增 `domain`（`name`/`label`/`verification`/`generic`/`confidence`）与可选 `intake`；`intake` 是入口整理，不是卡点卡：不含层级、把握、诊断结论或答案。`intake` **v0.2** 增加 `observed`（学生自己那段话里被认出的结构项）与 `gaps`（该验证方式要求、但那段话里没提到的项，最多 3 条）；两者都只说明“有没有写到/提到”，不判断对错，也不给出选项排序，没有作答时都为空。
+`problem-input.schema.json` 是交题入口（v0.3，Phase 0）。`problem.subject` 是**开放标签**（1–32 字符）：省略时由系统识别，识别不出或置信不足进入 `GenericProfile` 通用模式，不再返回 422；显式写一个系统不认识的标签也照样接受，并保留原文作为标签。v0.3 移除了未参与路由的旧标签字段，入口只保留问题文本、可选领域与作答。领域只是标签，真正决定“能说多硬的话”的是验证方式（FORMAL / EXECUTABLE / EMPIRICAL / ARGUMENTATIVE）。`SessionOut` 相应新增 `domain`（`name`/`label`/`verification`/`generic`/`confidence`）与可选 `intake`；`intake` 是入口整理，不是卡点卡：不含层级、把握、诊断结论或答案。`intake` **v0.2** 增加 `observed`（学生自己那段话里被认出的结构项）与 `gaps`（该验证方式要求、但那段话里没提到的项，最多 3 条）；两者都只说明“有没有写到/提到”，不判断对错，也不给出选项排序，没有作答时都为空。
 
 `problem-graph.schema.json` 是通用问题图契约（Phase 1b，v0.1）。它和解法图不是同一张图：解法图描述“解题步骤”，通用图描述问题本身的目标、已知、约束、假设、计划、尝试、证据、检查、选项、风险与下一步。节点只记录“提到了什么”，不记录对错；`source=student` 表示从学生原话原样复制，`source=system` 表示模型整理，来源决定界面如何标注，不决定内容可信。`g1` 是 Phase 1a 的线索抽取，`g2` 是生成图；只有 `g2` 可以带 `formal`/`empirical`。`formal` 复用 `solution-graph.schema.json#/$defs/claim`，只把**学生已经写出的答案**形式化，不替学生解题；`empirical` 只接受结构化方程/表达式、单位与数值，没有结构化输入就不从自然语言猜单位。两者都是可选字段：没有声明、验证器没运行、或输入无法解析时结果为 `unknown`，不假装检查过。
 

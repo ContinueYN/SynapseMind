@@ -939,7 +939,6 @@ def encode_problem(problem: Problem) -> dict[str, object]:
             "title": problem.title,
             "text": problem.text,
             "subject": problem.subject,
-            "grade": problem.grade,
             "annotated": problem.annotated,
             # Additive in snapshot v0.2: rows written before Phase 0 omit
             # these and decode with the defaults below.
@@ -960,7 +959,6 @@ def decode_problem(snapshot: object) -> Problem:
         title=_text(data.get("title"), "problem.title"),
         text=_text(data.get("text"), "problem.text"),
         subject=_text(data.get("subject"), "problem.subject"),
-        grade=_text(data.get("grade"), "problem.grade"),
         annotated=_flag(data.get("annotated"), "problem.annotated"),
         domain_confidence=(
             _number(data["domain_confidence"], "problem.domain_confidence")

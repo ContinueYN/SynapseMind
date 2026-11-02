@@ -172,7 +172,6 @@ def load_cases(path: Path) -> list[Case]:
                     id=str(payload["id"]),
                     text=str(payload["text"]),
                     subject=str(payload.get("subject", "math")),
-                    grade=str(payload.get("grade", "high_school")),
                 ),
                 topic=str(payload.get("topic", "")),
             )

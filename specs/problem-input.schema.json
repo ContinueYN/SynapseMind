@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://synapsemind.dev/schemas/problem-input.schema.json",
   "title": "ProblemInput",
-  "description": "通用问题入口（v0.2）：题目/问题 + 自己的答案或已有尝试。领域是开放标签，不是白名单。",
+  "description": "通用问题入口（v0.3）：题目/问题 + 自己的答案或已有尝试。领域是开放标签，不是白名单。",
   "type": "object",
   "additionalProperties": false,
   "required": ["problem", "attempt"],
@@ -27,12 +27,6 @@
           "minLength": 1,
           "maxLength": 32,
           "description": "可选领域标签，开放取值（math / physics / chinese / programming / research / decision / 任意领域名），不是路由白名单。省略时由系统自动识别；识别不出或置信不足进入 GenericProfile 通用模式，不再返回 422。显式标签仍优先于自动识别。"
-        },
-        "grade": {
-          "type": "string",
-          "enum": ["primary_school", "middle_school", "high_school"],
-          "default": "high_school",
-          "description": "学段标签，不参与路由；当前只服务 high_school（M2.5 扩学段时再定映射）。"
         }
       },
       "anyOf": [

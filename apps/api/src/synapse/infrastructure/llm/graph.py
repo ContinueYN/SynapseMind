@@ -464,12 +464,7 @@ class _GraphPayload(BaseModel):
 
 def build_request(draft: ProblemDraft, *, issues: Sequence[str] = ()) -> LLMRequest:
     """One generation request; ``issues`` carries the previous attempt's errors."""
-    user = (
-        f"学科：{draft.subject}\n"
-        f"学段：{draft.grade}\n"
-        f"题目：\n{draft.text.strip()}\n\n"
-        "请输出解法图 JSON。"
-    )
+    user = f"学科：{draft.subject}\n题目：\n{draft.text.strip()}\n\n请输出解法图 JSON。"
     feedback = _feedback(issues)
     if feedback:
         # The retry is the second half of the first-question budget: a minimal
@@ -504,7 +499,6 @@ def build_claim_repair_request(
     malformed = verification.reason == "malformed"
     lines = [
         f"学科：{draft.subject}",
-        f"学段：{draft.grade}",
         "题目：",
         draft.text.strip(),
         "",
@@ -1224,7 +1218,6 @@ def _cache_key(draft: ProblemDraft, settings: LLMSettings) -> str:
         (
             draft.id,
             draft.subject,
-            draft.grade,
             settings.model,
             _prompt_version(settings, draft.subject),
             draft.text.strip(),

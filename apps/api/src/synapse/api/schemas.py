@@ -27,7 +27,6 @@ class ProblemIn(StrictModel):
         max_length=32,
         description="可选领域标签（开放取值）。省略时自动识别；识别不出进入通用模式，不返回 422。",
     )
-    grade: Literal["primary_school", "middle_school", "high_school"] = "high_school"
 
     @field_validator("subject")
     @classmethod

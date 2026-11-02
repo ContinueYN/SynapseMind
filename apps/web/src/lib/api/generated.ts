@@ -1379,12 +1379,6 @@ export interface components {
              * @description 可选领域标签（开放取值）。省略时自动识别；识别不出进入通用模式，不返回 422。
              */
             subject?: string | null;
-            /**
-             * Grade
-             * @default high_school
-             * @enum {string}
-             */
-            grade: "primary_school" | "middle_school" | "high_school";
         };
         /** ProgressOut */
         ProgressOut: {
